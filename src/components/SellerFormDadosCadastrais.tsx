@@ -12,7 +12,7 @@ import { Checkbox } from "./ui/checkbox";
 import { User, Mail, Phone, MapPin, Calendar, CreditCard, Building2, Trash2, Plus, Search } from "lucide-react";
 import { municipiosPorUF, ufs } from "../data/municipios";
 import { api } from '../services/api';
-import { applyCPFMask, applyCEPMask, applyPhoneMask, applyCPFCNPJMask } from '../lib/masks';
+import { applyCPFMask, applyCEPMask, applyPhoneMask, applyCPFCNPJMask, applyCNPJMask } from '../lib/masks';
 import { toast } from "sonner";
 import type { Seller, SellerBankAccount, AdditionalContact, AccountType, PixKeyType } from '../types/seller';
 
@@ -471,13 +471,16 @@ export function SellerFormDadosCadastrais({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+              <div className="space-y-2">
               <Label htmlFor="cnpj">CNPJ</Label>
               <div className="flex gap-2">
                 <Input
                   id="cnpj"
                   value={formData.cnpj || ""}
-                  onChange={(e) => setFormData({ ...formData, cnpj: applyCNPJMask(e.target.value) })}
+                  onChange={(e) => {
+                    const maskedValue = applyCNPJMask(e.target.value);
+                    setFormData({ ...formData, cnpj: maskedValue });
+                  }}
                   disabled={!isEditing}
                   placeholder="00.000.000/0000-00"
                   maxLength={18}

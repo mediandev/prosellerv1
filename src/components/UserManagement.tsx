@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Checkbox } from "./ui/checkbox";
 import { Separator } from "./ui/separator";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
-import { mockUsuarios } from "../data/mockUsers";
 import { Usuario, PERMISSOES_DISPONIVEIS, Permissao } from "../types/user";
 import { toast } from "sonner@2.0.3";
 import { 
@@ -79,8 +78,8 @@ export function UserManagement() {
 
   const carregarUsuarios = async () => {
     try {
-      console.log('[USERS] Carregando usuários da API...');
-      const usuariosAPI = await api.get('usuarios');
+      console.log('[USERS] Carregando usuários via Edge Functions...');
+      const usuariosAPI = await api.usuarios.list();
       // Garantir que todos os usuários tenham campos obrigatórios inicializados
       const usuariosNormalizados = usuariosAPI.map((u: Usuario) => ({
         ...u,
@@ -90,15 +89,9 @@ export function UserManagement() {
       setUsuarios(usuariosNormalizados);
       console.log('[USERS] Usuários carregados:', usuariosNormalizados.length);
     } catch (error) {
-      console.error('[USERS] Erro ao carregar usuários, usando mock:', error);
-      // Garantir que mock também tenha campos obrigatórios
-      const mockNormalizados = mockUsuarios.map((u: Usuario) => ({
-        ...u,
-        permissoes: u.permissoes || [],
-        dataCadastro: u.dataCadastro || new Date().toISOString()
-      }));
-      setUsuarios(mockNormalizados);
-      toast.error('Erro ao carregar usuários. Usando dados de demonstração.');
+      console.error('[USERS] Erro ao carregar usuários:', error);
+      toast.error('Erro ao carregar usuários. Verifique sua conexão.');
+      setUsuarios([]);
     } finally {
       setLoading(false);
     }
@@ -207,20 +200,23 @@ export function UserManagement() {
     if (modoEdicao && usuarioEditando) {
       const usuarioAtualizado = usuarios.find(u => u.id === usuarioEditando);
       if (usuarioAtualizado) {
-        const dadosAtualizados = {
-          ...usuarioAtualizado,
+        api.usuarios.update(usuarioEditando, {
           nome: formulario.nome,
           email: formulario.email,
-          permissoes: formulario.permissoes,
+          tipo: usuarioAtualizado.tipo, // Manter tipo existente
           ativo: formulario.ativo,
-        };
-        
-        api.update('usuarios', usuarioEditando, dadosAtualizados)
-          .then(() => {
-            setUsuarios(usuarios.map((u) => u.id === usuarioEditando ? dadosAtualizados : u));
+        })
+          .then((usuarioAtualizado) => {
+            // Manter permissões (não são atualizadas via Edge Function ainda)
+            const usuarioComPermissoes = {
+              ...usuarioAtualizado,
+              permissoes: formulario.permissoes,
+            };
+            setUsuarios(usuarios.map((u) => u.id === usuarioEditando ? usuarioComPermissoes : u));
             toast.success("Usuário atualizado com sucesso!");
             setDialogAberto(false);
             setFormulario(formularioInicial);
+            carregarUsuarios(); // Recarregar para garantir sincronização
           })
           .catch((error: any) => {
             console.error('[USERS] Erro ao atualizar usuário:', error);
@@ -228,57 +224,31 @@ export function UserManagement() {
           });
       }
     } else {
-      const novoUsuario: Usuario = {
-        id: Date.now().toString(),
-        nome: formulario.nome,
-        email: formulario.email,
-        tipo: "backoffice",
-        permissoes: formulario.permissoes,
-        ativo: formulario.ativo,
-        dataCadastro: new Date().toISOString(),
-      };
-      
-      api.create('usuarios', novoUsuario)
-        .then(() => {
-          setUsuarios([...usuarios, novoUsuario]);
-          toast.success("Usuário criado com sucesso!");
-          setDialogAberto(false);
-          setFormulario(formularioInicial);
-        })
-        .catch((error: any) => {
-          console.error('[USERS] Erro ao criar usuário:', error);
-          toast.error(`Erro ao criar usuário: ${error.message || 'Erro desconhecido'}`);
-        });
+      // Criar novo usuário (requer senha - será implementado em componente separado)
+      toast.error('Para criar usuários, use a função de signup com senha. Esta funcionalidade será implementada.');
+      // TODO: Implementar criação de usuário com senha ou componente separado
     }
   };
 
   const handleSalvarPermissoes = () => {
     if (usuarioPermissoes) {
-      const usuarioAtualizado = usuarios.find(u => u.id === usuarioPermissoes.id);
-      if (usuarioAtualizado) {
-        const dadosAtualizados = {
-          ...usuarioAtualizado,
-          permissoes: formulario.permissoes,
-        };
-        
-        api.update('usuarios', usuarioPermissoes.id, dadosAtualizados)
-          .then(() => {
-            setUsuarios(
-              usuarios.map((u) =>
-                u.id === usuarioPermissoes.id
-                  ? dadosAtualizados
-                  : u
-              )
-            );
-            toast.success("Permissões atualizadas com sucesso!");
-            setDialogPermissoesAberto(false);
-            setUsuarioPermissoes(null);
-          })
-          .catch((error: any) => {
-            console.error('[USERS] Erro ao atualizar permissões:', error);
-            toast.error(`Erro ao atualizar permissões: ${error.message || 'Erro desconhecido'}`);
-          });
-      }
+      // Nota: Permissões ainda não são gerenciadas via Edge Functions
+      // Por enquanto, atualizar apenas localmente
+      const dadosAtualizados = {
+        ...usuarioPermissoes,
+        permissoes: formulario.permissoes,
+      };
+      
+      setUsuarios(
+        usuarios.map((u) =>
+          u.id === usuarioPermissoes.id
+            ? dadosAtualizados
+            : u
+        )
+      );
+      toast.success("Permissões atualizadas com sucesso!");
+      setDialogPermissoesAberto(false);
+      setUsuarioPermissoes(null);
     }
   };
 
@@ -293,30 +263,35 @@ export function UserManagement() {
     }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (deleteConfirm.id) {
-      setUsuarios(usuarios.filter((u) => u.id !== deleteConfirm.id));
-      toast.success(`Usuário "${deleteConfirm.name}" removido com sucesso`);
-      setDeleteConfirm({ open: false, id: null, name: null });
+      try {
+        await api.usuarios.delete(deleteConfirm.id);
+        setUsuarios(usuarios.filter((u) => u.id !== deleteConfirm.id));
+        toast.success(`Usuário "${deleteConfirm.name}" removido com sucesso`);
+        setDeleteConfirm({ open: false, id: null, name: null });
+        carregarUsuarios(); // Recarregar para garantir sincronização
+      } catch (error: any) {
+        console.error('[USERS] Erro ao excluir usuário:', error);
+        toast.error(`Erro ao excluir usuário: ${error.message || 'Erro desconhecido'}`);
+      }
     }
   };
 
   const handleToggleAtivo = (id: string) => {
     const usuario = usuarios.find((u) => u.id === id);
     if (usuario) {
-      const dadosAtualizados = {
-        ...usuario,
+      api.usuarios.update(id, {
         ativo: !usuario.ativo,
-      };
-      
-      api.update('usuarios', id, dadosAtualizados)
-        .then(() => {
+      })
+        .then((usuarioAtualizado) => {
           setUsuarios(
             usuarios.map((u) =>
-              u.id === id ? dadosAtualizados : u
+              u.id === id ? { ...usuarioAtualizado, permissoes: u.permissoes } : u
             )
           );
           toast.success(`Usuário ${usuario.ativo ? "desativado" : "ativado"} com sucesso`);
+          carregarUsuarios(); // Recarregar para garantir sincronização
         })
         .catch((error: any) => {
           console.error('[USERS] Erro ao alterar status:', error);

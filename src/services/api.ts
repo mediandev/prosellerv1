@@ -1,7 +1,7 @@
-// API Mock - Sistema funciona apenas com dados locais/mock
-// Todas as operações usam dados mockados armazenados no localStorage
+// API Service - Integração com Supabase Edge Functions
+// Sistema migrado para usar arquitetura em camadas (Edge Functions → RPC → Tabelas)
 
-// Importar todos os dados mock
+// Importar dados mock para fallback (serão removidos gradualmente)
 import { clientes as mockClientes } from '../data/mockCustomers';
 import { mockSellers } from '../data/mockSellers';
 import { mockProdutos } from '../data/mockProdutos';
@@ -15,6 +15,58 @@ import { compromissosMock } from '../data/mockContaCorrente';
 import { notificacoesMock } from '../data/mockNotificacoes';
 import { carregarVendasDoLocalStorage, salvarVendasNoLocalStorage, vendasIniciais } from '../data/mockVendas';
 import { mockComissoesVendas } from '../data/mockComissoes';
+import type { TipoUsuario } from '../types/user';
+import type { Seller } from '../types/seller';
+
+// Configuração do Supabase
+const SUPABASE_URL = 'https://xxoiqfraeolsqsmsheue.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4b2lxZnJhZW9sc3FzbXNoZXVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjY1ODQ5MDIsImV4cCI6MjA0MjE2MDkwMn0.m8A1mUf3GyAl_17FjltxkgBr-xRQYZw9YEDUVUBdttA';
+
+// Helper para obter permissões padrão baseadas no tipo
+function getDefaultPermissoes(tipo: TipoUsuario): string[] {
+  if (tipo === 'backoffice') {
+    return [
+      'clientes.visualizar',
+      'clientes.criar',
+      'clientes.editar',
+      'clientes.excluir',
+      'clientes.todos',
+      'clientes.aprovar',
+      'vendas.visualizar',
+      'vendas.criar',
+      'vendas.editar',
+      'vendas.excluir',
+      'vendas.todas',
+      'relatorios.visualizar',
+      'relatorios.todos',
+      'config.minhas_empresas',
+      'config.geral',
+      'usuarios.visualizar',
+      'usuarios.criar',
+      'usuarios.editar',
+      'usuarios.excluir',
+      'usuarios.permissoes',
+      'contacorrente.visualizar',
+      'contacorrente.criar',
+      'contacorrente.editar',
+      'contacorrente.excluir',
+      'configuracoes.editar',
+      'configuracoes.excluir',
+    ];
+  } else {
+    return [
+      'clientes.visualizar',
+      'clientes.criar',
+      'clientes.editar',
+      'vendas.visualizar',
+      'vendas.criar',
+      'vendas.editar',
+      'relatorios.visualizar',
+      'contacorrente.visualizar',
+      'contacorrente.criar',
+    ];
+  }
+}
 
 let authToken: string | null = null;
 
@@ -33,6 +85,69 @@ export const getAuthToken = () => {
   }
   return authToken;
 };
+
+// Helper para chamadas às Edge Functions
+async function callEdgeFunction(
+  functionName: string,
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
+  body?: any,
+  path?: string,
+  queryParams?: Record<string, any>
+): Promise<any> {
+  const token = getAuthToken();
+  let url = `${SUPABASE_URL}/functions/v1/${functionName}${path ? `/${path}` : ''}`;
+  
+  // Adicionar query params se fornecidos
+  if (queryParams && Object.keys(queryParams).length > 0) {
+    const params = new URLSearchParams();
+    Object.entries(queryParams).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        params.append(key, String(value));
+      }
+    });
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+  }
+  
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'apikey': SUPABASE_ANON_KEY,
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  const options: RequestInit = {
+    method,
+    headers,
+  };
+  
+  if (body && (method === 'POST' || method === 'PUT')) {
+    options.body = JSON.stringify(body);
+  }
+  
+  try {
+    const response = await fetch(url, options);
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || data.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    // Edge Functions retornam { success: true, data: {...} }
+    if (data.success && data.data) {
+      return data.data;
+    }
+    
+    // Fallback para formato direto
+    return data.data || data;
+  } catch (error) {
+    console.error(`[API] Error calling ${functionName}:`, error);
+    throw error;
+  }
+}
 
 // Helper para carregar dados do localStorage ou usar mock inicial
 function getStoredData<T>(key: string, initialData: T[]): T[] {
@@ -69,6 +184,96 @@ function saveStoredData<T>(key: string, data: T[]): void {
   }
 }
 
+// Helper: Converte usuário (tipo=vendedor) para formato Seller
+function usuarioToSeller(user: any): Seller {
+  const generateInitials = (nome: string): string => {
+    const parts = nome.trim().split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return nome.substring(0, 2).toUpperCase();
+  };
+
+  return {
+    id: user.user_id || user.id,
+    nome: user.nome || '',
+    iniciais: generateInitials(user.nome || ''),
+    cpf: '', // Será preenchido quando houver dados_vendedor
+    email: user.email || '',
+    telefone: '',
+    dataAdmissao: user.data_cadastro ? new Date(user.data_cadastro).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    status: user.ativo ? 'ativo' : 'inativo',
+    acessoSistema: true,
+    emailAcesso: user.email || '',
+    usuarioId: user.user_id || user.id,
+    contatosAdicionais: [],
+    cnpj: '',
+    razaoSocial: '',
+    nomeFantasia: '',
+    inscricaoEstadual: '',
+    dadosBancarios: {
+      banco: '',
+      agencia: '',
+      digitoAgencia: '',
+      tipoConta: 'corrente',
+      numeroConta: '',
+      digitoConta: '',
+      nomeTitular: '',
+      cpfCnpjTitular: '',
+      tipoChavePix: 'cpf_cnpj',
+      chavePix: '',
+    },
+    endereco: {
+      cep: '',
+      logradouro: '',
+      numero: '',
+      complemento: '',
+      bairro: '',
+      uf: '',
+      municipio: '',
+      enderecoEntregaDiferente: false,
+    },
+    observacoesInternas: '',
+    metasAnuais: [],
+    comissoes: {
+      regraAplicavel: 'lista_preco',
+    },
+    usuario: {
+      usuarioCriado: true,
+      email: user.email || '',
+      conviteEnviado: false,
+      senhaDefinida: true,
+      requisitosSeguranca: true,
+      permissoes: {
+        dashboard: { visualizar: true, criar: false, editar: false, excluir: false },
+        vendas: { visualizar: true, criar: true, editar: true, excluir: false },
+        pipeline: { visualizar: true, criar: true, editar: true, excluir: false },
+        clientes: { visualizar: true, criar: true, editar: true, excluir: false },
+        metas: { visualizar: true, criar: false, editar: false, excluir: false },
+        comissoes: { visualizar: true, criar: false, editar: false, excluir: false },
+        produtos: { visualizar: true, criar: false, editar: false, excluir: false },
+        relatorios: { visualizar: true, criar: false, editar: false, excluir: false },
+        equipe: { visualizar: false, criar: false, editar: false, excluir: false },
+        configuracoes: { visualizar: false, criar: false, editar: false, excluir: false },
+      },
+    },
+    integracoes: [],
+    vendas: {
+      total: 0,
+      mes: 0,
+      qtdFechamentos: 0,
+      ticketMedio: 0,
+      positivacao: 0,
+    },
+    performance: {
+      taxaConversao: 0,
+      tempoMedioFechamento: 0,
+      clientesAtivos: 0,
+    },
+    historico: [],
+  };
+}
+
 // Mapeamento de entidades para dados mock
 const entityMap: Record<string, { data: any[], storageKey: string }> = {
   'clientes': { data: mockClientes, storageKey: 'mockClientes' },
@@ -88,75 +293,112 @@ const entityMap: Record<string, { data: any[], storageKey: string }> = {
 
 // Generic API functions usando dados mock
 export const api = {
-  // Auth - Usa dados mock de usuários
+  // Auth - Usa Supabase Edge Functions (v2)
   auth: {
     signup: async (email: string, password: string, nome: string, tipo: string) => {
-      console.log('[API] Signup mockado:', { email, nome, tipo });
+      console.log('[API] Signup via Supabase Auth:', { email, nome, tipo });
       
-      // Verificar se email já existe
-      const usuarios = getStoredData('mockUsuarios', mockUsuarios);
-      if (usuarios.some(u => u.email === email)) {
-        throw new Error('Email já cadastrado');
+      try {
+        // 1. Criar usuário no Supabase Auth
+        const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            data: { nome, tipo },
+          }),
+        });
+        
+        const authData = await authResponse.json();
+        
+        if (!authResponse.ok) {
+          throw new Error(authData.message || 'Erro ao criar usuário');
+        }
+        
+        // 2. Criar registro na tabela user via Edge Function
+        // IMPORTANTE: Passar o auth_user_id para garantir que user_id = auth.id
+        const token = authData.access_token;
+        setAuthToken(token);
+        
+        const userResponse = await callEdgeFunction('create-user-v2', 'POST', {
+          email,
+          nome,
+          tipo,
+          auth_user_id: authData.user?.id,  // Passar ID do Supabase Auth
+        });
+        
+        // callEdgeFunction já retorna data.data
+        const user = userResponse.user || userResponse;
+        
+        return {
+          user: {
+            id: user.user_id || user.id,
+            email: user.email,
+            nome: user.nome,
+            tipo: user.tipo,
+            ativo: user.ativo,
+            dataCadastro: user.data_cadastro,
+          },
+          session: { access_token: token },
+        };
+      } catch (error: any) {
+        console.error('[API] Signup error:', error);
+        throw new Error(error.message || 'Erro ao criar usuário');
       }
-      
-      // Criar novo usuário
-      const novoUsuario = {
-        id: `user-${Date.now()}`,
-        nome,
-        email,
-        tipo: tipo as 'backoffice' | 'vendedor',
-        permissoes: tipo === 'backoffice' 
-          ? mockUsuarios[0].permissoes 
-          : mockUsuarios[1].permissoes,
-        ativo: true,
-        dataCadastro: new Date().toISOString(),
-      };
-      
-      usuarios.push(novoUsuario);
-      saveStoredData('mockUsuarios', usuarios);
-      
-      // Criar token mock
-      const token = `mock-token-${Date.now()}`;
-      setAuthToken(token);
-      
-      return {
-        user: novoUsuario,
-        session: { access_token: token }
-      };
     },
     
     signin: async (email: string, password: string) => {
-      console.log('[API] Signin mockado:', { email });
+      console.log('[API] Signin via Supabase Auth:', { email });
       
-      // Buscar usuário nos dados mock
-      const usuarios = getStoredData('mockUsuarios', mockUsuarios);
-      const usuario = usuarios.find(u => u.email === email);
-      
-      if (!usuario) {
-        throw new Error('Email ou senha inválidos');
+      try {
+        // Autenticar via Supabase Auth
+        const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            email,
+            password,
+          }),
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error_description || data.error || 'Email ou senha inválidos');
+        }
+        
+        const token = data.access_token;
+        setAuthToken(token);
+        
+        // Buscar dados do usuário via Edge Function
+        const userResponse = await callEdgeFunction('get-user-v2', 'GET', undefined, data.user.id);
+        
+        // callEdgeFunction já retorna data.data
+        const user = userResponse.user || userResponse;
+        
+        return {
+          user: {
+            id: user.user_id || user.id,
+            email: user.email,
+            nome: user.nome,
+            tipo: user.tipo,
+            ativo: user.ativo,
+            dataCadastro: user.data_cadastro,
+            ultimoAcesso: user.ultimo_acesso,
+          },
+          session: { access_token: token },
+        };
+      } catch (error: any) {
+        console.error('[API] Signin error:', error);
+        throw new Error(error.message || 'Erro ao fazer login');
       }
-      
-      if (!usuario.ativo) {
-        throw new Error('Usuário inativo');
-      }
-      
-      // Nota: A senha não é armazenada nos dados mock de usuários
-      // A validação de senha é feita no AuthContext com USUARIOS_MOCK
-      // Se chegou aqui, o usuário existe, então aceitar o login
-      // (a validação de senha já foi feita no AuthContext)
-      
-      // Criar token mock
-      const token = `mock-token-${usuario.id}-${Date.now()}`;
-      setAuthToken(token);
-      
-      // Atualizar último acesso
-      usuario.ultimoAcesso = new Date().toISOString();
-      saveStoredData('mockUsuarios', usuarios);
-      
-      return {
-        user: usuario,
-        session: { access_token: token }
-      };
     },
     
     me: async () => {
@@ -165,19 +407,237 @@ export const api = {
         throw new Error('Não autenticado');
       }
       
-      // Buscar usuário atual (simplificado - em produção viria do token)
-      const usuarios = getStoredData('mockUsuarios', mockUsuarios);
-      return usuarios[0] || usuarios[1]; // Retorna primeiro usuário disponível
+      try {
+        // Obter user_id do token via Supabase Auth
+        const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': SUPABASE_ANON_KEY,
+          },
+        });
+        
+        const authUser = await response.json();
+        
+        if (!response.ok || !authUser.id) {
+          throw new Error('Token inválido');
+        }
+        
+        // Buscar dados completos via Edge Function
+        const userResponse = await callEdgeFunction('get-user-v2', 'GET', undefined, authUser.id);
+        
+        // callEdgeFunction já retorna data.data
+        const user = userResponse.user || userResponse;
+        
+        return {
+          id: user.user_id || user.id,
+          email: user.email,
+          nome: user.nome,
+          tipo: user.tipo,
+          ativo: user.ativo,
+          dataCadastro: user.data_cadastro,
+          ultimoAcesso: user.ultimo_acesso,
+        };
+      } catch (error: any) {
+        console.error('[API] Me error:', error);
+        throw new Error(error.message || 'Erro ao buscar usuário');
+      }
     },
     
     signout: () => {
       setAuthToken(null);
+      // Opcional: chamar Supabase Auth signout
+      fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'apikey': SUPABASE_ANON_KEY,
+        },
+      }).catch(console.error);
+    },
+  },
+
+  // Usuários - Usa Supabase Edge Functions (v2)
+  usuarios: {
+    list: async (filters?: { tipo?: string; ativo?: boolean; search?: string; page?: number; limit?: number }) => {
+      try {
+        const params = new URLSearchParams();
+        if (filters?.tipo) params.append('tipo', filters.tipo);
+        if (filters?.ativo !== undefined) params.append('ativo', filters.ativo.toString());
+        if (filters?.search) params.append('search', filters.search);
+        if (filters?.page) params.append('page', filters.page.toString());
+        if (filters?.limit) params.append('limit', filters.limit.toString());
+
+        const url = `${SUPABASE_URL}/functions/v1/list-users-v2${params.toString() ? `?${params.toString()}` : ''}`;
+        const token = getAuthToken();
+        
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || data.message || 'Erro ao listar usuários');
+        }
+
+        // Edge Functions retornam { success: true, data: { users: [...], pagination: {...} } }
+        const usersData = data.success ? data.data : data;
+        
+        // Transformar dados do formato Edge Function para formato esperado pelo frontend
+        const users = (usersData?.users || []).map((u: any) => ({
+          id: u.user_id,
+          nome: u.nome,
+          email: u.email,
+          tipo: u.tipo,
+          ativo: u.ativo,
+          dataCadastro: u.data_cadastro,
+          ultimoAcesso: u.ultimo_acesso,
+          permissoes: getDefaultPermissoes(u.tipo), // Permissões baseadas no tipo
+        }));
+
+        return users;
+      } catch (error: any) {
+        console.error('[API] Erro ao listar usuários:', error);
+        throw error;
+      }
+    },
+
+    get: async (userId: string) => {
+      try {
+        const userResponse = await callEdgeFunction('get-user-v2', 'GET', undefined, userId);
+        
+        return {
+          id: userResponse.user.user_id,
+          nome: userResponse.user.nome,
+          email: userResponse.user.email,
+          tipo: userResponse.user.tipo,
+          ativo: userResponse.user.ativo,
+          dataCadastro: userResponse.user.data_cadastro,
+          ultimoAcesso: userResponse.user.ultimo_acesso,
+          permissoes: getDefaultPermissoes(userResponse.user.tipo),
+        };
+      } catch (error: any) {
+        console.error('[API] Erro ao buscar usuário:', error);
+        throw error;
+      }
+    },
+
+    create: async (userData: { nome: string; email: string; tipo: 'backoffice' | 'vendedor'; senha?: string }) => {
+      try {
+        // Se senha fornecida, criar via signup (que cria no Auth e na tabela)
+        if (userData.senha) {
+          const result = await api.auth.signup(userData.email, userData.senha, userData.nome, userData.tipo);
+          return result.user;
+        } else {
+          // Sem senha, criar apenas na tabela (requer backoffice)
+          const userResponse = await callEdgeFunction('create-user-v2', 'POST', {
+            email: userData.email,
+            nome: userData.nome,
+            tipo: userData.tipo,
+          });
+          
+          return {
+            id: userResponse.user.user_id,
+            nome: userResponse.user.nome,
+            email: userResponse.user.email,
+            tipo: userResponse.user.tipo,
+            ativo: userResponse.user.ativo,
+            dataCadastro: userResponse.user.data_cadastro,
+            permissoes: getDefaultPermissoes(userResponse.user.tipo),
+          };
+        }
+      } catch (error: any) {
+        console.error('[API] Erro ao criar usuário:', error);
+        throw error;
+      }
+    },
+
+    update: async (userId: string, userData: { nome?: string; email?: string; tipo?: 'backoffice' | 'vendedor'; ativo?: boolean }) => {
+      try {
+        const userResponse = await callEdgeFunction('update-user-v2', 'PUT', {
+          nome: userData.nome,
+          email: userData.email,
+          tipo: userData.tipo,
+          ativo: userData.ativo,
+        }, userId);
+        
+        // callEdgeFunction já retorna data.data
+        const user = userResponse.user || userResponse;
+        
+        return {
+          id: user.user_id || user.id,
+          nome: user.nome,
+          email: user.email,
+          tipo: user.tipo,
+          ativo: user.ativo,
+          dataCadastro: user.data_cadastro,
+          ultimoAcesso: user.ultimo_acesso,
+          permissoes: getDefaultPermissoes(user.tipo),
+        };
+      } catch (error: any) {
+        console.error('[API] Erro ao atualizar usuário:', error);
+        throw error;
+      }
+    },
+
+    delete: async (userId: string) => {
+      try {
+        await callEdgeFunction('delete-user-v2', 'DELETE', undefined, userId);
+        return true;
+      } catch (error: any) {
+        console.error('[API] Erro ao excluir usuário:', error);
+        throw error;
+      }
     },
   },
   
   // Generic CRUD operations
   get: async (entity: string, options?: { params?: Record<string, any> }) => {
-    console.log(`[API] GET /${entity} (mockado)`, options?.params);
+    console.log(`[API] GET /${entity}`, options?.params);
+    
+    // Caso especial para vendedores - buscar usuários tipo vendedor
+    if (entity === 'vendedores') {
+      try {
+        console.log('[API] Buscando vendedores via Edge Function list-users-v2...');
+        const response = await callEdgeFunction('list-users-v2', 'GET', undefined, undefined, {
+          tipo: 'vendedor',
+          ativo: options?.params?.ativo !== undefined ? options.params.ativo : undefined,
+        });
+        
+        const users = response.users || [];
+        console.log(`[API] ${users.length} usuários vendedores encontrados`);
+        
+        // Converter usuários para formato Seller
+        const sellers = users.map((user: any) => usuarioToSeller(user));
+        
+        // Aplicar filtros adicionais se fornecidos
+        if (options?.params) {
+          let filtered = [...sellers];
+          const params = options.params;
+          
+          if (params.status) {
+            filtered = filtered.filter(s => s.status === params.status);
+          }
+          
+          if (params.id) {
+            filtered = filtered.filter(s => s.id === params.id);
+          }
+          
+          return filtered;
+        }
+        
+        return sellers;
+      } catch (error) {
+        console.error('[API] Erro ao buscar vendedores, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        return getStoredData(entityConfig.storageKey, entityConfig.data);
+      }
+    }
     
     // Caso especial para vendas
     if (entity === 'vendas') {
@@ -187,20 +647,20 @@ export const api = {
       if (options?.params) {
         let filtered = [...vendas];
         
-        if (options.params.vendedorId) {
-          filtered = filtered.filter(v => v.vendedorId === options.params.vendedorId);
+        if (options.params?.vendedorId) {
+          filtered = filtered.filter(v => v.vendedorId === options.params?.vendedorId);
         }
         
-        if (options.params.clienteId) {
-          filtered = filtered.filter(v => v.clienteId === options.params.clienteId);
+        if (options.params?.clienteId) {
+          filtered = filtered.filter(v => v.clienteId === options.params?.clienteId);
         }
         
-        if (options.params.dataInicio) {
+        if (options.params?.dataInicio) {
           const dataInicio = new Date(options.params.dataInicio);
           filtered = filtered.filter(v => new Date(v.dataPedido) >= dataInicio);
         }
         
-        if (options.params.dataFim) {
+        if (options.params?.dataFim) {
           const dataFim = new Date(options.params.dataFim);
           filtered = filtered.filter(v => new Date(v.dataPedido) <= dataFim);
         }
@@ -223,20 +683,21 @@ export const api = {
     // Aplicar filtros básicos se fornecidos
     if (options?.params) {
       let filtered = [...data];
+      const params = options.params;
       
       // Filtro por ID
-      if (options.params.id) {
-        filtered = filtered.filter(item => item.id === options.params.id);
+      if (params.id) {
+        filtered = filtered.filter(item => item.id === params.id);
       }
       
       // Filtro por status
-      if (options.params.status) {
-        filtered = filtered.filter(item => item.status === options.params.status);
+      if (params.status) {
+        filtered = filtered.filter(item => item.status === params.status);
       }
       
       // Filtro por ativo
-      if (options.params.ativo !== undefined) {
-        filtered = filtered.filter(item => item.ativo === options.params.ativo);
+      if (params.ativo !== undefined) {
+        filtered = filtered.filter(item => item.ativo === params.ativo);
       }
       
       return filtered;
@@ -274,7 +735,41 @@ export const api = {
   },
   
   create: async (entity: string, data: any) => {
-    console.log(`[API] POST /${entity} (mockado):`, data);
+    console.log(`[API] POST /${entity}:`, data);
+    
+    // Caso especial para vendedores - criar usuário tipo vendedor
+    if (entity === 'vendedores') {
+      try {
+        console.log('[API] Criando vendedor via Edge Function create-user-v2...');
+        
+        // Criar usuário com tipo vendedor
+        const userData = {
+          email: data.email || data.emailAcesso || '',
+          nome: data.nome || '',
+          tipo: 'vendedor' as const,
+          user_login: data.email || data.emailAcesso || '',
+        };
+        
+        const userResponse = await callEdgeFunction('create-user-v2', 'POST', userData);
+        const createdUser = userResponse.user || userResponse;
+        
+        console.log('[API] Usuário vendedor criado:', createdUser.user_id);
+        
+        // Converter para formato Seller
+        const seller = usuarioToSeller(createdUser);
+        
+        // Mesclar dados adicionais do Seller se fornecidos
+        return {
+          ...seller,
+          ...data,
+          id: createdUser.user_id,
+          usuarioId: createdUser.user_id,
+        };
+      } catch (error) {
+        console.error('[API] Erro ao criar vendedor:', error);
+        throw error;
+      }
+    }
     
     // Caso especial para vendas
     if (entity === 'vendas') {
@@ -310,7 +805,41 @@ export const api = {
   },
   
   update: async (entity: string, id: string, data: any) => {
-    console.log(`[API] PUT /${entity}/${id} (mockado):`, data);
+    console.log(`[API] PUT /${entity}/${id}:`, data);
+    
+    // Caso especial para vendedores - atualizar usuário
+    if (entity === 'vendedores') {
+      try {
+        console.log('[API] Atualizando vendedor via Edge Function update-user-v2...');
+        
+        // Preparar dados para atualização do usuário
+        const userData: any = {};
+        if (data.nome !== undefined) userData.nome = data.nome;
+        if (data.email !== undefined || data.emailAcesso !== undefined) {
+          userData.email = data.email || data.emailAcesso;
+        }
+        if (data.status !== undefined) {
+          userData.ativo = data.status === 'ativo';
+        }
+        
+        const userResponse = await callEdgeFunction('update-user-v2', 'PUT', userData, id);
+        const updatedUser = userResponse.user || userResponse;
+        
+        console.log('[API] Usuário vendedor atualizado:', updatedUser.user_id);
+        
+        // Converter para formato Seller e mesclar dados adicionais
+        const seller = usuarioToSeller(updatedUser);
+        return {
+          ...seller,
+          ...data,
+          id: updatedUser.user_id,
+          usuarioId: updatedUser.user_id,
+        };
+      } catch (error) {
+        console.error('[API] Erro ao atualizar vendedor:', error);
+        throw error;
+      }
+    }
     
     // Caso especial para vendas
     if (entity === 'vendas') {
@@ -553,10 +1082,28 @@ export const api = {
     },
   },
   
-  // Sync vendedores with usuarios (mockado)
+  // Sync vendedores with usuarios - busca usuários tipo vendedor
   syncVendedores: async () => {
-    console.log('[API] syncVendedores (mockado)');
-    return { success: true, message: 'Sincronização mockada concluída' };
+    try {
+      console.log('[API] syncVendedores: Buscando usuários tipo vendedor...');
+      
+      // Buscar todos os usuários tipo vendedor
+      const response = await callEdgeFunction('list-users-v2', 'GET', undefined, undefined, {
+        tipo: 'vendedor',
+      });
+      
+      const users = response.users || [];
+      console.log(`[API] ${users.length} usuários vendedores encontrados`);
+      
+      return {
+        success: true,
+        message: `${users.length} vendedor(es) sincronizado(s) com sucesso`,
+        count: users.length,
+      };
+    } catch (error: any) {
+      console.error('[API] Erro ao sincronizar vendedores:', error);
+      throw new Error(error.message || 'Erro ao sincronizar vendedores');
+    }
   },
 
   // ============================================

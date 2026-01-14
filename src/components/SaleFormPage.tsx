@@ -260,12 +260,11 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           fantasia: matchFantasia,
           grupo: matchGrupo,
           cnpj: matchCnpj,
-          codigo: matchCodigo,
+          codigo: matchCodigo || cliente.codigo,
           razaoSocial: cliente.razaoSocial,
           nomeFantasia: cliente.nomeFantasia,
           grupoRede: cliente.grupoRede,
           cpfCnpj: cliente.cpfCnpj,
-          codigo: cliente.codigo,
         });
       }
       

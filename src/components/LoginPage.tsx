@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, AlertCircle } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
+import { Alert, AlertDescription } from "./ui/alert";
 import { toast } from "sonner@2.0.3";
 import { ProSellerLogo } from "./ProSellerLogo";
 
@@ -17,28 +18,39 @@ export function LoginPage({ onForgotPassword }: LoginPageProps) {
   const [senha, setSenha] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Limpar erro anterior
+    setErro(null);
+    
     if (!email || !senha) {
-      toast.error("Por favor, preencha todos os campos");
+      const mensagem = "Por favor, preencha todos os campos";
+      setErro(mensagem);
+      toast.error(mensagem);
       return;
     }
 
     setCarregando(true);
 
     try {
-      const sucesso = await login(email, senha);
+      const resultado = await login(email, senha);
       
-      if (sucesso) {
+      if (resultado.success) {
         toast.success("Login realizado com sucesso!");
+        setErro(null);
       } else {
-        toast.error("Email ou senha incorretos");
+        const mensagemErro = resultado.error || "Email ou senha incorretos";
+        setErro(mensagemErro);
+        toast.error(mensagemErro);
       }
-    } catch (error) {
-      toast.error("Erro ao fazer login. Tente novamente.");
+    } catch (error: any) {
+      const mensagemErro = error?.message || "Erro ao fazer login. Tente novamente.";
+      setErro(mensagemErro);
+      toast.error(mensagemErro);
     } finally {
       setCarregando(false);
     }
@@ -47,18 +59,24 @@ export function LoginPage({ onForgotPassword }: LoginPageProps) {
   const handleQuickLogin = async (userEmail: string, userPassword: string) => {
     setEmail(userEmail);
     setSenha(userPassword);
+    setErro(null);
     setCarregando(true);
 
     try {
-      const sucesso = await login(userEmail, userPassword);
+      const resultado = await login(userEmail, userPassword);
       
-      if (sucesso) {
+      if (resultado.success) {
         toast.success("Login realizado com sucesso!");
+        setErro(null);
       } else {
-        toast.error("Email ou senha incorretos");
+        const mensagemErro = resultado.error || "Email ou senha incorretos";
+        setErro(mensagemErro);
+        toast.error(mensagemErro);
       }
-    } catch (error) {
-      toast.error("Erro ao fazer login. Tente novamente.");
+    } catch (error: any) {
+      const mensagemErro = error?.message || "Erro ao fazer login. Tente novamente.";
+      setErro(mensagemErro);
+      toast.error(mensagemErro);
     } finally {
       setCarregando(false);
     }
@@ -78,6 +96,14 @@ export function LoginPage({ onForgotPassword }: LoginPageProps) {
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
+            {/* Mensagem de erro */}
+            {erro && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{erro}</AlertDescription>
+              </Alert>
+            )}
+            
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
@@ -144,31 +170,7 @@ export function LoginPage({ onForgotPassword }: LoginPageProps) {
               {carregando ? "Entrando..." : "Entrar"}
             </Button>
             
-            <div className="text-center space-y-2">
-              <p className="text-xs text-muted-foreground">
-                Credenciais de teste (clique para entrar)
-              </p>
-              <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("admin@empresa.com", "admin123")}
-                  disabled={carregando}
-                  className="w-full text-xs text-left px-2 py-1.5 rounded hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <strong className="text-primary hover:underline cursor-pointer">Admin:</strong>{" "}
-                  <span className="text-muted-foreground">admin@empresa.com / admin123</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("joao.silva@empresa.com", "joao123")}
-                  disabled={carregando}
-                  className="w-full text-xs text-left px-2 py-1.5 rounded hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <strong className="text-primary hover:underline cursor-pointer">Vendedor:</strong>{" "}
-                  <span className="text-muted-foreground">joao.silva@empresa.com / joao123</span>
-                </button>
-              </div>
-            </div>
+            
           </CardFooter>
         </form>
       </Card>
