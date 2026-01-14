@@ -1,9 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
-import { FileText, TrendingUp, Package, ChevronRight, AlertTriangle, FileBarChart, Target } from "lucide-react";
+import { FileText, TrendingUp, Package, ChevronRight, AlertTriangle, FileBarChart, Target, ClipboardCheck } from "lucide-react";
 import { Button } from "./ui/button";
 
 interface ReportsPageProps {
-  onNavigateToReport: (reportType: "vendas" | "clientes-abc" | "produtos-abc" | "clientes-risco" | "mix-cliente" | "roi-clientes") => void;
+  onNavigateToReport: (reportType: "vendas" | "clientes-abc" | "produtos-abc" | "clientes-risco" | "mix-cliente" | "roi-clientes" | "analise-abc-dez2025") => void;
 }
 
 export function ReportsPage({ onNavigateToReport }: ReportsPageProps) {
@@ -62,19 +62,34 @@ export function ReportsPage({ onNavigateToReport }: ReportsPageProps) {
       bgColor: "bg-red-50 dark:bg-red-950/20",
       borderColor: "border-red-200 dark:border-red-900",
     },
+    // DEBUG relatório removido - pode ser restaurado se necessário
+    // {
+    //   id: "analise-abc-dez2025" as const,
+    //   icon: TrendingUp,
+    //   title: "🔍 [DEBUG] Análise ABC - Dezembro/2025",
+    //   description: "⚠️ FERRAMENTA DE DIAGNÓSTICO: Análise detalhada dos dados reais de Curva ABC para dezembro/2025. Mostra valores exatos, percentuais e classificação de cada cliente. Use para verificar se a lógica ABC está sendo aplicada corretamente.",
+    //   color: "text-yellow-600 dark:text-yellow-400",
+    //   bgColor: "bg-yellow-50 dark:bg-yellow-950/20",
+    //   borderColor: "border-yellow-200 dark:border-yellow-900",
+    // },
+    
+    // TEMPORARIAMENTE REMOVIDO - pode ser restaurado e corrigido no futuro
+    // Problema: Relatório não exibe dados faturados corretamente
+    // Arquivo: /components/SolicitadoFaturadoReportPage.tsx
+    // {
+    //   id: "solicitado-faturado" as const,
+    //   icon: ClipboardCheck,
+    //   title: "Análise Solicitado X Faturado",
+    //   description: "Comparação entre quantidades e valores solicitados versus faturados por produto. Identifica perdas de vendas (cortes no pedido) quando o faturado é menor que o solicitado. Filtros por período, vendedor, grupo/rede, UF, empresa emitente e opção de exibir apenas produtos com corte.",
+    //   color: "text-teal-600 dark:text-teal-400",
+    //   bgColor: "bg-teal-50 dark:bg-teal-950/20",
+    //   borderColor: "border-teal-200 dark:border-teal-900",
+    // },
   ];
 
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div>
-          <h1>Relatórios</h1>
-          <p className="text-muted-foreground">
-            Escolha o tipo de relatório que deseja visualizar
-          </p>
-        </div>
-
         {/* Cards de Relatórios */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {reports.map((report) => (

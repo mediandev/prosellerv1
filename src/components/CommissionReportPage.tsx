@@ -78,6 +78,11 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
   const totalCreditos = lancamentosCredito.reduce((sum: number, l: any) => sum + l.valor, 0);
   const totalDebitos = lancamentosDebito.reduce((sum: number, l: any) => sum + l.valor, 0);
   
+  // Calcular valor líquido e saldo em tempo real
+  const valorLiquidoCalculado = totalComissoes + totalCreditos - totalDebitos + (relatorio.saldoAnterior || 0);
+  const totalPagoCalculado = pagamentosRelatorio.reduce((sum: number, p: any) => sum + p.valor, 0);
+  const saldoDevedorCalculado = valorLiquidoCalculado - totalPagoCalculado;
+  
   // Usar dados do relatorioCompleto se fornecido, senão usar calculados
   const dadosRelatorio = relatorioCompleto || {
     relatorio,
@@ -259,12 +264,12 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
             yPos += 6;
             
             doc.setFont('helvetica', 'bold');
-            if (relatorio.saldoDevedor > 0) {
+            if (saldoDevedorCalculado > 0) {
               doc.setTextColor(200, 0, 0);
-            } else if (relatorio.saldoDevedor < 0) {
+            } else if (saldoDevedorCalculado < 0) {
               doc.setTextColor(0, 150, 0);
             }
-            doc.text('Saldo: ' + formatCurrency(relatorio.saldoDevedor), 15, yPos);
+            doc.text('Saldo: ' + formatCurrency(saldoDevedorCalculado), 15, yPos);
             doc.setTextColor(0, 0, 0);
             doc.setFont('helvetica', 'normal');
             yPos += 8;
@@ -495,8 +500,8 @@ Segue em anexo o seu relatorio de comissoes referente ao periodo ${formatPeriodo
 Resumo:
 - Total de Vendas: ${formatCurrency(dadosRelatorio.totalVendas)}
 - Total de Comissoes: ${formatCurrency(dadosRelatorio.totalComissoes)}
-- Valor Liquido: ${formatCurrency(relatorio.valorLiquido)}
-- Saldo: ${formatCurrency(relatorio.saldoDevedor)}
+- Valor Liquido: ${formatCurrency(valorLiquidoCalculado)}
+- Saldo: ${formatCurrency(saldoDevedorCalculado)}
 
 Em caso de duvidas, entre em contato com o financeiro.
 
@@ -562,7 +567,7 @@ Equipe de Vendas`;
     setModoPagamento('novo');
     setPagamentoSelecionado(null);
     setFormPagamento({
-      valor: relatorio.saldoDevedor > 0 ? relatorio.saldoDevedor.toFixed(2) : "",
+      valor: saldoDevedorCalculado > 0 ? saldoDevedorCalculado.toFixed(2) : "",
       formaPagamento: "",
       comprovante: "",
       observacoes: "",
@@ -901,7 +906,7 @@ Equipe de Vendas`;
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              {formatCurrency(relatorio.valorLiquido)}
+              {formatCurrency(valorLiquidoCalculado)}
             </div>
             <p className="text-xs text-muted-foreground">
               Com ajustes aplicados
@@ -916,16 +921,16 @@ Equipe de Vendas`;
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${
-              relatorio.saldoDevedor > 0 
+              saldoDevedorCalculado > 0 
                 ? 'text-red-600' 
-                : relatorio.saldoDevedor < 0 
+                : saldoDevedorCalculado < 0 
                   ? 'text-green-600' 
                   : 'text-foreground'
             }`}>
-              {relatorio.saldoDevedor > 0 && '-'}{formatCurrency(Math.abs(relatorio.saldoDevedor))}
+              {saldoDevedorCalculado > 0 && '-'}{formatCurrency(Math.abs(saldoDevedorCalculado))}
             </div>
             <p className="text-xs text-muted-foreground">
-              {relatorio.saldoDevedor > 0 ? 'Aguardando pagamento' : relatorio.saldoDevedor < 0 ? 'Saldo a favor' : 'Quitado'}
+              {saldoDevedorCalculado > 0 ? 'Aguardando pagamento' : saldoDevedorCalculado < 0 ? 'Saldo a favor' : 'Quitado'}
             </p>
           </CardContent>
         </Card>
@@ -1199,33 +1204,33 @@ Equipe de Vendas`;
             )}
             <div className="flex justify-between items-center py-3 border-t font-semibold">
               <span>Valor Líquido</span>
-              <span className="text-blue-600">{formatCurrency(relatorio.valorLiquido)}</span>
+              <span className="text-blue-600">{formatCurrency(valorLiquidoCalculado)}</span>
             </div>
             <div className="flex justify-between items-center py-2 text-green-600">
               <span className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4" />
                 Total Pago
               </span>
-              <span className="font-medium">{formatCurrency(relatorio.totalPago)}</span>
+              <span className="font-medium">{formatCurrency(totalPagoCalculado)}</span>
             </div>
             <div className="flex justify-between items-center py-3 border-t font-semibold">
               <span className={
-                relatorio.saldoDevedor > 0 
+                saldoDevedorCalculado > 0 
                   ? 'text-red-600' 
-                  : relatorio.saldoDevedor < 0 
+                  : saldoDevedorCalculado < 0 
                     ? 'text-green-600' 
                     : ''
               }>
                 Saldo
               </span>
               <span className={
-                relatorio.saldoDevedor > 0 
+                saldoDevedorCalculado > 0 
                   ? 'text-red-600' 
-                  : relatorio.saldoDevedor < 0 
+                  : saldoDevedorCalculado < 0 
                     ? 'text-green-600' 
                     : ''
               }>
-                {relatorio.saldoDevedor > 0 && '-'}{formatCurrency(Math.abs(relatorio.saldoDevedor))}
+                {saldoDevedorCalculado > 0 && '-'}{formatCurrency(Math.abs(saldoDevedorCalculado))}
               </span>
             </div>
           </div>
@@ -1656,7 +1661,7 @@ Equipe de Vendas`;
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Saldo Devedor:</span>
                   <span className="font-semibold text-orange-600">
-                    {formatCurrency(relatorio.saldoDevedor)}
+                    {formatCurrency(saldoDevedorCalculado)}
                   </span>
                 </div>
               </div>

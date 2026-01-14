@@ -611,14 +611,6 @@ export function ContaCorrenteOverview() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">Conta Corrente</h1>
-        <p className="text-muted-foreground mt-1">
-          Visão geral de todos os compromissos e pagamentos de conta corrente
-        </p>
-      </div>
-
       {/* Cards de Resumo */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>

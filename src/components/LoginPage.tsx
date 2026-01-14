@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Eye, EyeOff, LogIn, Mail, Lock } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { toast } from "sonner@2.0.3";
-import { SetupUsersButton } from "./SetupUsersButton";
+import { ProSellerLogo } from "./ProSellerLogo";
 
 interface LoginPageProps {
   onForgotPassword: () => void;
@@ -68,10 +68,10 @@ export function LoginPage({ onForgotPassword }: LoginPageProps) {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10 p-4">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-1 text-center">
-          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-            <LogIn className="h-6 w-6 text-primary" />
+          <div className="flex justify-center mt-4 mb-4">
+            <ProSellerLogo size="lg" />
           </div>
-          <CardTitle className="text-2xl">Bem-vindo ao VendasPro</CardTitle>
+          <CardTitle className="text-2xl">Bem-vindo ao ProSeller</CardTitle>
           <CardDescription>
             Entre com suas credenciais para acessar o sistema
           </CardDescription>
@@ -168,10 +168,6 @@ export function LoginPage({ onForgotPassword }: LoginPageProps) {
                   <span className="text-muted-foreground">joao.silva@empresa.com / joao123</span>
                 </button>
               </div>
-            </div>
-            
-            <div className="pt-4 border-t">
-              <SetupUsersButton />
             </div>
           </CardFooter>
         </form>

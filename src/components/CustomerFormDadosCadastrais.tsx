@@ -151,27 +151,57 @@ export function CustomerFormDadosCadastrais({
     []
   );
 
-  const gruposOptions = useMemo(
-    () => gruposRedes.map((g) => ({ value: g.id, label: g.nome })),
-    [gruposRedes]
-  );
+  const gruposOptions = useMemo(() => {
+    // Deduplicate by ID to avoid duplicate keys
+    const uniqueGrupos = gruposRedes.reduce((acc, g) => {
+      if (!acc.find(item => item.id === g.id)) {
+        acc.push(g);
+      }
+      return acc;
+    }, [] as typeof gruposRedes);
+    
+    return uniqueGrupos.map((g) => ({ value: g.id, label: g.nome }));
+  }, [gruposRedes]);
 
-  const segmentosOptions = useMemo(
-    () => segmentosMercado.map((s) => ({ value: s, label: s })),
-    [segmentosMercado]
-  );
+  const segmentosOptions = useMemo(() => {
+    // Deduplicate segments to avoid duplicate keys
+    const uniqueSegmentos = Array.from(new Set(segmentosMercado));
+    return uniqueSegmentos.map((s) => ({ value: s, label: s }));
+  }, [segmentosMercado]);
 
   const municipiosOptions = useMemo(() => {
     if (!formData.uf) return [];
     const municipios = getMunicipiosPorUF(formData.uf);
-    return municipios.map((m) => ({ value: m, label: m }));
+    // Deduplicate municipalities to avoid duplicate keys
+    const uniqueMunicipios = Array.from(new Set(municipios));
+    return uniqueMunicipios.map((m) => ({ value: m, label: m }));
   }, [formData.uf]);
 
   const municipiosEntregaOptions = useMemo(() => {
     if (!formData.enderecoEntrega?.uf) return [];
     const municipios = getMunicipiosPorUF(formData.enderecoEntrega.uf);
-    return municipios.map((m) => ({ value: m, label: m }));
+    // Deduplicate municipalities to avoid duplicate keys
+    const uniqueMunicipios = Array.from(new Set(municipios));
+    return uniqueMunicipios.map((m) => ({ value: m, label: m }));
   }, [formData.enderecoEntrega?.uf]);
+
+  // Opções para bancos com deduplicação
+  const bancosOptions = useMemo(() => {
+    // Deduplicate banks by code to avoid duplicate keys
+    const uniqueBanks = mockBanks.reduce((acc, bank, index) => {
+      const code = bank.code || bank.codigo || `bank-${index}`;
+      // Only add if we haven't seen this code before
+      if (!acc.find(b => (b.code || b.codigo || `bank-${b.index}`) === code)) {
+        acc.push({ ...bank, index });
+      }
+      return acc;
+    }, [] as any[]);
+
+    return uniqueBanks.map((b) => ({
+      value: `${b.code || b.codigo || `bank-${b.index}`}`,
+      label: `${b.code || b.codigo || b.index} - ${b.fullName || b.nomeCompleto || b.name || b.nome || 'Sem nome'}`
+    }));
+  }, [mockBanks]);
 
   const handleBuscarCEP = async () => {
     const cep = formData.cep?.replace(/\D/g, '');
@@ -1024,10 +1054,7 @@ export function CustomerFormDadosCadastrais({
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="banco">Banco *</Label>
                   <Combobox
-                    options={mockBanks.map((b, index) => ({ 
-                      value: `${b.code || b.codigo || index}`, 
-                      label: `${b.code || b.codigo} - ${b.fullName || b.nomeCompleto || b.name || b.nome}` 
-                    }))}
+                    options={bancosOptions}
                     value={formBancario.banco || ''}
                     onValueChange={(value) => {
                       // Find the bank by code to get the full label

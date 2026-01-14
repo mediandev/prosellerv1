@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar as CalendarUI } from "./ui/calendar";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Checkbox } from "./ui/checkbox";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,7 +47,11 @@ import {
   Edit,
   RotateCcw,
   Lock,
-  Unlock
+  Unlock,
+  ChevronLeft,
+  ChevronRight,
+  Settings,
+  Trash2
 } from "lucide-react";
 import { 
   RelatorioPeriodoComissoes,
@@ -98,11 +103,13 @@ export function CommissionsManagement({
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>(customDateRange);
   
-  // Período selecionado
-  const [mesAtual] = useState(10);
-  const [anoAtual] = useState(2025);
+  // Período selecionado - usar data atual do sistema
+  const dataAtual = new Date();
+  const mesAtual = dataAtual.getMonth() + 1; // getMonth() retorna 0-11
+  const anoAtual = dataAtual.getFullYear();
   const [mesSelecionado, setMesSelecionado] = useState(mesAtual.toString().padStart(2, '0'));
   const [anoSelecionado, setAnoSelecionado] = useState(anoAtual.toString());
+  const [editandoPeriodo, setEditandoPeriodo] = useState(false);
 
   // Lançamento sendo editado
   const [lancamentoEditando, setLancamentoEditando] = useState<{
@@ -133,6 +140,52 @@ export function CommissionsManagement({
 
   const periodoSelecionado = `${anoSelecionado}-${mesSelecionado}`;
 
+  // Funções para navegação de período
+  const avancarMes = () => {
+    const mesNum = parseInt(mesSelecionado);
+    const anoNum = parseInt(anoSelecionado);
+    
+    if (mesNum === 12) {
+      setMesSelecionado('01');
+      setAnoSelecionado((anoNum + 1).toString());
+    } else {
+      setMesSelecionado((mesNum + 1).toString().padStart(2, '0'));
+    }
+  };
+
+  const voltarMes = () => {
+    const mesNum = parseInt(mesSelecionado);
+    const anoNum = parseInt(anoSelecionado);
+    
+    if (mesNum === 1) {
+      setMesSelecionado('12');
+      setAnoSelecionado((anoNum - 1).toString());
+    } else {
+      setMesSelecionado((mesNum - 1).toString().padStart(2, '0'));
+    }
+  };
+
+  const handlePeriodoInputChange = (valor: string) => {
+    // Remove caracteres não numéricos e barra
+    const apenasNumeros = valor.replace(/[^\d/]/g, '');
+    
+    // Se tem barra, divide em mês e ano
+    if (apenasNumeros.includes('/')) {
+      const [mes, ano] = apenasNumeros.split('/');
+      
+      if (mes && mes.length <= 2) {
+        const mesNum = parseInt(mes);
+        if (mesNum >= 1 && mesNum <= 12) {
+          setMesSelecionado(mes.padStart(2, '0'));
+        }
+      }
+      
+      if (ano && ano.length === 4) {
+        setAnoSelecionado(ano);
+      }
+    }
+  };
+
   // Carregar dados de comissões
   useEffect(() => {
     carregarComissoes();
@@ -150,14 +203,47 @@ export function CommissionsManagement({
         api.get('vendedores'),
       ]);
 
-      setRelatorios(Array.isArray(relatoriosAPI) ? relatoriosAPI : []);
+      // Recalcular valores de todos os relatórios em tempo real
+      const relatoriosRecalculados = Array.isArray(relatoriosAPI) ? relatoriosAPI.map((relatorio: any) => {
+        const vendas = (Array.isArray(comissoesVendasAPI) ? comissoesVendasAPI : []).filter((cv: any) => 
+          cv.vendedorId === relatorio.vendedorId && cv.periodo === relatorio.periodo
+        );
+        
+        const lancamentos = (Array.isArray(lancamentosAPI) ? lancamentosAPI : []).filter((lm: any) => 
+          lm.vendedorId === relatorio.vendedorId && lm.periodo === relatorio.periodo
+        );
+        
+        const pagsRelatorio = (Array.isArray(pagamentosAPI) ? pagamentosAPI : []).filter((p: any) => 
+          p.vendedorId === relatorio.vendedorId && p.periodo === relatorio.periodo
+        );
+
+        const totalComissoes = vendas.reduce((sum: number, v: any) => sum + v.valorComissao, 0);
+        const totalCreditos = lancamentos.filter((l: any) => l.tipo === 'credito').reduce((sum: number, l: any) => sum + l.valor, 0);
+        const totalDebitos = lancamentos.filter((l: any) => l.tipo === 'debito').reduce((sum: number, l: any) => sum + l.valor, 0);
+        const totalPago = pagsRelatorio.reduce((sum: number, p: any) => sum + p.valor, 0);
+
+        const valorLiquido = totalComissoes + totalCreditos - totalDebitos + (relatorio.saldoAnterior || 0);
+        const saldoDevedor = valorLiquido - totalPago;
+        const status = saldoDevedor <= 0 && relatorio.status === "fechado" ? "pago" as const : relatorio.status;
+
+        return {
+          ...relatorio,
+          valorLiquido,
+          totalPago,
+          saldoDevedor,
+          status,
+          dataPagamento: status === "pago" && !relatorio.dataPagamento ? new Date().toISOString() : relatorio.dataPagamento
+        };
+      }) : [];
+
+      setRelatorios(relatoriosRecalculados);
       setLancamentosManuais(Array.isArray(lancamentosAPI) ? lancamentosAPI : []);
       setPagamentos(Array.isArray(pagamentosAPI) ? pagamentosAPI : []);
       setComissoesVendas(Array.isArray(comissoesVendasAPI) ? comissoesVendasAPI : []);
       setVendedores(Array.isArray(vendedoresAPI) ? vendedoresAPI : []);
 
-      console.log('[COMISSOES] Dados carregados:', {
-        relatorios: relatoriosAPI?.length || 0,
+      console.log('[COMISSOES] Dados carregados e recalculados:', {
+        relatorios: relatoriosRecalculados?.length || 0,
         lancamentos: lancamentosAPI?.length || 0,
         pagamentos: pagamentosAPI?.length || 0
       });
@@ -647,6 +733,69 @@ export function CommissionsManagement({
   };
 
   // ========================================
+  // FUNÇÃO CALCULAR COMISSÕES PENDENTES
+  // ========================================
+
+  const handleCalcularComissoesPendentes = async () => {
+    try {
+      setLoading(true);
+      toast.info('Calculando comissões de vendas concluídas...');
+      
+      const resultado = await api.create('comissoesVendas/calcular', {});
+      
+      if (resultado.success) {
+        toast.success(resultado.message, { duration: 5000 });
+        
+        // Recarregar dados
+        await carregarComissoes();
+      } else {
+        toast.error('Erro ao calcular comissões');
+      }
+    } catch (error: any) {
+      console.error('[COMISSOES] Erro ao calcular comissões pendentes:', error);
+      toast.error(`Erro ao calcular comissões: ${error.message || 'Erro desconhecido'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ========================================
+  // FUNÇÃO LIMPAR COMISSÕES DE VENDAS CANCELADAS
+  // ========================================
+
+  const handleLimparComissoesCanceladas = async () => {
+    try {
+      setLoading(true);
+      toast.info('🧹 Limpando comissões de vendas canceladas...');
+      
+      const resultado = await api.create('comissoesVendas/limpar-canceladas', {});
+      
+      if (resultado.success) {
+        const detalhes = resultado.detalhes;
+        if (detalhes.comissoesExcluidas > 0) {
+          toast.success(
+            `✅ ${detalhes.comissoesExcluidas} comissão(ões) excluída(s) com sucesso!\n` +
+            `Comissões restantes: ${detalhes.comissoesRestantes}`,
+            { duration: 6000 }
+          );
+        } else {
+          toast.info('✓ Nenhuma comissão de venda cancelada encontrada', { duration: 4000 });
+        }
+        
+        // Recarregar dados
+        await carregarComissoes();
+      } else {
+        toast.error('Erro ao limpar comissões canceladas');
+      }
+    } catch (error: any) {
+      console.error('[COMISSOES] Erro ao limpar comissões canceladas:', error);
+      toast.error(`Erro ao limpar comissões: ${error.message || 'Erro desconhecido'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ========================================
   // FUNÇÕES AUXILIARES
   // ========================================
 
@@ -750,54 +899,6 @@ export function CommissionsManagement({
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div>
-        <h1 className="text-3xl">Gestão de Comissões</h1>
-        <p className="text-muted-foreground mt-1">
-          Gerencie relatórios periódicos de comissões, lançamentos manuais e pagamentos
-        </p>
-      </div>
-
-      {/* Filtros de Período */}
-      <div className="flex flex-wrap gap-2">
-        <Select value={period === "custom" ? "" : period} onValueChange={onPeriodChange}>
-          <SelectTrigger className="w-[200px]">
-            <CalendarIcon className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Selecione o período" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem key="per-curr-month" value="current_month">Mês atual</SelectItem>
-            <SelectItem key="per-last-month" value="last_month">Mês anterior</SelectItem>
-            <SelectItem key="per-curr-quarter" value="current_quarter">Trimestre atual</SelectItem>
-            <SelectItem key="per-curr-year" value="current_year">Ano atual</SelectItem>
-            <SelectItem key="per-30" value="30">Últimos 30 dias</SelectItem>
-            <SelectItem key="per-90" value="90">Últimos 90 dias</SelectItem>
-            <SelectItem key="per-365" value="365">Último ano</SelectItem>
-          </SelectContent>
-        </Select>
-        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="w-[240px] justify-start">
-              <CalendarIcon className="h-4 w-4 mr-2" />
-              {period === "custom" && dateRange.from && dateRange.to ? (
-                formatDateRange()
-              ) : (
-                "Período personalizado"
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="end">
-            <CalendarUI
-              mode="range"
-              selected={dateRange}
-              onSelect={handleDateSelect}
-              numberOfMonths={2}
-              locale={ptBR}
-            />
-          </PopoverContent>
-        </Popover>
-      </div>
-
       {/* Cards de Estatísticas */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -874,6 +975,47 @@ export function CommissionsManagement({
                 Visualize, gerencie lançamentos manuais e registre pagamentos
               </CardDescription>
             </div>
+            
+            {/* Dropdown de Ações Administrativas */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={loading}
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Ações
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem
+                  onClick={handleCalcularComissoesPendentes}
+                  disabled={loading}
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  <div className="flex flex-col">
+                    <span>Calcular Comissões Pendentes</span>
+                    <span className="text-xs text-muted-foreground">
+                      Processa vendas concluídas sem comissão
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleLimparComissoesCanceladas}
+                  disabled={loading}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  <div className="flex flex-col">
+                    <span>Limpar Comissões Canceladas</span>
+                    <span className="text-xs text-muted-foreground">
+                      Remove comissões de vendas canceladas
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -882,32 +1024,45 @@ export function CommissionsManagement({
             {/* Seletor de Período */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">Período</Label>
-              <div className="flex gap-2">
-                <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {meses.map((mes) => (
-                      <SelectItem key={mes.value} value={mes.value}>
-                        {mes.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={anoSelecionado} onValueChange={setAnoSelecionado}>
-                  <SelectTrigger className="w-[100px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {anos.map((ano) => (
-                      <SelectItem key={ano.value} value={ano.value}>
-                        {ano.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center border rounded-md bg-background">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 w-9 p-0 rounded-r-none border-r"
+                  onClick={voltarMes}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                {editandoPeriodo ? (
+                  <Input
+                    value={`${mesSelecionado}/${anoSelecionado}`}
+                    onChange={(e) => handlePeriodoInputChange(e.target.value)}
+                    onBlur={() => setEditandoPeriodo(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === 'Escape') {
+                        setEditandoPeriodo(false);
+                      }
+                    }}
+                    className="h-9 w-[150px] text-center border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-3"
+                    placeholder="MM/AAAA"
+                    autoFocus
+                  />
+                ) : (
+                  <button
+                    onClick={() => setEditandoPeriodo(true)}
+                    className="h-9 px-3 text-center min-w-[150px] hover:bg-accent transition-colors capitalize"
+                  >
+                    {formatPeriodo(periodoSelecionado)}
+                  </button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 w-9 p-0 rounded-l-none border-l"
+                  onClick={avancarMes}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
               </div>
             </div>
 
@@ -934,17 +1089,6 @@ export function CommissionsManagement({
                 <SelectItem key="st-pago" value="pago">Pago</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-
-          {/* Info do período selecionado */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CalendarIcon className="h-4 w-4" />
-            <span>
-              Exibindo relatórios de <span className="font-medium text-foreground capitalize">{formatPeriodo(periodoSelecionado)}</span>
-              {relatoriosFiltrados.length > 0 && (
-                <> • {relatoriosFiltrados.length} {relatoriosFiltrados.length === 1 ? 'vendedor' : 'vendedores'}</>
-              )}
-            </span>
           </div>
 
           {/* Ações em Massa */}

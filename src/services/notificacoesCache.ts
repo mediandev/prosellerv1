@@ -34,7 +34,13 @@ export const getNotificacoesWithCache = async (): Promise<any[]> => {
       lastFetchTime = Date.now();
       return notificacoesCache;
     } catch (error) {
-      console.error('[NOTIFICAÇÕES-CACHE] Erro ao buscar notificações:', error);
+      // Log silencioso para erros esperados (rede, autenticação)
+      if (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('401'))) {
+        console.log('[NOTIFICAÇÕES-CACHE] ℹ️ Servidor indisponível ou não autorizado, usando cache');
+      } else {
+        console.error('[NOTIFICAÇÕES-CACHE] ❌ Erro ao buscar notificações:', error);
+      }
+      
       // Em caso de erro, retornar cache antigo se tiver, senão array vazio
       return notificacoesCache.length > 0 ? notificacoesCache : [];
     } finally {

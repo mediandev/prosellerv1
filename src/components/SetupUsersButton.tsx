@@ -31,15 +31,31 @@ export function SetupUsersButton() {
   const [success, setSuccess] = useState(false);
 
   const setupUsers = async () => {
-    // Backend removido - usuários mock já estão disponíveis
     setLoading(true);
-    
-    // Simular delay para feedback visual
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const user of USUARIOS_SETUP) {
+      try {
+        await api.auth.signup(user.email, user.senha, user.nome, user.tipo);
+        successCount++;
+        console.log(`✓ Usuário criado: ${user.email}`);
+      } catch (error: any) {
+        console.error(`✗ Erro ao criar ${user.email}:`, error.message);
+        errorCount++;
+      }
+    }
+
     setLoading(false);
-    setSuccess(true);
-    toast.success('Usuários mock já estão disponíveis para login!');
+
+    if (successCount > 0) {
+      setSuccess(true);
+      toast.success(`${successCount} usuário(s) criado(s) com sucesso!`);
+    }
+
+    if (errorCount > 0) {
+      toast.info(`${errorCount} usuário(s) já existiam ou falharam`);
+    }
   };
 
   if (success) {
@@ -48,7 +64,7 @@ export function SetupUsersButton() {
         <UserPlus className="h-4 w-4 text-green-600" />
         <AlertTitle className="text-green-800">Usuários Criados!</AlertTitle>
         <AlertDescription className="text-green-700">
-          Sistema configurado. Você pode fazer login agora.
+          Os usuários foram criados no Supabase. Você pode fazer login agora.
         </AlertDescription>
       </Alert>
     );
@@ -58,7 +74,7 @@ export function SetupUsersButton() {
     <div className="space-y-2">
       <Alert className="bg-blue-50 border-blue-200">
         <AlertDescription className="text-blue-800 text-sm">
-          <strong>Modo Demo:</strong> Usando autenticação mock. Os usuários já estão disponíveis para login.
+          <strong>Modo Demo:</strong> Usando autenticação mock. Clique abaixo para criar usuários no Supabase.
         </AlertDescription>
       </Alert>
       <Button 
@@ -76,7 +92,7 @@ export function SetupUsersButton() {
         ) : (
           <>
             <UserPlus className="h-4 w-4 mr-2" />
-            Verificar Usuários Disponíveis
+            Criar Usuários no Supabase
           </>
         )}
       </Button>

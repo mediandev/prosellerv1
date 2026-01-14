@@ -19,6 +19,7 @@ interface CustomerABCFilters {
   grupoRede: string;
   naturezaOperacaoId: string;
   groupBy: GroupBy;
+  statusVendas: "concluidas" | "todas"; // NOVO: Filtro de status
 }
 
 interface CustomerABCData {
@@ -48,6 +49,7 @@ export function CustomerABCReport() {
     grupoRede: "all",
     naturezaOperacaoId: "all",
     groupBy: "none",
+    statusVendas: "concluidas", // NOVO: Padrão = apenas concluídas
   });
 
   // Carregar dados do Supabase
@@ -118,6 +120,14 @@ export function CustomerABCReport() {
         return false;
       }
 
+      // CORRIGIDO: Filtro de status - aceitar todas as variações de status concluído
+      if (filters.statusVendas === "concluidas") {
+        const statusConcluido = ['Faturado', 'Concluído', 'Concluída', 'faturado', 'concluido', 'concluida'].includes(venda.status || '');
+        if (!statusConcluido) {
+          return false;
+        }
+      }
+
       return true;
     });
   }, [filters]);
@@ -125,13 +135,13 @@ export function CustomerABCReport() {
   // Calcular Curva ABC de Clientes
   const abcData = useMemo(() => {
     // Agrupar vendas por cliente
-    const clientMap = new Map<string, { valor: number; vendedor: string }>();
+    const clientMap = new Map<string, { valor: number; vendedorId: string }>();
 
     filteredSales.forEach((venda) => {
-      const current = clientMap.get(venda.clienteId) || { valor: 0, vendedor: venda.nomeVendedor };
+      const current = clientMap.get(venda.clienteId) || { valor: 0, vendedorId: venda.vendedorId };
       clientMap.set(venda.clienteId, {
         valor: current.valor + venda.valorPedido,
-        vendedor: venda.nomeVendedor,
+        vendedorId: venda.vendedorId, // 🆕 Armazenar ID do vendedor
       });
     });
 
@@ -141,12 +151,14 @@ export function CustomerABCReport() {
     // Criar array de clientes com dados
     const clientesData: CustomerABCData[] = Array.from(clientMap.entries()).map(([clienteId, data]) => {
       const cliente = clientes.find(c => c.id === clienteId);
+      // 🆕 Buscar nome do vendedor pelo ID
+      const vendedor = vendedores.find(v => v.id === data.vendedorId);
       return {
         clienteId,
         grupoRede: cliente?.grupoRede || "-",
         nomeCliente: cliente?.razaoSocial || "Cliente Desconhecido",
         cnpj: cliente?.cnpj || "-",
-        vendedor: data.vendedor,
+        vendedor: vendedor?.nome || "Vendedor Desconhecido",
         valorTotal: data.valor,
         percentual: totalVendas > 0 ? (data.valor / totalVendas) * 100 : 0,
         percentualAcumulado: 0,
@@ -160,16 +172,18 @@ export function CustomerABCReport() {
     // Calcular percentual acumulado e classificar curva ABC
     let acumulado = 0;
     clientesData.forEach((cliente) => {
-      acumulado += cliente.percentual;
-      cliente.percentualAcumulado = acumulado;
-
-      if (acumulado <= 80) {
+      // CORREÇÃO: Classificar ANTES de acumular o percentual atual
+      if (acumulado < 80) {
         cliente.curvaABC = "A";
-      } else if (acumulado <= 95) {
+      } else if (acumulado < 95) {
         cliente.curvaABC = "B";
       } else {
         cliente.curvaABC = "C";
       }
+
+      // Agora sim, acumular
+      acumulado += cliente.percentual;
+      cliente.percentualAcumulado = acumulado;
     });
 
     return clientesData;
@@ -243,6 +257,7 @@ export function CustomerABCReport() {
       grupoRede: "all",
       naturezaOperacaoId: "all",
       groupBy: "none",
+      statusVendas: "concluidas", // NOVO: Padrão = apenas concluídas
     });
   };
 
@@ -392,6 +407,20 @@ export function CustomerABCReport() {
                   <SelectItem value="grupo">Grupo/Rede</SelectItem>
                   <SelectItem value="vendedor">Vendedor</SelectItem>
                   <SelectItem value="natureza">Natureza de Operação</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Status de Vendas */}
+            <div className="space-y-2">
+              <Label>Status de Vendas</Label>
+              <Select value={filters.statusVendas} onValueChange={(value: "concluidas" | "todas") => setFilters({ ...filters, statusVendas: value })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="concluidas">Apenas concluídas</SelectItem>
+                  <SelectItem value="todas">Todas as vendas</SelectItem>
                 </SelectContent>
               </Select>
             </div>

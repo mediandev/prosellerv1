@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { Cliente } from '../types/customer';
 import { useAuth } from '../contexts/AuthContext';
 import { historyService } from '../services/historyService';
+import { companyService } from '../services/companyService';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import {
@@ -241,6 +242,10 @@ export function CustomerImportExport({ clientes, onImportComplete }: CustomerImp
           throw new Error('Campos obrigatórios não preenchidos');
         }
 
+        // ✅ Buscar primeira empresa disponível
+        const empresas = companyService.getAllSync();
+        const primeiraEmpresa = empresas.length > 0 ? empresas[0].razaoSocial : undefined;
+
         // Criar objeto cliente
         const cliente: Partial<Cliente> = {
           id: `cliente-import-${Date.now()}-${i}`,
@@ -269,7 +274,7 @@ export function CustomerImportExport({ clientes, onImportComplete }: CustomerImp
           descontoFinanceiro: parseFloat(descontoFinanceiro) || 0,
           condicoesPagamentoAssociadas: [],
           pedidoMinimo: parseFloat(pedidoMinimo) || 0,
-          empresaFaturamento: 'Empresa Principal LTDA',
+          empresaFaturamento: primeiraEmpresa, // ✅ Usa primeira empresa disponível
           dataCadastro: new Date().toISOString(),
           dataAtualizacao: new Date().toISOString(),
           criadoPor: usuario?.nome || 'Sistema',

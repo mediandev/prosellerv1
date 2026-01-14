@@ -1,8 +1,15 @@
 // Serviço de sincronização automática de status com Tiny ERP
-// 🔄 VERSION: 2024-11-30_20:00 - FIX: Validação CNPJ corrigida - aceita zeros iniciais
-// ✅ VERSÃO 2.0.0 - Banco do Brasil e CNPJs com zeros agora são aceitos
+// 🔄 VERSION: 2025-12-24_03:00 - FIX CRÍTICO: Forçar salvamento dados NFe SEMPRE
+// ✅ VERSÃO 3.0.0 - Salvamento FORÇADO de notaFiscalId, notaFiscalNumero, notaFiscalChave
+console.log('🚀 tinyERPSync.ts v3.0.0 CARREGADO - Salvamento NFe FORÇADO');
 import { toast } from 'sonner@2.0.3';
 import { Venda, StatusVenda, TinyERPStatus, MAPEAMENTO_STATUS_TINY } from '../types/venda';
+import { api } from './api';
+
+// Cache de produtos para matching
+let produtosCache: any[] = [];
+let produtosCacheTimestamp = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 
 export interface TinyPedidoStatus {
   id: string;
@@ -49,6 +56,92 @@ export interface ConfiguracaoSincronizacaoEmpresa extends ConfiguracaoSincroniza
   empresaId: string;
   empresaNome: string;
   apiToken: string;
+}
+
+/**
+ * Carrega produtos do cache ou da API
+ */
+async function carregarProdutos(): Promise<any[]> {
+  const agora = Date.now();
+  
+  // Verificar se o cache ainda é válido
+  if (produtosCache.length > 0 && (agora - produtosCacheTimestamp) < CACHE_DURATION) {
+    console.log('[PRODUTO-MATCH] Usando cache de produtos:', produtosCache.length);
+    return produtosCache;
+  }
+  
+  try {
+    console.log('[PRODUTO-MATCH] Carregando produtos da API...');
+    const produtos = await api.get('produtos');
+    produtosCache = Array.isArray(produtos) ? produtos : [];
+    produtosCacheTimestamp = agora;
+    console.log('[PRODUTO-MATCH] Produtos carregados:', produtosCache.length);
+    return produtosCache;
+  } catch (error) {
+    console.error('[PRODUTO-MATCH] Erro ao carregar produtos:', error);
+    return produtosCache; // Retornar cache antigo se houver erro
+  }
+}
+
+/**
+ * Faz matching de um item da NF com produtos cadastrados
+ * Tenta em ordem: produtoId -> EAN -> SKU
+ */
+async function matchProduto(itemNF: any): Promise<{ produtoId?: string; codigoSku: string; codigoEan?: string }> {
+  const produtos = await carregarProdutos();
+  
+  // Normalizar dados do item da NF
+  const skuNF = itemNF.codigo || itemNF.item?.codigo || '';
+  const eanNF = itemNF.gtin || itemNF.item?.gtin || '';
+  
+  console.log('[PRODUTO-MATCH] Tentando match para:', { skuNF, eanNF });
+  
+  // 1. Tentar por EAN primeiro (mais confiável)
+  if (eanNF) {
+    const produtoPorEan = produtos.find(p => 
+      p.codigoEan && p.codigoEan.trim() === eanNF.trim()
+    );
+    
+    if (produtoPorEan) {
+      console.log('[PRODUTO-MATCH] ✅ Match por EAN:', {
+        produtoId: produtoPorEan.id,
+        sku: produtoPorEan.codigoSku,
+        ean: produtoPorEan.codigoEan
+      });
+      return {
+        produtoId: produtoPorEan.id,
+        codigoSku: produtoPorEan.codigoSku,
+        codigoEan: produtoPorEan.codigoEan
+      };
+    }
+  }
+  
+  // 2. Tentar por SKU
+  if (skuNF) {
+    const produtoPorSku = produtos.find(p => 
+      p.codigoSku && p.codigoSku.trim() === skuNF.trim()
+    );
+    
+    if (produtoPorSku) {
+      console.log('[PRODUTO-MATCH] ✅ Match por SKU:', {
+        produtoId: produtoPorSku.id,
+        sku: produtoPorSku.codigoSku,
+        ean: produtoPorSku.codigoEan
+      });
+      return {
+        produtoId: produtoPorSku.id,
+        codigoSku: produtoPorSku.codigoSku,
+        codigoEan: produtoPorSku.codigoEan
+      };
+    }
+  }
+  
+  // 3. Não encontrou - retornar apenas os dados da NF
+  console.log('[PRODUTO-MATCH] ⚠️ Produto não encontrado no cadastro:', { skuNF, eanNF });
+  return {
+    codigoSku: skuNF,
+    codigoEan: eanNF || undefined
+  };
 }
 
 class TinyERPSyncService {
@@ -174,23 +267,66 @@ class TinyERPSyncService {
 
     console.log('Iniciando sincronização de vendas...');
 
+    // Contar pedidos mockados (IDs de teste)
+    const pedidosMockados = (vendas || []).filter(
+      v => v.integracaoERP?.erpPedidoId?.startsWith('tiny-mock-')
+    ).length;
+    
+    if (pedidosMockados > 0) {
+      console.log(`ℹ️ ${pedidosMockados} pedido(s) com IDs mockados serão ignorados (não foram enviados ao ERP real)`);
+    }
+
     // Filtrar vendas que devem ser sincronizadas
     const vendasParaSincronizar = (vendas || []).filter(
       v => v.integracaoERP?.sincronizacaoAutomatica && 
            v.integracaoERP?.erpPedidoId &&
+           !v.integracaoERP?.erpPedidoId.startsWith('tiny-mock-') && // Ignorar IDs mockados
            v.status !== 'Rascunho' &&
            v.status !== 'Cancelado'
     );
 
     console.log(`${vendasParaSincronizar.length} vendas para sincronizar`);
 
+    let sucesso = 0;
+    let erros = 0;
+    let naoEncontrados = 0;
+    let rateLimitAtingido = false;
+
     for (const venda of vendasParaSincronizar) {
       try {
-        await this.sincronizarVenda(venda);
-      } catch (error) {
-        console.error(`Erro ao sincronizar venda ${venda.numero}:`, error);
+        const resultado = await this.sincronizarVenda(venda);
+        if (resultado === null) {
+          naoEncontrados++;
+          console.log(`⚠️ Pedido ${venda.numero} não encontrado no ERP`);
+        } else {
+          sucesso++;
+          console.log(`✅ Pedido ${venda.numero} sincronizado`);
+        }
+        
+        // Delay de 500ms entre requisições para respeitar rate limit
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+      } catch (error: any) {
+        // Verificar se é erro de rate limit (código 6)
+        if (error?.details?.codigo_erro === 6 || error?.codigo_erro === 6 || 
+            error?.message?.includes('API Bloqueada') || error?.message?.includes('Excedido o número de acessos')) {
+          console.error('🚫 Rate limit da API Tiny ERP atingido!');
+          console.error('⏸️ Parando sincronização para evitar bloqueio prolongado.');
+          rateLimitAtingido = true;
+          break; // Parar a sincronização
+        }
+        
+        erros++;
+        console.error(`❌ Erro ao sincronizar venda ${venda.numero}:`, error);
       }
     }
+
+    if (rateLimitAtingido) {
+      console.log(`⏸️ Sincronização interrompida por rate limit: ${sucesso} sucesso, ${naoEncontrados} não encontrados antes da pausa`);
+      throw new Error('Rate limit da API Tiny ERP atingido. Aguarde alguns minutos antes de sincronizar novamente.');
+    }
+
+    console.log(`✅ Sincronização concluída: ${sucesso} sucesso, ${naoEncontrados} não encontrados, ${erros} erros`);
   }
 
   /**
@@ -199,6 +335,12 @@ class TinyERPSyncService {
   async sincronizarVenda(venda: Venda, empresaId?: string): Promise<Venda | null> {
     if (!venda.integracaoERP?.erpPedidoId) {
       console.log('Venda sem ID do ERP, pulando sincronização');
+      return null;
+    }
+
+    // Ignorar IDs mockados (pedidos de teste que nunca foram enviados ao ERP)
+    if (venda.integracaoERP.erpPedidoId.startsWith('tiny-mock-')) {
+      console.log(`⚠️ Pedido ${venda.numero} possui ID mockado (${venda.integracaoERP.erpPedidoId}), pulando sincronização`);
       return null;
     }
 
@@ -234,7 +376,8 @@ class TinyERPSyncService {
       );
 
       if (!statusERP) {
-        throw new Error('Não foi possível consultar status no ERP');
+        console.warn(`⚠️ Pedido ${venda.numero} não encontrado no ERP. Pulando sincronização.`);
+        return null; // Retorna null sem jogar erro
       }
 
       // Verificar se houve mudança de status
@@ -303,11 +446,129 @@ class TinyERPSyncService {
           if (statusERP.nota_fiscal) {
             vendaAtualizada.integracaoERP = {
               ...vendaAtualizada.integracaoERP,
+              notaFiscalId: statusERP.nota_fiscal.id,
               notaFiscalNumero: statusERP.nota_fiscal.numero,
               notaFiscalChave: statusERP.nota_fiscal.chave_acesso,
               notaFiscalUrl: statusERP.nota_fiscal.url_danfe,
               dataFaturamento: statusERP.data_faturamento ? new Date(statusERP.data_faturamento) : undefined,
             };
+          }
+        }
+
+        // 🆕 BUSCAR DADOS DE FATURAMENTO SE O PEDIDO FOI FATURADO
+        // Mesma lógica do webhook para garantir consistência
+        // O Tiny pode retornar em 2 formatos: statusERP.nota_fiscal.id OU statusERP.id_nota_fiscal
+        const notaFiscalIdDisponivel = statusERP.nota_fiscal?.id || statusERP.id_nota_fiscal;
+        
+        console.log('[Tiny Sync] 🔍 Verificando se precisa buscar nota fiscal:', {
+          temNotaFiscalId: !!notaFiscalIdDisponivel,
+          notaFiscalId: notaFiscalIdDisponivel,
+          nota_fiscal_id: statusERP.nota_fiscal?.id,
+          id_nota_fiscal: statusERP.id_nota_fiscal,
+          statusNovo,
+          deveProcessar: notaFiscalIdDisponivel && (statusNovo === 'Aprovado' || statusNovo === 'Faturado' || statusNovo === 'Concluído')
+        });
+        
+        if (notaFiscalIdDisponivel && (statusNovo === 'Aprovado' || statusNovo === 'Faturado' || statusNovo === 'Concluído')) {
+          console.log('[Tiny Sync] 📄 Pedido faturado detectado, buscando dados completos da nota fiscal...');
+          
+          try {
+            const { api } = await import('../services/api');
+            const notaFiscalId = notaFiscalIdDisponivel;
+            
+            console.log('[Tiny Sync] 🔍 Buscando nota fiscal ID:', notaFiscalId);
+            const nfData = await api.tinyObterNotaFiscal(empresaId || venda.empresaFaturamentoId, notaFiscalId);
+            
+            console.log('[Tiny Sync] 📦 Response da API:', {
+              status: nfData?.status,
+              status_processamento: nfData?.status_processamento,
+              temNotaFiscal: !!nfData?.nota_fiscal
+            });
+            
+            if (nfData?.status === 'OK' && nfData?.nota_fiscal) {
+              const nf = nfData.nota_fiscal;
+              console.log('[Tiny Sync] ✅ Nota fiscal obtida com sucesso!');
+              
+              // Extrair valor total faturado
+              const valorFaturado = parseFloat(nf.valor_nota || nf.total_nota || '0');
+              const valorDesconto = parseFloat(nf.desconto || '0');
+              
+              console.log('[Tiny Sync] 💰 Valor faturado:', valorFaturado);
+              console.log('[Tiny Sync] 💸 Desconto aplicado:', valorDesconto);
+              
+              // Extrair itens faturados com matching de produtos
+              let itensFaturados = [];
+              if (nf.itens && Array.isArray(nf.itens)) {
+                // Processar cada item com matching
+                itensFaturados = await Promise.all(
+                  nf.itens.map(async (item: any, index: number) => {
+                    const match = await matchProduto(item);
+                    
+                    return {
+                      id: `faturado-${Date.now()}-${index}`,
+                      numero: index + 1,
+                      produtoId: match.produtoId,
+                      descricaoProduto: item.item?.descricao || '',
+                      codigoSku: match.codigoSku,
+                      codigoEan: match.codigoEan,
+                      quantidade: parseFloat(item.item?.quantidade || '0'),
+                      valorUnitario: parseFloat(item.item?.valor_unitario || '0'),
+                      subtotal: parseFloat(item.item?.valor || '0'),
+                      unidade: item.item?.unidade || 'UN',
+                      cfop: item.item?.cfop || '',
+                      ncm: item.item?.ncm || '',
+                    };
+                  })
+                );
+                console.log('[Tiny Sync] 📦 Itens faturados processados:', itensFaturados.length);
+                console.log('[Tiny Sync] 🔍 Matching results:', 
+                  itensFaturados.map(i => ({ 
+                    sku: i.codigoSku, 
+                    produtoId: i.produtoId ? '✅' : '❌' 
+                  }))
+                );
+              }
+              
+              // Adicionar dados de faturamento na venda atualizada
+              vendaAtualizada.valorFaturado = valorFaturado;
+              vendaAtualizada.valorDescontoFaturado = valorDesconto;
+              vendaAtualizada.dataFaturamento = nf.data_emissao || statusERP.data_faturamento || new Date().toISOString();
+              
+              // 🆕 ADICIONAR DADOS DA NOTA FISCAL dentro de integracaoERP (necessário para exibir seção "Dados NFe Vinculada")
+              if (!vendaAtualizada.integracaoERP) {
+                vendaAtualizada.integracaoERP = {};
+              }
+              vendaAtualizada.integracaoERP.notaFiscalId = notaFiscalId;
+              vendaAtualizada.integracaoERP.notaFiscalNumero = nf.numero || null;
+              vendaAtualizada.integracaoERP.notaFiscalChave = nf.chave_acesso || null;
+              vendaAtualizada.integracaoERP.notaFiscalSerie = nf.serie || null;
+              
+              if (itensFaturados.length > 0) {
+                vendaAtualizada.itensFaturados = itensFaturados;
+              }
+              
+              console.log('[Tiny Sync] ✅ Dados de faturamento extraídos e salvos na venda:', {
+                vendaId: venda.id,
+                vendaNumero: venda.numero,
+                valorFaturado: vendaAtualizada.valorFaturado,
+                valorDescontoFaturado: vendaAtualizada.valorDescontoFaturado,
+                notaFiscalId: vendaAtualizada.integracaoERP?.notaFiscalId,
+                notaFiscalNumero: vendaAtualizada.integracaoERP?.notaFiscalNumero,
+                notaFiscalChave: vendaAtualizada.integracaoERP?.notaFiscalChave,
+                temItensFaturados: !!vendaAtualizada.itensFaturados
+              });
+            } else {
+              console.warn('[Tiny Sync] ⚠️ Não foi possível obter dados da nota fiscal (mudança de status):', {
+                status: nfData?.status,
+                status_processamento: nfData?.status_processamento,
+                temNotaFiscal: !!nfData?.nota_fiscal,
+                erros: nfData?.erros,
+                avisos: nfData?.avisos
+              });
+            }
+          } catch (nfError) {
+            console.error('[Tiny Sync] ❌ Erro ao buscar nota fiscal:', nfError);
+            // Continuar mesmo com erro - não bloquear a atualização do status
           }
         }
 
@@ -340,6 +601,128 @@ class TinyERPSyncService {
         };
         
         console.log(`ℹ️ Venda ${venda.numero} já está atualizada`);
+        
+        // 🆕🆕🆕 FORÇAR BUSCA DE DADOS DA NFE SEMPRE QUE HOUVER ID (SEM CONDIÇÕES!)
+        // Buscar ID da nota fiscal (prioridade: id_nota_fiscal direto, depois nota_fiscal.id)
+        const notaFiscalIdRecuperacao = statusERP.id_nota_fiscal || statusERP.nota_fiscal?.id;
+        
+        console.log('[Tiny Sync] 🚨 FORÇANDO busca de dados da NFe:', {
+          temNotaFiscalId: !!notaFiscalIdRecuperacao,
+          notaFiscalId: notaFiscalIdRecuperacao,
+          vendaAtualJaTem: !!venda.notaFiscalId,
+          statusNovo
+        });
+        
+        if (notaFiscalIdRecuperacao) {
+          console.log('[Tiny Sync] 📄 FORÇANDO busca da nota fiscal:', notaFiscalIdRecuperacao);
+          
+          try {
+            const { api } = await import('../services/api');
+            const notaFiscalId = notaFiscalIdRecuperacao;
+            
+            console.log('[Tiny Sync] 🔍 Buscando nota fiscal ID (recuperação):', notaFiscalId);
+            const nfData = await api.tinyObterNotaFiscal(empresaId || venda.empresaFaturamentoId, notaFiscalId);
+            
+            console.log('[Tiny Sync] 🔴🔴🔴 RESPOSTA RAW COMPLETA da API:', nfData);
+            console.log('[Tiny Sync] 🔴 nfData type:', typeof nfData);
+            console.log('[Tiny Sync] 🔴 nfData keys:', nfData ? Object.keys(nfData) : 'null');
+            console.log('[Tiny Sync] 🔴 nfData.status:', nfData?.status);
+            console.log('[Tiny Sync] 🔴 nfData.nota_fiscal:', nfData?.nota_fiscal);
+            
+            console.log('[Tiny Sync] 📦 Response da API (recuperação):', {
+              status: nfData?.status,
+              status_processamento: nfData?.status_processamento,
+              temNotaFiscal: !!nfData?.nota_fiscal,
+              erros: nfData?.erros,
+              responseCompleto: JSON.stringify(nfData, null, 2)
+            });
+            
+            if (nfData?.status === 'OK' && nfData?.nota_fiscal) {
+              const nf = nfData.nota_fiscal;
+              console.log('[Tiny Sync] ✅ Nota fiscal obtida com sucesso!');
+              
+              // Extrair valor total faturado
+              const valorFaturado = parseFloat(nf.valor_nota || nf.total_nota || '0');
+              const valorDesconto = parseFloat(nf.desconto || '0');
+              
+              console.log('[Tiny Sync] 💰 Valor faturado:', valorFaturado);
+              console.log('[Tiny Sync] 💸 Desconto aplicado:', valorDesconto);
+              
+              // Extrair itens faturados com matching de produtos
+              let itensFaturados = [];
+              if (nf.itens && Array.isArray(nf.itens)) {
+                // Processar cada item com matching
+                itensFaturados = await Promise.all(
+                  nf.itens.map(async (item: any, index: number) => {
+                    const match = await matchProduto(item);
+                    
+                    return {
+                      id: `faturado-${Date.now()}-${index}`,
+                      numero: index + 1,
+                      produtoId: match.produtoId,
+                      descricaoProduto: item.item?.descricao || '',
+                      codigoSku: match.codigoSku,
+                      codigoEan: match.codigoEan,
+                      quantidade: parseFloat(item.item?.quantidade || '0'),
+                      valorUnitario: parseFloat(item.item?.valor_unitario || '0'),
+                      subtotal: parseFloat(item.item?.valor || '0'),
+                      unidade: item.item?.unidade || 'UN',
+                      cfop: item.item?.cfop || '',
+                      ncm: item.item?.ncm || '',
+                    };
+                  })
+                );
+                console.log('[Tiny Sync] 📦 Itens faturados processados:', itensFaturados.length);
+                console.log('[Tiny Sync] 🔍 Matching results:', 
+                  itensFaturados.map(i => ({ 
+                    sku: i.codigoSku, 
+                    produtoId: i.produtoId ? '✅' : '❌' 
+                  }))
+                );
+              }
+              
+              // Adicionar dados de faturamento na venda atualizada
+              vendaAtualizada.valorFaturado = valorFaturado;
+              vendaAtualizada.valorDescontoFaturado = valorDesconto;
+              vendaAtualizada.dataFaturamento = nf.data_emissao || statusERP.data_faturamento || new Date().toISOString();
+              
+              // 🆕 ADICIONAR DADOS DA NOTA FISCAL dentro de integracaoERP (necessário para exibir seção "Dados NFe Vinculada")
+              if (!vendaAtualizada.integracaoERP) {
+                vendaAtualizada.integracaoERP = {};
+              }
+              vendaAtualizada.integracaoERP.notaFiscalId = notaFiscalId;
+              vendaAtualizada.integracaoERP.notaFiscalNumero = nf.numero || null;
+              vendaAtualizada.integracaoERP.notaFiscalChave = nf.chave_acesso || null;
+              vendaAtualizada.integracaoERP.notaFiscalSerie = nf.serie || null;
+              
+              if (itensFaturados.length > 0) {
+                vendaAtualizada.itensFaturados = itensFaturados;
+              }
+              
+              console.log('[Tiny Sync] ✅ Dados de faturamento extraídos e salvos na venda (recuperação):', {
+                vendaId: venda.id,
+                vendaNumero: venda.numero,
+                valorFaturado: vendaAtualizada.valorFaturado,
+                valorDescontoFaturado: vendaAtualizada.valorDescontoFaturado,
+                notaFiscalId: vendaAtualizada.integracaoERP?.notaFiscalId,
+                notaFiscalNumero: vendaAtualizada.integracaoERP?.notaFiscalNumero,
+                notaFiscalChave: vendaAtualizada.integracaoERP?.notaFiscalChave,
+                temItensFaturados: !!vendaAtualizada.itensFaturados
+              });
+            } else {
+              console.warn('[Tiny Sync] ⚠️ Não foi possível obter dados da nota fiscal (recuperação)');
+              console.warn('[Tiny Sync] 🔴 Status:', nfData?.status);
+              console.warn('[Tiny Sync] 🔴 Status Processamento:', nfData?.status_processamento);
+              console.warn('[Tiny Sync] 🔴 Tem Nota Fiscal?:', !!nfData?.nota_fiscal);
+              console.warn('[Tiny Sync] 🔴 Erros:', nfData?.erros);
+              console.warn('[Tiny Sync] 🔴 Avisos:', nfData?.avisos);
+              console.warn('[Tiny Sync] 🔴 nfData completo:', nfData);
+            }
+          } catch (nfError) {
+            console.error('[Tiny Sync] ❌ Erro ao buscar nota fiscal:', nfError);
+            // Continuar mesmo com erro
+          }
+        }
       }
 
       return vendaAtualizada;
@@ -427,9 +810,19 @@ class TinyERPSyncService {
         url_rastreamento: pedido.url_rastreamento,
         data_faturamento: pedido.data_faturamento,
         nota_fiscal: pedido.nota_fiscal,
+        id_nota_fiscal: pedido.id_nota_fiscal,
         transportadora: pedido.transportadora
       };
-    } catch (error) {
+    } catch (error: any) {
+      // Verificar se é erro 32 (Pedido não localizado)
+      if (error?.details?.codigo_erro === '32' || error?.codigo_erro === '32') {
+        console.warn('[Tiny Sync] ⚠️ Pedido não encontrado no Tiny ERP (erro 32):', {
+          erpPedidoId,
+          empresaId
+        });
+        return null; // Retorna null sem jogar erro
+      }
+      
       console.error('[Tiny Sync] Erro ao consultar status no ERP:', error);
       return null;
     }
@@ -591,6 +984,13 @@ class TinyERPSyncService {
     console.log('🚀 [tinyERPSync v2024-01-20_19:30] INICIANDO ENVIO');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🚀 Venda:', venda.numero, '| empresaFaturamentoId:', venda.empresaFaturamentoId);
+    
+    // ✅ PROTEÇÃO: NÃO enviar pedidos com status "Rascunho"
+    if (venda.status === 'Rascunho') {
+      console.error('🚫 BLOQUEIO: Tentativa de enviar pedido com status "Rascunho" ao Tiny ERP');
+      console.error('🚫 Venda:', venda.numero, '| Status:', venda.status);
+      throw new Error('Pedidos com status "Rascunho" não podem ser enviados ao ERP');
+    }
     
     // Detectar se estamos em ambiente que suporta chamadas à API
     const usarModoMock = this.deveUsarModoMock();

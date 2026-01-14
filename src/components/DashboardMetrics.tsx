@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { TrendingUp, TrendingDown, DollarSign, Target, Users, ShoppingCart, Calendar as CalendarIcon, Filter, Map, Package, UserCheck, Receipt, ChevronLeft, ChevronRight } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Target, Users, ShoppingCart, Calendar as CalendarIcon, Filter, Map as MapIcon, Package, UserCheck, Receipt, ChevronLeft, ChevronRight } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
@@ -26,22 +26,61 @@ interface MetricCardProps {
   change: number;
   icon: React.ReactNode;
   subtitle?: string; // Linha adicional de descrição
+  exactValue?: number; // Valor exato para tooltip
 }
 
-function MetricCard({ title, value, change, icon, subtitle }: MetricCardProps) {
+function MetricCard({ title, value, change, icon, subtitle, exactValue }: MetricCardProps) {
   const isPositive = change >= 0;
+  
+  const formatCurrency = (value: number) => {
+    return value.toLocaleString('pt-BR', { 
+      style: 'currency', 
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+  
+  const formatDisplayValue = (value: number) => {
+    // Se for >= 1 milhão, abreviar mostrando milhões e milhares
+    if (value >= 1000000) {
+      // Truncar para milhares (remover centenas e centavos)
+      const truncatedValue = Math.floor(value / 1000);
+      // Formatar com separador de milhar
+      return `R$ ${truncatedValue.toLocaleString('pt-BR')} M`;
+    }
+    
+    // Se for < 1 milhão, mostrar valor completo
+    return formatCurrency(value);
+  };
+  
+  // Se exactValue está definido, usar formatDisplayValue para o valor principal
+  const displayValue = exactValue !== undefined ? formatDisplayValue(exactValue) : value;
   
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 px-4 pt-4 pb-1">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <div className="h-4 w-4 text-muted-foreground">
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 px-4 pt-4 pb-1 h-[52px]">
+        <CardTitle className="text-sm font-medium leading-tight">{title}</CardTitle>
+        <div className="h-4 w-4 text-muted-foreground flex-shrink-0">
           {icon}
         </div>
       </CardHeader>
       <CardContent className="px-4 pb-4 space-y-0">
-        <div className="text-2xl font-bold leading-none mb-0.5">{value}</div>
-        <div className="min-h-[14px] flex items-center mb-0.5">
+        {exactValue !== undefined ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="text-2xl font-bold leading-none mb-0.5 cursor-help">{displayValue}</div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{formatCurrency(exactValue)}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <div className="text-2xl font-bold leading-none mb-0.5">{value}</div>
+        )}
+        <div className="h-[20px] flex items-center mb-0.5">
           {subtitle && (
             <p className="text-xs text-muted-foreground leading-tight">{subtitle}</p>
           )}
@@ -76,6 +115,8 @@ export interface DashboardFilters {
   segmentos: string[];
   statusClientes: string[];
   ufs: string[];
+  statusVendas: "concluidas" | "todas"; // NOVO: Filtro de status de vendas
+  curvasABC: string[]; // 🆕 NOVO: Filtro de Curva ABC de Clientes
 }
 
 interface DashboardMetricsProps {
@@ -84,7 +125,9 @@ interface DashboardMetricsProps {
   onCustomDateRangeChange?: (range: { from: Date | undefined; to: Date | undefined }) => void;
   filters: DashboardFilters;
   onFiltersChange?: (filters: DashboardFilters) => void;
-  onTransactionsChange?: (transactions: Transaction[]) => void; // Callback para enviar transações filtradas
+  onTransactionsChange?: (transactions: Transaction[]) => void; // Callback para enviar transações filtradas (SEM canceladas)
+  onAllTransactionsChange?: (transactions: Transaction[]) => void; // Callback para enviar TODAS as transações (COM canceladas) para CanceledSalesTable
+  onRawTransactionsChange?: (transactions: Transaction[]) => void; // 🆕 NOVO: Callback para enviar TODAS as transações SEM filtro de período (para Curva ABC)
 }
 
 // Dados mockados para diferentes períodos
@@ -257,7 +300,7 @@ interface DateRange {
   to: Date | undefined;
 }
 
-export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChange, filters, onFiltersChange, onTransactionsChange }: DashboardMetricsProps) {
+export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChange, filters, onFiltersChange, onTransactionsChange, onAllTransactionsChange, onRawTransactionsChange }: DashboardMetricsProps) {
   const { usuario } = useAuth();
   const ehVendedor = usuario?.tipo === 'vendedor';
   
@@ -272,6 +315,25 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   
   // Estado para armazenar a meta do período
   const [metaMensal, setMetaMensal] = useState<number>(0);
+  
+  // Estado para armazenar as métricas calculadas
+  const [metrics, setMetrics] = useState({
+    vendasTotais: 0,
+    vendasTotaisChange: 0,
+    ticketMedio: 0,
+    ticketMedioChange: 0,
+    produtosVendidos: 0,
+    produtosVendidosChange: 0,
+    positivacao: 0,
+    positivacaoChange: 0,
+    positivacaoCount: 0,
+    positivacaoTotal: 0,
+    vendedoresAtivos: 0,
+    vendedoresAtivosChange: 0,
+    porcentagemMeta: 0,
+    porcentagemMetaChange: 0,
+    negociosFechados: 0,
+  });
   
   // Carregar dados do Supabase ao montar o componente
   useEffect(() => {
@@ -297,9 +359,32 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   // Carregar meta do período
   useEffect(() => {
     async function loadMeta() {
-      if (!period || !period.includes('-')) return;
+      // Determinar ano e mês baseado no período
+      let year: number;
+      let month: number;
       
-      const [year, month] = period.split('-').map(Number);
+      const hoje = new Date();
+      
+      if (period === "current_month") {
+        // Mês atual
+        year = hoje.getFullYear();
+        month = hoje.getMonth() + 1;
+      } else if (period && period.includes('-')) {
+        // Formato YYYY-MM (legado)
+        const parts = period.split('-').map(Number);
+        if (isNaN(parts[0]) || isNaN(parts[1])) {
+          console.log('[DASHBOARD] ⚠️ Período inválido:', period);
+          setMetaMensal(0);
+          return;
+        }
+        year = parts[0];
+        month = parts[1];
+      } else {
+        // Outros períodos (7, 30, 90, 365, custom) - não carregar meta
+        console.log('[DASHBOARD] ⚠️ Período não compatível com meta mensal:', period);
+        setMetaMensal(0);
+        return;
+      }
       
       try {
         let meta = 0;
@@ -337,6 +422,8 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   const [selectedSegmento, setSelectedSegmento] = useState<string[]>(filters.segmentos);
   const [selectedStatusCliente, setSelectedStatusCliente] = useState<string[]>(filters.statusClientes);
   const [selectedUF, setSelectedUF] = useState<string[]>(filters.ufs);
+  const [selectedStatusVendas, setSelectedStatusVendas] = useState<DashboardFilters['statusVendas']>(filters.statusVendas);
+  const [selectedCurvaABC, setSelectedCurvaABC] = useState<string[]>(filters.curvasABC);
   
   // Sincronizar estados locais com filtros externos
   useEffect(() => {
@@ -345,6 +432,8 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
     setSelectedSegmento(filters.segmentos);
     setSelectedStatusCliente(filters.statusClientes);
     setSelectedUF(filters.ufs);
+    setSelectedStatusVendas(filters.statusVendas);
+    setSelectedCurvaABC(filters.curvasABC);
   }, [filters]);
 
   // Sincronizar ano selecionado com o período
@@ -361,12 +450,130 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   const [naturezaPopoverOpen, setNaturezaPopoverOpen] = useState(false);
   const [ufPopoverOpen, setUfPopoverOpen] = useState(false);
   
+  // 🆕 Função auxiliar para calcular a Curva ABC de um cliente baseado nos ÚLTIMOS 12 MESES
+  const calcularCurvaABCCliente = (clienteId: string, todasTransacoes: Transaction[]): string => {
+    /**
+     * 🎯 IMPORTANTE: Esta função calcula Curva ABC baseada nos ÚLTIMOS 12 MESES
+     * (mesma lógica do ABCCurveCard para consistência)
+     */
+    
+    // PASSO 1: Filtrar transações dos últimos 12 meses
+    const hoje = new Date();
+    const dozesMesesAtras = new Date(hoje);
+    dozesMesesAtras.setMonth(hoje.getMonth() - 12);
+    
+    const transacoesUltimos12Meses = todasTransacoes.filter(t => {
+      if (!t.data) return false;
+      
+      // Converter a data da transação para Date
+      const partesData = t.data.split('/'); // formato: "DD/MM/YYYY"
+      const dataTransacao = new Date(
+        parseInt(partesData[2]), // ano
+        parseInt(partesData[1]) - 1, // mês (0-indexed)
+        parseInt(partesData[0]) // dia
+      );
+      
+      return dataTransacao >= dozesMesesAtras && dataTransacao <= hoje;
+    });
+    
+    // PASSO 2: Agrupar vendas por clienteId
+    const clientMap = new Map<string, number>();
+    
+    transacoesUltimos12Meses.forEach(t => {
+      if (!t.clienteId) return; // Ignorar vendas sem clienteId
+      const current = clientMap.get(t.clienteId) || 0;
+      clientMap.set(t.clienteId, current + t.valor);
+    });
+    
+    // PASSO 3: Ordenar clientes por valor decrescente
+    const sortedClients = Array.from(clientMap.entries())
+      .sort((a, b) => b[1] - a[1]);
+    
+    const totalVendas = sortedClients.reduce((sum, [_, valor]) => sum + valor, 0);
+    
+    // PASSO 4: Calcular curva ABC (mesma lógica do ABCCurveCard)
+    let acumulado = 0;
+    let curvaCliente = "Curva C"; // Default
+    
+    for (const [cId, valor] of sortedClients) {
+      const percentualAtual = totalVendas > 0 ? (valor / totalVendas) * 100 : 0;
+      
+      // Acumular percentual ANTES de verificar
+      acumulado += percentualAtual;
+      
+      // Verificar APÓS acumular (percentual acumulado incluindo o cliente atual)
+      if (cId === clienteId) {
+        if (acumulado <= 80) {
+          curvaCliente = "Curva A";
+        } else if (acumulado <= 95) {
+          curvaCliente = "Curva B";
+        } else {
+          curvaCliente = "Curva C";
+        }
+        break;
+      }
+    }
+    
+    return curvaCliente;
+  };
+  
   // Filter transactions based on selected filters
   const filterTransactions = (transactions: Transaction[]) => {
     return transactions.filter(transaction => {
-      // Filtro automático para vendedores: mostrar apenas suas próprias transações
+      // 🚨 CRÍTICO: Excluir SEMPRE vendas canceladas de TODOS os componentes do Dashboard
+      if (transaction.cancelado) {
+        return false;
+      }
+      
+      // Filtro automático para vendedores: mostrar apenas suas próprias transações (USAR ID)
       if (ehVendedor && usuario) {
-        if (transaction.vendedor !== usuario.nome) {
+        if (transaction.vendedorId !== usuario.id) {
+          return false;
+        }
+      }
+      
+      // Filtro manual de vendedor (comparar por nome para exibição no filtro)
+      if (selectedVendedor.length > 0 && !selectedVendedor.includes(transaction.vendedor)) {
+        return false;
+      }
+      if (selectedNatureza.length > 0 && !selectedNatureza.includes(transaction.natureza)) {
+        return false;
+      }
+      if (selectedSegmento.length > 0 && !selectedSegmento.includes(transaction.segmento)) {
+        return false;
+      }
+      if (selectedStatusCliente.length > 0 && !selectedStatusCliente.includes(transaction.statusCliente)) {
+        return false;
+      }
+      if (selectedUF.length > 0 && transaction.uf && !selectedUF.includes(transaction.uf)) {
+        return false;
+      }
+      // CORRIGIDO: Aceitar todas as variações de status concluído
+      if (selectedStatusVendas === "concluidas") {
+        const statusConcluido = ['Faturado', 'Concluído', 'Concluída', 'faturado', 'concluido', 'concluida'].includes(transaction.status || '');
+        if (!statusConcluido) {
+          return false;
+        }
+      }
+      // 🆕 NOVO: Filtro de Curva ABC
+      if (selectedCurvaABC.length > 0) {
+        const curvaCliente = calcularCurvaABCCliente(transaction.clienteId, transactions);
+        if (!selectedCurvaABC.includes(curvaCliente)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  };
+  
+  // 🆕 NOVA FUNÇÃO: Filtrar transações para CanceledSalesTable (INCLUIR canceladas, mas aplicar outros filtros)
+  const filterTransactionsIncludingCanceled = (transactions: Transaction[]) => {
+    return transactions.filter(transaction => {
+      // ✅ NÃO excluir vendas canceladas aqui - queremos elas!
+      
+      // Filtro automático para vendedores: mostrar apenas suas próprias transações (USAR ID)
+      if (ehVendedor && usuario) {
+        if (transaction.vendedorId !== usuario.id) {
           return false;
         }
       }
@@ -386,6 +593,17 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
       if (selectedUF.length > 0 && transaction.uf && !selectedUF.includes(transaction.uf)) {
         return false;
       }
+      // ⚠️ IGNORAR filtro de status de vendas para transações canceladas
+      // (CanceledSalesTable irá filtrar apenas canceladas)
+      
+      // 🆕 NOVO: Filtro de Curva ABC (aplicar também nas canceladas)
+      if (selectedCurvaABC.length > 0) {
+        const curvaCliente = calcularCurvaABCCliente(transaction.clienteId, transactions);
+        if (!selectedCurvaABC.includes(curvaCliente)) {
+          return false;
+        }
+      }
+      
       return true;
     });
   };
@@ -394,48 +612,98 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
     if (loading || allTransactions.length === 0) {
       return [];
     }
+    const { current } = filtrarPorPeriodo(allTransactions, period, period === "custom" ? dateRange : undefined);
+    const filtered = filterTransactions(current);
+    
+    // Log para debug - mostrar quantas vendas canceladas foram excluídas
+    const totalCanceladas = current.filter(t => t.cancelado).length;
+    if (totalCanceladas > 0) {
+      console.log(`[DASHBOARD] 🚫 ${totalCanceladas} vendas CANCELADAS excluídas do Dashboard`);
+    }
+    console.log(`[DASHBOARD] 📊 ${filtered.length} vendas ativas após filtros (de ${current.length} totais no período)`);
+    
+    return filtered;
+  }, [loading, allTransactions, period, dateRange, selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, ehVendedor, usuario, selectedStatusVendas, selectedCurvaABC]);
+  
+  // 🆕 NOVO: Transações completas (incluindo canceladas) para CanceledSalesTable
+  const allFilteredTransactions = useMemo(() => {
+    if (loading || allTransactions.length === 0) {
+      return [];
+    }
     const { current } = filtrarPorPeriodo(allTransactions, period);
-    return filterTransactions(current);
-  }, [loading, allTransactions, period, selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, ehVendedor, usuario]);
+    const filtered = filterTransactionsIncludingCanceled(current);
+    
+    console.log(`[DASHBOARD] 📋 ${filtered.length} transações TOTAIS após filtros (incluindo canceladas)`);
+    
+    return filtered;
+  }, [loading, allTransactions, period, selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, ehVendedor, usuario, selectedCurvaABC]);
   
   // Notificar componente pai sempre que as transações filtradas mudarem
   useEffect(() => {
     onTransactionsChange?.(filteredTransactions);
   }, [filteredTransactions, onTransactionsChange]);
   
+  // 🆕 NOVO: Notificar componente pai sobre transações completas (incluindo canceladas)
+  useEffect(() => {
+    onAllTransactionsChange?.(allFilteredTransactions);
+  }, [allFilteredTransactions, onAllTransactionsChange]);
+  
+  // 🆕 NOVO: Notificar componente pai sobre todas as transações SEM filtro de período (para Curva ABC)
+  useEffect(() => {
+    console.log(`[DASHBOARD METRICS] 📤 Enviando ${allTransactions.length} transações RAW (sem filtro de período) para App.tsx`);
+    onRawTransactionsChange?.(allTransactions);
+  }, [allTransactions, onRawTransactionsChange]);
+  
   // Calculate metrics from filtered transactions with comparison to previous period
-  const metrics = useMemo(() => {
-    if (loading || allTransactions.length === 0) {
-      return {
-        vendasTotais: 0,
-        vendasTotaisChange: 0,
-        ticketMedio: 0,
-        ticketMedioChange: 0,
-        produtosVendidos: 0,
-        produtosVendidosChange: 0,
-        positivacao: 0,
-        positivacaoChange: 0,
-        positivacaoCount: 0,
-        positivacaoTotal: 0,
-        vendedoresAtivos: 0,
-        vendedoresAtivosChange: 0,
-        porcentagemMeta: 0,
-        porcentagemMetaChange: 0,
-        negociosFechados: 0,
-      };
+  useEffect(() => {
+    async function calculateMetrics() {
+      if (loading || allTransactions.length === 0) {
+        setMetrics({
+          vendasTotais: 0,
+          vendasTotaisChange: 0,
+          ticketMedio: 0,
+          ticketMedioChange: 0,
+          produtosVendidos: 0,
+          produtosVendidosChange: 0,
+          positivacao: 0,
+          positivacaoChange: 0,
+          positivacaoCount: 0,
+          positivacaoTotal: 0,
+          vendedoresAtivos: 0,
+          vendedoresAtivosChange: 0,
+          porcentagemMeta: 0,
+          porcentagemMetaChange: 0,
+          negociosFechados: 0,
+        });
+        return;
+      }
+      
+      const { current, previous } = filtrarPorPeriodo(allTransactions, period);
+      const filteredCurrent = filterTransactions(current);
+      const filteredPrevious = filterTransactions(previous);
+      
+      // Passar o nome do vendedor se for um vendedor logado
+      const vendedorNome = ehVendedor && usuario ? usuario.nome : undefined;
+      
+      const calculatedMetrics = await calculateMetricsWithComparison(
+        filteredCurrent, 
+        filteredPrevious, 
+        metaMensal, 
+        vendedorNome
+      );
+      
+      setMetrics(calculatedMetrics);
     }
     
-    const { current, previous } = filtrarPorPeriodo(allTransactions, period);
-    const filteredCurrent = filterTransactions(current);
-    const filteredPrevious = filterTransactions(previous);
-    
-    return calculateMetricsWithComparison(filteredCurrent, filteredPrevious, metaMensal);
-  }, [loading, allTransactions, period, selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, ehVendedor, usuario, metaMensal]);
+    calculateMetrics();
+  }, [loading, allTransactions, period, selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, ehVendedor, usuario, metaMensal, selectedStatusVendas, selectedCurvaABC]);
   const [segmentoPopoverOpen, setSegmentoPopoverOpen] = useState(false);
   
   // Extrair valores únicos das transações para os filtros
   const vendedores = useMemo(() => {
-    const unique = new Set(allTransactions.map(t => t.vendedor));
+    const unique = new Set(allTransactions.map(t => t.vendedor).filter(vendedor => 
+      vendedor && vendedor.trim() !== '' && vendedor !== 'N/A' && vendedor !== 'Não identificado'
+    ));
     return Array.from(unique).sort();
   }, [allTransactions]);
   
@@ -472,6 +740,8 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
     setSelectedSegmento([]);
     setSelectedStatusCliente([]);
     setSelectedUF([]);
+    setSelectedStatusVendas("todas");
+    setSelectedCurvaABC([]);
   };
   
   // Notify parent component when filters change
@@ -482,8 +752,10 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
       segmentos: selectedSegmento,
       statusClientes: selectedStatusCliente,
       ufs: selectedUF,
+      statusVendas: selectedStatusVendas,
+      curvasABC: selectedCurvaABC,
     });
-  }, [selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, onFiltersChange]);
+  }, [selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, onFiltersChange, selectedStatusVendas, selectedCurvaABC]);
   
   const activeFiltersCount = 
     (ehVendedor ? 0 : selectedVendedor.length) + 
@@ -492,20 +764,18 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
     selectedStatusCliente.length +
     selectedUF.length;
 
-  const handleDateSelect = (range: DateRange | undefined) => {
-    if (range) {
-      setDateRange(range);
-      if (range.from && range.to) {
-        onPeriodChange("custom");
-        onCustomDateRangeChange?.(range);
-        setIsCalendarOpen(false);
-      }
-    }
-  };
-
   const formatDateRange = () => {
     if (!dateRange.from || !dateRange.to) return "Selecionar período";
     return `${format(dateRange.from, "dd/MM/yy", { locale: ptBR })} - ${format(dateRange.to, "dd/MM/yy", { locale: ptBR })}`;
+  };
+
+  const handleDateSelect = (range: DateRange | undefined) => {
+    if (range?.from && range?.to) {
+      setDateRange(range);
+      onPeriodChange("custom");
+      onCustomDateRangeChange?.(range);
+      setIsCalendarOpen(false);
+    }
   };
 
   const getPeriodLabel = (periodValue: string) => {
@@ -542,63 +812,39 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   return (
     <div className="space-y-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-muted-foreground">
-            Visão geral do desempenho de vendas
-          </p>
-        </div>
         <div className="flex flex-wrap gap-2">
-          <Popover open={monthPickerOpen} onOpenChange={setMonthPickerOpen}>
+          <Select value={period === "custom" ? "" : period} onValueChange={onPeriodChange}>
+            <SelectTrigger className="w-[200px]">
+              <CalendarIcon className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Selecione o período" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">Últimos 7 dias</SelectItem>
+              <SelectItem value="30">Últimos 30 dias</SelectItem>
+              <SelectItem value="current_month">Mês atual</SelectItem>
+              <SelectItem value="90">Últimos 90 dias</SelectItem>
+              <SelectItem value="365">Último ano</SelectItem>
+            </SelectContent>
+          </Select>
+          <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="w-[200px] justify-start">
+              <Button variant="outline" className="w-[240px] justify-start">
                 <CalendarIcon className="h-4 w-4 mr-2" />
-                {getPeriodLabel(period)}
+                {period === "custom" && dateRange.from && dateRange.to ? (
+                  formatDateRange()
+                ) : (
+                  "Período personalizado"
+                )}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[280px] p-4" align="start">
-              <div className="space-y-4">
-                {/* Navegação de Ano */}
-                <div className="flex items-center justify-between px-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => setSelectedYear(Math.max(2020, selectedYear - 1))}
-                    disabled={selectedYear <= 2020}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <div className="text-lg font-semibold">{selectedYear}</div>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => setSelectedYear(Math.min(2030, selectedYear + 1))}
-                    disabled={selectedYear >= 2030}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {/* Grid de Meses */}
-                <div className="grid grid-cols-3 gap-2">
-                  {meses.map((mes, index) => {
-                    const monthValue = `${selectedYear}-${String(index + 1).padStart(2, '0')}`;
-                    const isSelected = period === monthValue;
-                    return (
-                      <Button
-                        key={mes}
-                        variant={isSelected ? "default" : "outline"}
-                        className="h-auto py-3 px-4 text-sm font-medium"
-                        onClick={() => handleMonthSelect(index + 1)}
-                      >
-                        {mes.substring(0, 3)}
-                      </Button>
-                    );
-                  })}
-                </div>
-              </div>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="range"
+                selected={dateRange}
+                onSelect={handleDateSelect}
+                numberOfMonths={2}
+                locale={ptBR}
+              />
             </PopoverContent>
           </Popover>
           <Button
@@ -673,7 +919,7 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
 
               {/* Filtro Natureza de Operação */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Natureza de Operação</label>
+                <label className="text-sm font-medium">Natureza de Operaço</label>
                 <Popover open={naturezaPopoverOpen} onOpenChange={setNaturezaPopoverOpen}>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-start">
@@ -761,7 +1007,7 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
                 <Popover open={ufPopoverOpen} onOpenChange={setUfPopoverOpen}>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-start">
-                      <Map className="h-4 w-4 mr-2" />
+                      <MapIcon className="h-4 w-4 mr-2" />
                       {selectedUF.length > 0 
                         ? `${selectedUF.length} selecionada(s)` 
                         : "Todas as UFs"}
@@ -817,6 +1063,23 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Filtro Status de Vendas */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Status de Vendas</label>
+                <Select
+                  value={selectedStatusVendas}
+                  onValueChange={(value) => setSelectedStatusVendas(value)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Todos os status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todas as vendas</SelectItem>
+                    <SelectItem value="concluidas">Vendas concluídas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Botão limpar filtros */}
@@ -838,12 +1101,14 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
           change={metrics.vendasTotaisChange}
           icon={<DollarSign className="h-4 w-4" />}
           subtitle={`${metrics.negociosFechados} vendas realizadas`}
+          exactValue={metrics.vendasTotais}
         />
         <MetricCard
           title="Ticket Médio"
           value={`R$ ${(metrics.ticketMedio / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k`}
           change={metrics.ticketMedioChange}
           icon={<Receipt className="h-4 w-4" />}
+          exactValue={metrics.ticketMedio}
         />
         <MetricCard
           title="Produtos Vendidos"
@@ -871,6 +1136,11 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
           value={`${metrics.porcentagemMeta.toFixed(2)}%`}
           change={metrics.porcentagemMetaChange}
           icon={<Target className="h-4 w-4" />}
+          subtitle={metaMensal > 0 ? `Meta: R$ ${
+            metaMensal >= 1000000 
+              ? `${Math.floor(metaMensal / 1000).toLocaleString('pt-BR')} M`
+              : metaMensal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          }` : undefined}
         />
       </div>
     </div>

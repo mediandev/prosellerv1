@@ -43,6 +43,29 @@ export function SegmentSalesCard({ transactions, currentFilters, onFilterChange 
     "PME": "#f59e0b", // amber-500
     "Standard": "#6b7280", // gray-500
     "Startup": "#ec4899", // pink-500
+    "Distribuidor": "#3b82f6", // blue-500
+    "Perfumaria": "#f59e0b", // amber-500
+    "Varejo": "#10b981", // green-500
+    "Atacado": "#8b5cf6", // purple-500
+    "E-commerce": "#ec4899", // pink-500
+    "Indústria": "#ef4444", // red-500
+  };
+  
+  // Cores de fallback para segmentos não mapeados
+  const FALLBACK_COLORS = [
+    "#3b82f6", // blue-500
+    "#f59e0b", // amber-500
+    "#10b981", // green-500
+    "#8b5cf6", // purple-500
+    "#ec4899", // pink-500
+    "#ef4444", // red-500
+    "#14b8a6", // teal-500
+    "#f97316", // orange-500
+  ];
+  
+  // Função para obter cor de um segmento
+  const getSegmentColor = (segmentName: string, index: number) => {
+    return COLORS[segmentName] || FALLBACK_COLORS[index % FALLBACK_COLORS.length];
   };
   
   // Handler para click nas fatias
@@ -88,15 +111,15 @@ export function SegmentSalesCard({ transactions, currentFilters, onFilterChange 
         ) : (
           <div className="space-y-4">
             {/* Gráfico de Rosca */}
-            <div className="h-[200px] min-h-[200px] relative">
-              <ResponsiveContainer width="100%" height={200}>
+            <div className="h-[240px] min-h-[240px] relative">
+              <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
                   <Pie
                     data={segmentData}
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
-                    outerRadius={80}
+                    outerRadius={85}
                     paddingAngle={2}
                     dataKey="value"
                     onClick={handleSliceClick}
@@ -110,7 +133,7 @@ export function SegmentSalesCard({ transactions, currentFilters, onFilterChange 
                       return (
                         <Cell 
                           key={`cell-${index}`} 
-                          fill={COLORS[entry.name] || "#94a3b8"}
+                          fill={getSegmentColor(entry.name, index)}
                           fillOpacity={opacity}
                           stroke={isSelected ? "#fff" : "none"}
                           strokeWidth={isSelected ? 2 : 0}
@@ -119,6 +142,14 @@ export function SegmentSalesCard({ transactions, currentFilters, onFilterChange 
                     })}
                   </Pie>
                   <Tooltip 
+                    wrapperStyle={{ zIndex: 1000 }}
+                    contentStyle={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.96)',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '6px',
+                      padding: '8px 12px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                    }}
                     formatter={(value: number, name: string, props: any) => [
                       `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${props.payload.percentage}%)`,
                       name
@@ -135,7 +166,7 @@ export function SegmentSalesCard({ transactions, currentFilters, onFilterChange 
             </div>
 
             {/* Legenda Manual */}
-            <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+            <div className="flex flex-col gap-2">
               {segmentData.map((entry, index) => {
                 const isSelected = selectedSegment === entry.name;
                 const isOtherSelected = selectedSegment && selectedSegment !== entry.name;
@@ -149,12 +180,20 @@ export function SegmentSalesCard({ transactions, currentFilters, onFilterChange 
                     onClick={() => handleSliceClick(entry)}
                   >
                     <div 
-                      className="w-3 h-3 rounded-full" 
-                      style={{ backgroundColor: COLORS[entry.name] || "#94a3b8" }}
+                      className="w-3 h-3 rounded-full flex-shrink-0" 
+                      style={{ backgroundColor: getSegmentColor(entry.name, index) }}
                     />
-                    <span className="text-sm">
-                      {entry.name}: {entry.percentage}%
-                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium">{entry.name}</span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {entry.percentage}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        R$ {entry.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    </div>
                   </div>
                 );
               })}

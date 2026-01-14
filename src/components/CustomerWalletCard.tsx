@@ -1,7 +1,7 @@
-import { useMemo, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Progress } from "./ui/progress";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, Sector } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { 
   Transaction,
   calculatePositivation,
@@ -9,7 +9,6 @@ import {
 } from "../services/dashboardDataService";
 import { Users } from "lucide-react";
 import { DashboardFilters } from "./DashboardMetrics";
-import { useAuth } from "../contexts/AuthContext";
 
 interface CustomerWalletCardProps {
   transactions: Transaction[];
@@ -27,8 +26,12 @@ interface CustomerDistribution {
 }
 
 export function CustomerWalletCard({ transactions, currentFilters, onFilterChange, vendedorNome }: CustomerWalletCardProps) {
-  // Calcular positivação usando o vendedorNome recebido via props
-  const positivation = useMemo(() => calculatePositivation(transactions, vendedorNome), [transactions, vendedorNome]);
+  // Estado para positivação
+  const [positivation, setPositivation] = useState({
+    positivatedCount: 0,
+    totalCustomers: 0,
+    positivationPercentage: 0,
+  });
   
   // Estado para distribuição de clientes
   const [distribution, setDistribution] = useState<CustomerDistribution>({
@@ -38,6 +41,15 @@ export function CustomerWalletCard({ transactions, currentFilters, onFilterChang
     activePercentage: "0.0",
     inactivePercentage: "0.0",
   });
+  
+  // Carregar positivação quando transactions ou vendedorNome mudarem
+  useEffect(() => {
+    async function loadPositivation() {
+      const pos = await calculatePositivation(transactions, vendedorNome);
+      setPositivation(pos);
+    }
+    loadPositivation();
+  }, [transactions, vendedorNome]);
   
   // Carregar distribuição de clientes
   useEffect(() => {
@@ -81,50 +93,6 @@ export function CustomerWalletCard({ transactions, currentFilters, onFilterChang
       });
     }
   };
-  
-  // Renderizar label customizado no centro do gráfico
-  const renderCenterLabel = () => (
-    <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
-      <tspan x="50%" dy="-0.5em" fontSize="32" fontWeight="bold" fill="currentColor">
-        {distribution.total}
-      </tspan>
-      <tspan x="50%" dy="1.5em" fontSize="14" fill="#6b7280">
-        Clientes
-      </tspan>
-    </text>
-  );
-  
-  // Renderizar legenda customizada com opacidade
-  const renderLegend = (props: any) => {
-    const { payload } = props;
-    
-    return (
-      <div className="flex justify-center gap-6 mt-2">
-        {payload.map((entry: any, index: number) => {
-          const isSelected = selectedStatus === entry.payload.status;
-          const isOtherSelected = selectedStatus && selectedStatus !== entry.payload.status;
-          const opacity = isOtherSelected ? 0.3 : 1;
-          
-          return (
-            <div 
-              key={`legend-${index}`} 
-              className="flex items-center gap-2 cursor-pointer transition-opacity"
-              style={{ opacity }}
-              onClick={() => handleSliceClick(entry.payload)}
-            >
-              <div 
-                className="w-3 h-3 rounded-full" 
-                style={{ backgroundColor: entry.color }}
-              />
-              <span className="text-sm">
-                {entry.value}: {entry.payload.value} ({entry.payload.percentage}%)
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
 
   return (
     <Card>
@@ -141,54 +109,97 @@ export function CustomerWalletCard({ transactions, currentFilters, onFilterChang
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Gráfico de Rosca - Distribuição Ativo/Inativo */}
-        <div className="h-[240px] min-h-[240px]">
-          {distribution.total > 0 ? (
-            <ResponsiveContainer width="100%" height={240}>
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  dataKey="value"
-                  onClick={handleSliceClick}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {chartData.map((entry, index) => {
-                    const isSelected = selectedStatus === entry.status;
-                    const isOtherSelected = selectedStatus && selectedStatus !== entry.status;
-                    const opacity = isOtherSelected ? 0.3 : 1;
-                    
-                    return (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={COLORS[entry.name as keyof typeof COLORS]}
-                        fillOpacity={opacity}
-                        stroke={isSelected ? "#fff" : "none"}
-                        strokeWidth={isSelected ? 2 : 0}
-                      />
-                    );
-                  })}
-                </Pie>
-                <Tooltip 
-                  formatter={(value: number, name: string, props: any) => [
-                    `${value} clientes (${props.payload.percentage}%)`,
-                    name
-                  ]}
-                />
-                <Legend 
-                  verticalAlign="bottom" 
-                  height={36}
-                  content={renderLegend}
-                />
-                {renderCenterLabel()}
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-full text-center">
-              <p className="text-muted-foreground">Carregando dados dos clientes...</p>
+        <div className="space-y-4">
+          <div className="h-[240px] min-h-[240px] relative">
+            {distribution.total > 0 ? (
+              <ResponsiveContainer width="100%" height={240}>
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={85}
+                    paddingAngle={2}
+                    dataKey="value"
+                    onClick={handleSliceClick}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {chartData.map((entry, index) => {
+                      const isSelected = selectedStatus === entry.status;
+                      const isOtherSelected = selectedStatus && selectedStatus !== entry.status;
+                      const opacity = isOtherSelected ? 0.3 : 1;
+                      
+                      return (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={COLORS[entry.name as keyof typeof COLORS]}
+                          fillOpacity={opacity}
+                          stroke={isSelected ? "#fff" : "none"}
+                          strokeWidth={isSelected ? 2 : 0}
+                        />
+                      );
+                    })}
+                  </Pie>
+                  <Tooltip 
+                    wrapperStyle={{ zIndex: 1000 }}
+                    contentStyle={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.96)',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '6px',
+                      padding: '8px 12px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                    }}
+                    formatter={(value: number, name: string, props: any) => [
+                      `${value} clientes (${props.payload.percentage}%)`,
+                      name
+                    ]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-center">
+                <p className="text-muted-foreground">Carregando dados dos clientes...</p>
+              </div>
+            )}
+            {/* Texto centralizado absoluto */}
+            {distribution.total > 0 && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <div className="text-3xl font-bold">
+                  {distribution.total}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  Clientes
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Legenda Manual */}
+          {distribution.total > 0 && (
+            <div className="flex justify-center gap-6">
+              {chartData.map((entry, index) => {
+                const isSelected = selectedStatus === entry.status;
+                const isOtherSelected = selectedStatus && selectedStatus !== entry.status;
+                const opacity = isOtherSelected ? 0.3 : 1;
+                
+                return (
+                  <div 
+                    key={`legend-${index}`} 
+                    className="flex items-center gap-2 cursor-pointer transition-opacity"
+                    style={{ opacity }}
+                    onClick={() => handleSliceClick(entry)}
+                  >
+                    <div 
+                      className="w-3 h-3 rounded-full" 
+                      style={{ backgroundColor: COLORS[entry.name as keyof typeof COLORS] }}
+                    />
+                    <span className="text-sm">
+                      {entry.name}: {entry.value} ({entry.percentage}%)
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -207,7 +218,7 @@ export function CustomerWalletCard({ transactions, currentFilters, onFilterChang
           />
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              {positivation.positivationPercentage}% dos clientes realizaram compras
+              {positivation.positivationPercentage.toFixed(1)}% dos clientes realizaram compras
             </span>
           </div>
         </div>

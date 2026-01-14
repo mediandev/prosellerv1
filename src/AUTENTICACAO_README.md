@@ -1,4 +1,4 @@
-# 🔐 Sistema de Autenticação - VendasPro
+# 🔐 Sistema de Autenticação - ProSeller
 
 ## Visão Geral
 

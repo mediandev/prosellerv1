@@ -389,7 +389,7 @@ export function EmailIntegrationSettings() {
                     <Label htmlFor="resend-from-name">Nome Remetente *</Label>
                     <Input
                       id="resend-from-name"
-                      placeholder="VendasPro"
+                      placeholder="ProSeller"
                       value={settings.providers.resend?.fromName || ''}
                       onChange={(e) => updateResendConfig({ fromName: e.target.value })}
                     />
@@ -461,7 +461,7 @@ export function EmailIntegrationSettings() {
                     <Label htmlFor="sendgrid-from-name">Nome Remetente *</Label>
                     <Input
                       id="sendgrid-from-name"
-                      placeholder="VendasPro"
+                      placeholder="ProSeller"
                       value={settings.providers.sendgrid?.fromName || ''}
                       onChange={(e) => updateSendgridConfig({ fromName: e.target.value })}
                     />
@@ -535,7 +535,7 @@ export function EmailIntegrationSettings() {
                     <Label htmlFor="sendflow-from-name">Nome Remetente *</Label>
                     <Input
                       id="sendflow-from-name"
-                      placeholder="VendasPro"
+                      placeholder="ProSeller"
                       value={settings.providers.sendflow?.fromName || ''}
                       onChange={(e) => updateSendflowConfig({ fromName: e.target.value })}
                     />

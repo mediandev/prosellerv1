@@ -191,12 +191,6 @@ export function ProductsListPage({
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl">Produtos</h1>
-          <p className="text-muted-foreground">
-            Gerencie o catálogo de produtos
-          </p>
-        </div>
         <div className="flex gap-2">
           <Button 
             onClick={carregarProdutos} 
@@ -474,8 +468,8 @@ export function ProductsListPage({
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredProdutos.map((produto) => (
-                      <TableRow key={produto.id}>
+                    filteredProdutos.map((produto, index) => (
+                      <TableRow key={`${produto.id}-${index}`}>
                         <TableCell>
                           {produto.foto ? (
                             <img

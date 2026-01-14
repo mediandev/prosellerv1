@@ -12,6 +12,7 @@ import { toast } from "sonner@2.0.3";
 interface ProductABCFilters {
   dataInicio: string;
   dataFim: string;
+  statusVendas: "concluidas" | "todas"; // NOVO: Filtro de status
 }
 
 interface ProductABCData {
@@ -29,6 +30,7 @@ export function ProductABCReport() {
   const [filters, setFilters] = useState<ProductABCFilters>({
     dataInicio: "",
     dataFim: "",
+    statusVendas: "todas", // NOVO: Inicializa com "todas"
   });
 
   const [salesData, setSalesData] = useState([]);
@@ -61,6 +63,14 @@ export function ProductABCReport() {
       if (filters.dataFim) {
         const dataFim = new Date(filters.dataFim);
         if (venda.dataPedido > dataFim) return false;
+      }
+
+      // CORRIGIDO: Filtro de status - aceitar todas as variações de status concluído
+      if (filters.statusVendas === "concluidas") {
+        const statusConcluido = ['Faturado', 'Concluído', 'Concluída', 'faturado', 'concluido', 'concluida'].includes(venda.status || '');
+        if (!statusConcluido) {
+          return false;
+        }
       }
 
       return true;
@@ -117,16 +127,18 @@ export function ProductABCReport() {
     // Calcular percentual acumulado e classificar curva ABC
     let acumulado = 0;
     produtosData.forEach((produto) => {
-      acumulado += produto.percentual;
-      produto.percentualAcumulado = acumulado;
-
-      if (acumulado <= 80) {
+      // CORREÇÃO: Classificar ANTES de acumular o percentual atual
+      if (acumulado < 80) {
         produto.curvaABC = "A";
-      } else if (acumulado <= 95) {
+      } else if (acumulado < 95) {
         produto.curvaABC = "B";
       } else {
         produto.curvaABC = "C";
       }
+
+      // Agora sim, acumular
+      acumulado += produto.percentual;
+      produto.percentualAcumulado = acumulado;
     });
 
     return produtosData;
@@ -165,6 +177,7 @@ export function ProductABCReport() {
     setFilters({
       dataInicio: "",
       dataFim: "",
+      statusVendas: "todas", // NOVO: Limpa para "todas"
     });
   };
 
@@ -217,7 +230,7 @@ export function ProductABCReport() {
               <Filter className="h-4 w-4" />
               Filtros
             </h3>
-            {(filters.dataInicio || filters.dataFim) && (
+            {(filters.dataInicio || filters.dataFim || filters.statusVendas !== "todas") && (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 <X className="h-4 w-4 mr-2" />
                 Limpar Filtros
@@ -245,6 +258,19 @@ export function ProductABCReport() {
                 value={filters.dataFim}
                 onChange={(e) => setFilters({ ...filters, dataFim: e.target.value })}
               />
+            </div>
+
+            {/* Status */}
+            <div className="space-y-2">
+              <Label>Status das Vendas</Label>
+              <select
+                className="w-[140px] border border-gray-300 rounded px-2 py-1"
+                value={filters.statusVendas}
+                onChange={(e) => setFilters({ ...filters, statusVendas: e.target.value as "concluidas" | "todas" })}
+              >
+                <option value="todas">Todas</option>
+                <option value="concluidas">Concluídas</option>
+              </select>
             </div>
           </div>
         </div>

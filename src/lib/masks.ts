@@ -165,6 +165,12 @@ export const formatCNPJ = (value: string): string => {
   return maskCNPJ(value);
 };
 
+// Função para formatar CPF
+export const formatCPF = (value: string): string => {
+  if (!value) return '';
+  return maskCPF(value);
+};
+
 // Máscara para NCM (formato: 0000.00.00 - 8 dígitos)
 export const maskNCM = (value: string): string => {
   const cleaned = value.replace(/\D/g, '');

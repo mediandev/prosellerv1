@@ -2,21 +2,26 @@ import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { Badge } from "./ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { Receipt, FileText } from "lucide-react";
 import { DashboardFilters } from "./DashboardMetrics";
 import { useAuth } from "../contexts/AuthContext";
 import { Transaction } from "../services/dashboardDataService";
+import { StatusVenda } from "../types/venda"; // ✅ CORRIGIDO: Importar StatusVenda
 
 interface Sale {
-  id: string;
+  id: string; // ID real da venda (para navegação)
+  numero?: string; // Número formatado do pedido (para exibição)
   cliente: string;
   vendedor: string;
   valor: string;
-  status: "concluída" | "em_andamento" | "pendente";
+  status: StatusVenda; // ✅ CORRIGIDO: Usar StatusVenda direto
   data: string;
   natureza: string;
   segmento: string;
   statusCliente: string;
   grupoRede?: string;
+  faturado: boolean; // Se é valor faturado ou provisório
 }
 
 const recentSalesByPeriod: Record<string, Sale[]> = {
@@ -558,7 +563,7 @@ const recentSalesByPeriod: Record<string, Sale[]> = {
       valor: "R$ 18.900",
       status: "concluída",
       data: "07/10/2025",
-      natureza: "Demonstração",
+      natureza: "Demonstraão",
       segmento: "Premium",
       statusCliente: "Ativo"
     },
@@ -991,10 +996,16 @@ const recentSalesByPeriod: Record<string, Sale[]> = {
   ],
 };
 
-const statusConfig = {
-  concluída: { label: "Concluída", variant: "default" as const },
-  em_andamento: { label: "Em Andamento", variant: "secondary" as const },
-  pendente: { label: "Pendente", variant: "outline" as const },
+// ✅ CORRIGIDO: statusConfig para TODOS os StatusVenda possíveis
+const statusConfig: Record<StatusVenda, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
+  'Rascunho': { label: "Rascunho", variant: "outline" },
+  'Em Análise': { label: "Em Análise", variant: "secondary" },
+  'Aprovado': { label: "Aprovado", variant: "secondary" },
+  'Em Separação': { label: "Em Separação", variant: "secondary" },
+  'Faturado': { label: "Faturado", variant: "default" },
+  'Concluído': { label: "Concluído", variant: "default" },
+  'Enviado': { label: "Enviado", variant: "default" },
+  'Cancelado': { label: "Cancelado", variant: "destructive" }
 };
 
 const periodDescriptions: Record<string, string> = {
@@ -1010,26 +1021,73 @@ interface RecentSalesTableProps {
   period: string;
   filters?: DashboardFilters;
   transactions: Transaction[]; // Receber transações já filtradas
+  onVisualizarVenda?: (vendaId: string) => void; // Callback para visualizar pedido
 }
 
-export function RecentSalesTable({ period, filters, transactions }: RecentSalesTableProps) {
+export function RecentSalesTable({ period, filters, transactions, onVisualizarVenda }: RecentSalesTableProps) {
   const { usuario } = useAuth();
   const ehVendedor = usuario?.tipo === 'vendedor';
   
+  // Handler para clique na venda
+  const handleClickVenda = (sale: Sale) => {
+    console.log('[RECENT-SALES] 🖱️ Clique na venda:', {
+      id: sale.id,
+      cliente: sale.cliente,
+      hasCallback: !!onVisualizarVenda
+    });
+    
+    if (onVisualizarVenda) {
+      console.log('[RECENT-SALES] ✅ Chamando onVisualizarVenda com ID:', sale.id);
+      onVisualizarVenda(sale.id);
+    } else {
+      console.warn('[RECENT-SALES] ⚠️ onVisualizarVenda não está definido!');
+    }
+  };
+  
   // Converter transações para formato de vendas (já vem filtradas)
   const recentSales: Sale[] = useMemo(() => {
-    return transactions.slice(0, 20).map(t => ({
-      id: t.id,
-      cliente: t.cliente,
-      vendedor: t.vendedor,
-      valor: `R$ ${t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      status: 'concluída' as const,
-      data: t.data,
-      natureza: t.natureza,
-      segmento: t.segmento,
-      statusCliente: t.statusCliente,
-      grupoRede: t.grupoRede,
-    }));
+    // Ordenar transações por data (mais recente primeiro)
+    const sortedTransactions = [...transactions].sort((a, b) => {
+      // Converter data de DD/MM/YYYY para objeto Date
+      const parseDate = (dateStr: string): Date => {
+        const [day, month, year] = dateStr.split('/').map(Number);
+        return new Date(year, month - 1, day);
+      };
+      
+      const dateA = parseDate(a.data);
+      const dateB = parseDate(b.data);
+      
+      // Ordem decrescente (mais recente primeiro)
+      return dateB.getTime() - dateA.getTime();
+    });
+    
+    // Pegar apenas as 10 mais recentes
+    return sortedTransactions.slice(0, 10).map(t => {
+      // ✅ CORRIGIDO: Usar status DIRETO do banco - SEM conversão
+      if (!statusConfig[t.status as StatusVenda]) {
+        console.warn('[RecentSalesTable] Status não mapeado encontrado:', {
+          statusOriginal: t.status,
+          id: t.id,
+          vendaId: t.vendaId,
+          cliente: t.cliente
+        });
+      }
+      
+      return {
+        id: t.vendaId || t.id, // Usar vendaId para navegação, fallback para id (número)
+        numero: t.id, // Número formatado do pedido (PV-2025-XXXX)
+        cliente: t.cliente,
+        vendedor: t.vendedor,
+        valor: `R$ ${t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        status: t.status as StatusVenda, // ✅ USA STATUS DIRETO DO BANCO
+        data: t.data,
+        natureza: t.natureza,
+        segmento: t.segmento,
+        statusCliente: t.statusCliente,
+        grupoRede: t.grupoRede,
+        faturado: t.faturado, // Adicionar o campo faturado
+      };
+    });
   }, [transactions]);
   
   return (
@@ -1065,16 +1123,58 @@ export function RecentSalesTable({ period, filters, transactions }: RecentSalesT
             </TableHeader>
             <TableBody>
               {recentSales.map((sale) => (
-                <TableRow key={sale.id}>
-                  <TableCell className="font-medium">{sale.id}</TableCell>
+                <TableRow 
+                  key={sale.id}
+                  className={onVisualizarVenda ? "cursor-pointer hover:bg-muted/50" : ""}
+                  onClick={() => handleClickVenda(sale)}
+                >
+                  <TableCell className="font-medium">{sale.numero || sale.id}</TableCell>
                   <TableCell>{sale.cliente}</TableCell>
                   <TableCell className="text-muted-foreground">{sale.grupoRede || "-"}</TableCell>
                   <TableCell>{sale.vendedor}</TableCell>
-                  <TableCell>{sale.valor}</TableCell>
                   <TableCell>
-                    <Badge variant={statusConfig[sale.status as keyof typeof statusConfig].variant}>
-                      {statusConfig[sale.status as keyof typeof statusConfig].label}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <span>{sale.valor}</span>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            {sale.status === 'cancelada' || sale.status === 'Cancelado' ? (
+                              <Badge variant="destructive" className="h-5 px-1.5 text-[10px] bg-red-100 text-red-700 hover:bg-red-100">
+                                <FileText className="w-3 h-3" />
+                              </Badge>
+                            ) : sale.faturado ? (
+                              <Badge variant="default" className="h-5 px-1.5 text-[10px] bg-green-100 text-green-700 hover:bg-green-100">
+                                <Receipt className="w-3 h-3" />
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="h-5 px-1.5 text-[10px] bg-amber-100 text-amber-700 hover:bg-amber-100">
+                                <FileText className="w-3 h-3" />
+                              </Badge>
+                            )}
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>
+                              {sale.status === 'cancelada' || sale.status === 'Cancelado'
+                                ? "Venda cancelada (não contabilizada)"
+                                : sale.faturado 
+                                  ? "Valor faturado (nota fiscal emitida)" 
+                                  : "Valor provisório (aguardando faturamento)"}
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {statusConfig[sale.status] ? (
+                      <Badge variant={statusConfig[sale.status].variant}>
+                        {statusConfig[sale.status].label}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">
+                        {sale.status}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{sale.data}</TableCell>
                 </TableRow>

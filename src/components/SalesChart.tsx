@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import { Transaction } from '../services/dashboardDataService'; // Importar do service correto
-import { DashboardFilters } from './DashboardMetrics'; // Corrigir import
+import { Transaction } from '../services/dashboardDataService';
+import { DashboardFilters } from './DashboardMetrics';
+import { buscarMetaVendedor, buscarMetaTotal } from '../services/metasService';
 import {
   Card,
   CardContent,
@@ -25,34 +26,6 @@ import {
   ReferenceLine,
 } from "recharts";
 import { TrendingUp, Target } from "lucide-react";
-
-// Função auxiliar para buscar meta de um vendedor específico
-async function buscarMetaVendedor(vendedorId: string, year: number, month: number): Promise<number> {
-  try {
-    const metas = await api.get('metas');
-    const meta = metas.find((m: any) => 
-      m.usuarioId === vendedorId && 
-      m.ano === year && 
-      m.mes === month
-    );
-    return meta?.valor || 0;
-  } catch (error) {
-    console.error('[SALES CHART] Erro ao buscar meta do vendedor:', error);
-    return 0;
-  }
-}
-
-// Função auxiliar para buscar meta total (soma de todos os vendedores)
-async function buscarMetaTotal(year: number, month: number): Promise<number> {
-  try {
-    const metas = await api.get('metas');
-    const metasMes = metas.filter((m: any) => m.ano === year && m.mes === month);
-    return metasMes.reduce((sum: number, m: any) => sum + (m.valor || 0), 0);
-  } catch (error) {
-    console.error('[SALES CHART] Erro ao buscar meta total:', error);
-    return 0;
-  }
-}
 
 // Função auxiliar para agrupar transações por período
 function groupTransactionsByPeriod(transactions: Transaction[], groupBy: 'dia' | 'mes' = 'dia') {
@@ -87,13 +60,84 @@ function groupTransactionsByPeriod(transactions: Transaction[], groupBy: 'dia' |
     });
 }
 
-// Mapeamento de vendedores (temporário - será obtido via API futuramente)
-const VENDEDOR_TO_USER_ID: Record<string, string> = {
-  "João Silva": "user-2",
-  "Maria Santos": "user-3",
-  "Pedro Costa": "user-4",
-  "Ana Lima": "user-5",
-};
+// Função auxiliar para agrupar transações por período separando por status
+function groupTransactionsByPeriodAndStatus(transactions: Transaction[], groupBy: 'dia' | 'mes' = 'dia') {
+  const groupedConcluidas: Record<string, number> = {};
+  const groupedPendentes: Record<string, number> = {};
+  
+  console.log('[SALES CHART] 🔍 Total de transações recebidas:', transactions.length);
+  
+  let concluidasCount = 0;
+  let pendentesCount = 0;
+  let outrosCount = 0;
+  
+  transactions.forEach(t => {
+    // t.data está no formato DD/MM/YYYY - precisamos parseá-lo corretamente
+    const [day, month, year] = t.data.split('/').map(Number);
+    const date = new Date(year, month - 1, day); // month - 1 porque Date usa 0-11 para meses
+    
+    let key: string;
+    
+    if (groupBy === 'mes') {
+      // Formato YYYY-MM
+      key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    } else {
+      // Formato DD/MM
+      key = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+    }
+    
+    // Separar por status
+    const statusConcluido = ['Faturado', 'Concluído', 'Concluída', 'faturado', 'concluido', 'concluida'].includes(t.status || '');
+    const statusPendente = [
+      'Pendente', 'pendente',
+      'Em Andamento', 'em andamento', 'Em andamento',
+      'Em Análise', 'em análise', 'Em análise',
+      'Enviado', 'enviado',
+      'Aprovado', 'aprovado'
+    ].includes(t.status || '');
+    
+    if (statusConcluido) {
+      groupedConcluidas[key] = (groupedConcluidas[key] || 0) + t.valor;
+      concluidasCount++;
+    } else if (statusPendente) {
+      groupedPendentes[key] = (groupedPendentes[key] || 0) + t.valor;
+      pendentesCount++;
+    } else {
+      outrosCount++;
+      console.log('[SALES CHART] ⚠️ Transação com status não reconhecido:', {
+        id: t.id,
+        cliente: t.cliente,
+        status: t.status,
+        valor: t.valor
+      });
+    }
+  });
+  
+  console.log('[SALES CHART] 📊 Separação por status:', {
+    concluidas: concluidasCount,
+    pendentes: pendentesCount,
+    outros: outrosCount
+  });
+  
+  // Obter todas as datas únicas
+  const allDates = new Set([...Object.keys(groupedConcluidas), ...Object.keys(groupedPendentes)]);
+  
+  console.log('[SALES CHART] 📅 Datas únicas:', Array.from(allDates));
+  
+  // Converter para array e ordenar por data
+  return Array.from(allDates)
+    .map(name => ({
+      name,
+      concluidas: groupedConcluidas[name] || 0,
+      pendentes: groupedPendentes[name] || 0
+    }))
+    .sort((a, b) => {
+      // Ordenar por data corretamente
+      const dateA = groupBy === 'mes' ? a.name : a.name.split('/').reverse().join('-');
+      const dateB = groupBy === 'mes' ? b.name : b.name.split('/').reverse().join('-');
+      return dateA.localeCompare(dateB);
+    });
+}
 
 interface SalesChartProps {
   period: string;
@@ -108,53 +152,100 @@ export function SalesChart({ period, filters, transactions }: SalesChartProps) {
   // Estado para armazenar a meta do período
   const [metaPeriodo, setMetaPeriodo] = useState<number>(0);
   
-  // Determinar se o período é compatível com meta mensal
-  const isPeriodoComMeta = useMemo(() => {
-    // Períodos no formato YYYY-MM sempre são compatíveis com meta mensal
-    return period && period.includes('-');
+  // Determinar se o período é compatível com meta mensal e calcular ano/mês
+  const getPeriodoMeta = useMemo(() => {
+    const hoje = new Date();
+    
+    // Se for "current_month", usar mês atual
+    if (period === "current_month") {
+      return {
+        compativel: true,
+        year: hoje.getFullYear(),
+        month: hoje.getMonth() + 1
+      };
+    }
+    
+    // Se for formato YYYY-MM (legado), extrair ano e mês
+    if (period && period.includes('-')) {
+      const [year, month] = period.split('-').map(Number);
+      if (!isNaN(year) && !isNaN(month)) {
+        return {
+          compativel: true,
+          year,
+          month
+        };
+      }
+    }
+    
+    // Para outros períodos (7, 30, 90, 365, custom), não mostrar meta
+    return { compativel: false, year: 0, month: 0 };
   }, [period]);
   
   // Carregar meta do período
   useEffect(() => {
     async function loadMeta() {
-      if (!isPeriodoComMeta || !period.includes('-')) {
+      if (!getPeriodoMeta.compativel) {
+        console.log('[SALES CHART] ⚠️ Período não compatível com meta:', period);
         setMetaPeriodo(0);
         return;
       }
       
-      const [year, month] = period.split('-').map(Number);
+      const { year, month } = getPeriodoMeta;
+      console.log('[SALES CHART] 📊 Carregando meta para período:', { year, month });
       
       try {
         let metaMensal = 0;
         
         if (ehVendedor && usuario) {
           // Meta individual do vendedor
+          console.log('[SALES CHART] 👤 Buscando meta do vendedor:', usuario.id);
           metaMensal = await buscarMetaVendedor(usuario.id, year, month);
+          console.log('[SALES CHART] ✅ Meta do vendedor:', metaMensal);
         } else if (filters?.vendedores && filters.vendedores.length > 0) {
           // Meta dos vendedores selecionados nos filtros
-          const vendedorIds = filters.vendedores.map(nome => 
-            Object.entries(VENDEDOR_TO_USER_ID).find(([vNome]) => vNome === nome)?.[1]
-          ).filter(Boolean) as string[];
+          console.log('[SALES CHART] 👥 Buscando meta dos vendedores filtrados:', filters.vendedores);
           
-          // Buscar meta de cada vendedor e somar
-          const metas = await Promise.all(
-            vendedorIds.map(id => buscarMetaVendedor(id, year, month))
-          );
-          metaMensal = metas.reduce((sum, meta) => sum + meta, 0);
+          // ✅ CORRIGIDO: Buscar IDs reais dos vendedores via API
+          try {
+            const usuariosData = await api.get('usuarios');
+            const vendedoresMap = new Map(
+              usuariosData
+                .filter((u: any) => u.tipo === 'vendedor')
+                .map((u: any) => [u.nome, u.id])
+            );
+            
+            const vendedorIds = filters.vendedores
+              .map(nome => vendedoresMap.get(nome))
+              .filter(Boolean) as string[];
+            
+            console.log('[SALES CHART] 🔍 IDs dos vendedores filtrados:', vendedorIds);
+            
+            // Buscar meta de cada vendedor e somar
+            const metas = await Promise.all(
+              vendedorIds.map(id => buscarMetaVendedor(id, year, month))
+            );
+            console.log('[SALES CHART] 📊 Metas individuais:', metas);
+            metaMensal = metas.reduce((sum, meta) => sum + meta, 0);
+            console.log('[SALES CHART] ✅ Meta total dos filtrados:', metaMensal);
+          } catch (error) {
+            console.error('[SALES CHART] ❌ Erro ao buscar vendedores:', error);
+          }
         } else {
           // Meta total de todos os vendedores
+          console.log('[SALES CHART] 🌐 Buscando meta total de todos os vendedores');
           metaMensal = await buscarMetaTotal(year, month);
+          console.log('[SALES CHART] ✅ Meta total:', metaMensal);
         }
         
         setMetaPeriodo(metaMensal);
       } catch (error) {
-        console.error('[SALES CHART] Erro ao carregar meta:', error);
+        console.error('[SALES CHART] ❌ Erro ao carregar meta:', error);
         setMetaPeriodo(0);
       }
     }
     
     loadMeta();
-  }, [isPeriodoComMeta, period, ehVendedor, usuario, filters]);
+  }, [getPeriodoMeta, ehVendedor, usuario, filters]);
   
   // Calculate chart data from filtered transactions
   const data = useMemo(() => {
@@ -163,16 +254,22 @@ export function SalesChart({ period, filters, transactions }: SalesChartProps) {
       return [];
     }
     
-    // Group by period (retorna array com { name, valor })
-    const grouped = groupTransactionsByPeriod(transactions, 'dia');
+    // Agrupar por período e status (concluídas vs pendentes)
+    const grouped = groupTransactionsByPeriodAndStatus(transactions, 'dia');
     
-    // Calcular vendas acumuladas
-    let acumulado = 0;
+    // Calcular vendas acumuladas para cada categoria
+    let acumuladoConcluidas = 0;
+    let acumuladoPendentes = 0;
+    
     const dataWithAccumulated = grouped.map(g => {
-      acumulado += g.valor; // Corrigido: usar g.valor ao invés de g.vendas
+      acumuladoConcluidas += g.concluidas;
+      acumuladoPendentes += g.pendentes;
       return {
-        periodo: g.name, // Corrigido: usar g.name ao invés de g.periodo
-        vendasAcumuladas: acumulado
+        periodo: g.name,
+        vendasConcluidas: acumuladoConcluidas,
+        vendasPendentes: acumuladoPendentes,
+        // Manter vendasAcumuladas para compatibilidade com a meta
+        vendasAcumuladas: acumuladoConcluidas
       };
     });
     
@@ -180,26 +277,43 @@ export function SalesChart({ period, filters, transactions }: SalesChartProps) {
   }, [transactions]); // Corrigido: incluir transactions nas dependências
   
   // Calcular se a meta foi atingida
-  const metaAtingida = isPeriodoComMeta && data.length > 0 && data[data.length - 1].vendasAcumuladas >= metaPeriodo;
+  const metaAtingida = getPeriodoMeta.compativel && data.length > 0 && data[data.length - 1].vendasAcumuladas >= metaPeriodo;
+  
+  // ✅ Calcular o valor máximo do gráfico para incluir a meta
+  const maxValue = useMemo(() => {
+    if (data.length === 0) return 0;
+    
+    const maxVendas = Math.max(
+      ...data.map(d => Math.max(d.vendasConcluidas, d.vendasPendentes))
+    );
+    
+    console.log('[SALES CHART] 📊 Calculando domínio do eixo Y:', {
+      maxVendas,
+      metaPeriodo,
+      isPeriodoComMeta: getPeriodoMeta.compativel
+    });
+    
+    // Se há meta, garantir que o eixo Y vai até pelo menos a meta
+    if (getPeriodoMeta.compativel && metaPeriodo > 0) {
+      const maxWithMeta = Math.max(maxVendas, metaPeriodo) * 1.1; // 10% a mais para dar espaço
+      console.log('[SALES CHART] ✅ Domínio ajustado com meta:', maxWithMeta);
+      return maxWithMeta;
+    }
+    
+    const maxNormal = maxVendas * 1.1;
+    console.log('[SALES CHART] ✅ Domínio normal:', maxNormal);
+    return maxNormal;
+  }, [data, getPeriodoMeta, metaPeriodo]);
   
   // Obter descrição do período
   const getDescricaoPeriodo = () => {
-    if (!isPeriodoComMeta) {
-      return "Evolução das vendas acumuladas no período selecionado";
+    if (!getPeriodoMeta.compativel) {
+      return "Vendas Concluídas (verde) e Vendas a Concluir (amarelo tracejado)";
     }
     
     const metaFormatada = `R$ ${metaPeriodo.toLocaleString('pt-BR')}`;
     
-    switch (period) {
-      case "current_month":
-        return `Evolução das vendas acumuladas vs meta mensal de ${metaFormatada}`;
-      case "90":
-        return `Evolução das vendas acumuladas vs meta trimestral de ${metaFormatada}`;
-      case "365":
-        return `Evolução das vendas acumuladas vs meta anual de ${metaFormatada}`;
-      default:
-        return `Evolução das vendas acumuladas vs meta de ${metaFormatada}`;
-    }
+    return `Concluídas (verde) e Vendas a Concluir (amarelo) vs meta de ${metaFormatada}`;
   };
   
   return (
@@ -234,9 +348,11 @@ export function SalesChart({ period, filters, transactions }: SalesChartProps) {
               tick={{ fill: 'hsl(var(--muted-foreground))' }}
             />
             <YAxis 
+              yAxisId="1"
               className="text-xs"
               tick={{ fill: 'hsl(var(--muted-foreground))' }}
               tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+              domain={[0, maxValue]}
             />
             <Tooltip 
               contentStyle={{ 
@@ -244,45 +360,63 @@ export function SalesChart({ period, filters, transactions }: SalesChartProps) {
                 border: '1px solid hsl(var(--border))',
                 borderRadius: '8px'
               }}
-              formatter={(value: number) => [
-                `R$ ${value.toLocaleString('pt-BR')}`,
-                'Vendas Acumuladas'
-              ]}
+              formatter={(value: number, name: string) => {
+                const label = name === 'vendasConcluidas' 
+                  ? 'Vendas Concluídas' 
+                  : name === 'vendasPendentes'
+                  ? 'Vendas a Concluir'
+                  : 'Vendas Acumuladas';
+                return [`R$ ${value.toLocaleString('pt-BR')}`, label];
+              }}
             />
             <Legend 
               formatter={(value: string) => {
-                if (value === 'vendasAcumuladas') return 'Vendas Acumuladas';
+                if (value === 'vendasConcluidas') return 'Vendas Concluídas';
+                if (value === 'vendasPendentes') return 'Vendas a Concluir';
                 return value;
               }}
             />
             
             {/* Linha de referência da meta do período (apenas se aplicável) */}
-            {isPeriodoComMeta && metaPeriodo > 0 && (
+            {getPeriodoMeta.compativel && metaPeriodo > 0 && (
               <ReferenceLine 
+                yAxisId="1"
                 y={metaPeriodo} 
-                stroke={metaAtingida ? "#22c55e" : "#f59e0b"}
+                stroke="#3b82f6"
                 strokeWidth={2}
                 strokeDasharray="5 5"
                 label={{ 
                   value: `Meta: R$ ${(metaPeriodo / 1000).toFixed(0)}k`,
                   position: 'insideTopRight',
-                  fill: metaAtingida ? "#22c55e" : "#f59e0b",
+                  fill: "#3b82f6",
                   fontSize: 12,
                   fontWeight: 600
                 }}
               />
             )}
             
-            {/* Linha de vendas acumuladas */}
+            {/* Linha verde - Vendas Concluídas */}
             <Line 
+              yAxisId="1"
               type="monotone" 
-              dataKey="vendasAcumuladas" 
-              stroke={metaAtingida ? "#22c55e" : "#3b82f6"}
+              dataKey="vendasConcluidas" 
+              stroke="#22c55e"
               strokeWidth={3}
-              name="vendasAcumuladas"
-              dot={{ fill: metaAtingida ? "#22c55e" : "#3b82f6", r: 5 }}
+              name="vendasConcluidas"
+              dot={{ fill: "#22c55e", r: 5 }}
               activeDot={{ r: 7 }}
-              fill="url(#colorVendasAcumuladas)"
+            />
+            
+            {/* Linha amarela - Vendas a Concluir */}
+            <Line 
+              yAxisId="1"
+              type="monotone" 
+              dataKey="vendasPendentes" 
+              stroke="#eab308"
+              strokeWidth={3}
+              name="vendasPendentes"
+              dot={{ fill: "#eab308", r: 5 }}
+              activeDot={{ r: 7 }}
             />
           </LineChart>
           </ResponsiveContainer>

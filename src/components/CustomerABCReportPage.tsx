@@ -5,12 +5,16 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { Download, Filter, X, ArrowLeft } from "lucide-react";
+import { Download, Filter, X, ArrowLeft, Calendar as CalendarIcon } from "lucide-react";
 import { companyService } from "../services/companyService";
 import { Badge } from "./ui/badge";
 import { Combobox } from "./ui/combobox";
 import { api } from "../services/api";
 import { toast } from "sonner@2.0.3";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Calendar } from "./ui/calendar";
+import { ptBR } from "date-fns/locale";
+import { format } from "date-fns";
 
 type GroupBy = "none" | "grupo" | "vendedor" | "natureza";
 
@@ -23,6 +27,7 @@ interface CustomerABCFilters {
   uf: string;
   empresaEmitenteId: string;
   groupBy: GroupBy;
+  statusVendas: "concluidas" | "todas"; // NOVO: Filtro de status
 }
 
 interface CustomerABCData {
@@ -91,7 +96,77 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
     uf: "all",
     empresaEmitenteId: "all",
     groupBy: "none",
+    statusVendas: "todas", // NOVO: Inicializar com "todas"
   });
+
+  // Estados para controle de período
+  const [period, setPeriod] = useState<string>("current_month"); // Padrão: Mês atual
+  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  // Atualizar filtros de data quando o período muda
+  useEffect(() => {
+    if (period && period !== "custom") {
+      const hoje = new Date();
+      let dataInicio = new Date();
+      
+      switch (period) {
+        case "7":
+          dataInicio.setDate(hoje.getDate() - 7);
+          break;
+        case "30":
+          dataInicio.setDate(hoje.getDate() - 30);
+          break;
+        case "current_month":
+          dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+          break;
+        case "90":
+          dataInicio.setDate(hoje.getDate() - 90);
+          break;
+        case "365":
+          dataInicio.setDate(hoje.getDate() - 365);
+          break;
+      }
+      
+      setFilters(prev => ({
+        ...prev,
+        dataInicio: format(dataInicio, 'yyyy-MM-dd'),
+        dataFim: format(hoje, 'yyyy-MM-dd'),
+      }));
+    }
+  }, [period]);
+
+  // Handler para mudança de período pré-configurado
+  const handlePeriodChange = (value: string) => {
+    setPeriod(value);
+    if (value !== "custom") {
+      setDateRange({});
+    }
+  };
+
+  // Handler para seleção de período personalizado
+  const handleDateSelect = (range: { from?: Date; to?: Date } | undefined) => {
+    if (range?.from && range?.to) {
+      setDateRange(range);
+      setPeriod("custom");
+      setFilters(prev => ({
+        ...prev,
+        dataInicio: format(range.from, 'yyyy-MM-dd'),
+        dataFim: format(range.to, 'yyyy-MM-dd'),
+      }));
+      setIsCalendarOpen(false);
+    } else if (range) {
+      setDateRange(range);
+    }
+  };
+
+  // Formatar range de datas personalizado
+  const formatDateRange = () => {
+    if (dateRange.from && dateRange.to) {
+      return `${format(dateRange.from, "dd/MMM", { locale: ptBR })} - ${format(dateRange.to, "dd/MMM/yyyy", { locale: ptBR })}`;
+    }
+    return "";
+  };
 
   // Obter UFs únicas dos clientes
   const ufsDisponiveis = useMemo(() => {
@@ -105,16 +180,24 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
   // Filtrar vendas
   const filteredSales = useMemo(() => {
     return vendas.filter((venda) => {
-      // Filtro de data início
-      if (filters.dataInicio) {
-        const dataInicio = new Date(filters.dataInicio);
-        if (venda.dataPedido < dataInicio) return false;
-      }
+      // Filtro de data início e fim
+      if (filters.dataInicio || filters.dataFim) {
+        // Converter dataPedido para Date (pode ser string ou Date)
+        const dataPedido = typeof venda.dataPedido === 'string' 
+          ? new Date(venda.dataPedido) 
+          : venda.dataPedido;
+        
+        if (filters.dataInicio) {
+          const dataInicio = new Date(filters.dataInicio);
+          dataInicio.setHours(0, 0, 0, 0); // Reset para início do dia
+          if (dataPedido < dataInicio) return false;
+        }
 
-      // Filtro de data fim
-      if (filters.dataFim) {
-        const dataFim = new Date(filters.dataFim);
-        if (venda.dataPedido > dataFim) return false;
+        if (filters.dataFim) {
+          const dataFim = new Date(filters.dataFim);
+          dataFim.setHours(23, 59, 59, 999); // Final do dia
+          if (dataPedido > dataFim) return false;
+        }
       }
 
       // Filtro de vendedor
@@ -144,6 +227,14 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
         return false;
       }
 
+      // CORRIGIDO: Filtro de status - aceitar todas as variações de status concluído
+      if (filters.statusVendas === "concluidas") {
+        const statusConcluido = ['Faturado', 'Concluído', 'Concluída', 'faturado', 'concluido', 'concluida'].includes(venda.status || '');
+        if (!statusConcluido) {
+          return false;
+        }
+      }
+
       return true;
     });
   }, [vendas, filters, clientes]);
@@ -151,13 +242,13 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
   // Calcular Curva ABC de Clientes
   const abcData = useMemo(() => {
     // Agrupar vendas por cliente
-    const clientMap = new Map<string, { valor: number; vendedor: string }>();
+    const clientMap = new Map<string, { valor: number; vendedorId: string }>();
 
     filteredSales.forEach((venda) => {
-      const current = clientMap.get(venda.clienteId) || { valor: 0, vendedor: venda.nomeVendedor };
+      const current = clientMap.get(venda.clienteId) || { valor: 0, vendedorId: venda.vendedorId };
       clientMap.set(venda.clienteId, {
         valor: current.valor + venda.valorPedido,
-        vendedor: venda.nomeVendedor,
+        vendedorId: venda.vendedorId, // 🆕 Armazenar ID do vendedor
       });
     });
 
@@ -167,13 +258,15 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
     // Criar array de clientes com dados
     const clientesData: CustomerABCData[] = Array.from(clientMap.entries()).map(([clienteId, data]) => {
       const cliente = clientes.find(c => c.id === clienteId);
+      // 🆕 Buscar nome do vendedor pelo ID
+      const vendedor = vendedores.find(v => v.id === data.vendedorId);
       return {
         clienteId,
         grupoRede: cliente?.grupoRede || "-",
         nomeCliente: cliente?.razaoSocial || "Cliente Desconhecido",
         cnpj: cliente?.cpfCnpj || "-",
         uf: cliente?.uf || "-",
-        vendedor: data.vendedor,
+        vendedor: vendedor?.nome || "Vendedor Desconhecido",
         valorTotal: data.valor,
         percentual: totalVendas > 0 ? (data.valor / totalVendas) * 100 : 0,
         percentualAcumulado: 0,
@@ -187,20 +280,22 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
     // Calcular percentual acumulado e classificar curva ABC
     let acumulado = 0;
     clientesData.forEach((cliente) => {
-      acumulado += cliente.percentual;
-      cliente.percentualAcumulado = acumulado;
-
-      if (acumulado <= 80) {
+      // CORREÇÃO: Classificar ANTES de acumular o percentual atual
+      if (acumulado < 80) {
         cliente.curvaABC = "A";
-      } else if (acumulado <= 95) {
+      } else if (acumulado < 95) {
         cliente.curvaABC = "B";
       } else {
         cliente.curvaABC = "C";
       }
+      
+      // Agora sim, acumular
+      acumulado += cliente.percentual;
+      cliente.percentualAcumulado = acumulado;
     });
 
     return clientesData;
-  }, [filteredSales, clientes]);
+  }, [filteredSales, clientes, vendedores]);
 
   // Agrupar dados
   const groupedData = useMemo(() => {
@@ -263,6 +358,8 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
 
   // Limpar filtros
   const clearFilters = () => {
+    setPeriod("current_month"); // Resetar para padrão: Mês atual
+    setDateRange({});
     setFilters({
       dataInicio: "",
       dataFim: "",
@@ -272,6 +369,7 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
       uf: "all",
       empresaEmitenteId: "all",
       groupBy: "none",
+      statusVendas: "todas", // NOVO: Resetar status
     });
   };
 
@@ -343,27 +441,51 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
                 )}
               </div>
 
-              {/* Linha 1: Datas + UF compactados, Vendedor (pesquisável) com largura flexível */}
+              {/* Linha 1: Período Pré-configurado + Personalizado, UF, Vendedor */}
               <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex flex-wrap gap-4">
+                <div className="flex flex-wrap gap-2">
+                  {/* Período Pré-configurado */}
                   <div className="space-y-2">
-                    <Label>Data Início</Label>
-                    <Input
-                      type="date"
-                      className="w-[140px]"
-                      value={filters.dataInicio}
-                      onChange={(e) => setFilters({ ...filters, dataInicio: e.target.value })}
-                    />
+                    <Label>Período</Label>
+                    <Select value={period === "custom" ? "" : period} onValueChange={handlePeriodChange}>
+                      <SelectTrigger className="w-[200px]">
+                        <CalendarIcon className="h-4 w-4 mr-2" />
+                        <SelectValue placeholder="Selecione o período" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7">Últimos 7 dias</SelectItem>
+                        <SelectItem value="30">Últimos 30 dias</SelectItem>
+                        <SelectItem value="current_month">Mês atual</SelectItem>
+                        <SelectItem value="90">Últimos 90 dias</SelectItem>
+                        <SelectItem value="365">Último ano</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
+                  {/* Período Personalizado */}
                   <div className="space-y-2">
-                    <Label>Data Fim</Label>
-                    <Input
-                      type="date"
-                      className="w-[140px]"
-                      value={filters.dataFim}
-                      onChange={(e) => setFilters({ ...filters, dataFim: e.target.value })}
-                    />
+                    <Label>Personalizado</Label>
+                    <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-[240px] justify-start">
+                          <CalendarIcon className="h-4 w-4 mr-2" />
+                          {period === "custom" && dateRange.from && dateRange.to ? (
+                            formatDateRange()
+                          ) : (
+                            "Período personalizado"
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="end">
+                        <Calendar
+                          mode="range"
+                          selected={dateRange}
+                          onSelect={handleDateSelect}
+                          numberOfMonths={2}
+                          locale={ptBR}
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
 
                   <div className="space-y-2">
@@ -467,6 +589,19 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
                       <SelectItem key="agr-grupo" value="grupo">Grupo/Rede</SelectItem>
                       <SelectItem key="agr-vend" value="vendedor">Vendedor</SelectItem>
                       <SelectItem key="agr-nat" value="natureza">Natureza de Operação</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2 lg:col-span-3">
+                  <Label>Status das Vendas</Label>
+                  <Select value={filters.statusVendas} onValueChange={(value: "concluidas" | "todas") => setFilters({ ...filters, statusVendas: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem key="status-todas" value="todas">Todas</SelectItem>
+                      <SelectItem key="status-concluidas" value="concluidas">Concluídas</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

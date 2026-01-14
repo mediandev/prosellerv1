@@ -77,10 +77,14 @@ export function TinyERPPedidosPage() {
       'Rascunho': { variant: 'outline', label: 'Rascunho' },
       'Em Análise': { variant: 'secondary', label: 'Em Análise' },
       'Aprovado': { variant: 'default', label: 'Aprovado' },
+      'Em Separação': { variant: 'secondary', label: 'Em Separação' }, // ✅ NOVO
       'Faturado': { variant: 'default', label: 'Faturado' },
+      'Concluído': { variant: 'default', label: 'Concluído' }, // ✅ NOVO
+      'Enviado': { variant: 'default', label: 'Enviado' }, // ✅ NOVO
       'Cancelado': { variant: 'destructive', label: 'Cancelado' },
     };
 
+    // ✅ CORRIGIDO: Se status não estiver mapeado, usa status direto
     const config = statusMap[status] || { variant: 'outline', label: status };
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };

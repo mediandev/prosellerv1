@@ -1,60 +1,44 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
+import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Progress } from "./ui/progress";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { SellerFormPage } from "./SellerFormPage";
-import { Seller } from "../types";
-import { mockSellers } from "../data/mockSellers";
-import { api } from "../services/api";
-import { toast } from "sonner@2.0.3";
 import { 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Calendar, 
-  TrendingUp, 
-  Target,
-  Award,
-  Clock,
-  DollarSign,
-  LayoutGrid,
-  List,
-  Users,
-  ArrowUpDown,
-  ArrowUp,
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "./ui/table";
+import { 
+  Users, 
+  LayoutGrid, 
+  List, 
+  ArrowUpDown, 
+  ArrowUp, 
   ArrowDown,
+  ChevronLeft,
+  ChevronRight,
   RefreshCw
 } from "lucide-react";
+import { api } from "../services/api";
+import { Seller } from "../types";
+import { mockSellers } from "../data/mockSellers";
+import { SellerFormPage } from "./SellerFormPage";
+import { toast } from "sonner@2.0.3";
+import { format } from "date-fns@4.1.0";
+import { ptBR } from "date-fns@4.1.0/locale";
+import { Label } from "./ui/label";
+import { Venda } from "../types/venda";
+import { calcularMetricasVendedores, getVendedorMetrics, VendedorMetrics } from "../services/teamMetricsService";
 
 const statusConfig = {
   ativo: { label: "Ativo", variant: "default" as const },
   inativo: { label: "Inativo", variant: "secondary" as const },
   excluido: { label: "Excluído", variant: "outline" as const }
-};
-
-// Função helper para calcular o progresso da meta
-const calcularProgressoMeta = (vendedor: Seller): number => {
-  if (!vendedor.vendas?.mes) return 0;
-  
-  const mesAtual = new Date().getMonth() + 1;
-  const anoAtual = new Date().getFullYear();
-  const metaAno = vendedor.metasAnuais?.find(m => m.ano === anoAtual);
-  const metaMes = metaAno?.metas.find(m => m.mes === mesAtual);
-  
-  if (!metaMes || metaMes.valor === 0) return 0;
-  
-  return Math.round((vendedor.vendas.mes / metaMes.valor) * 100);
-};
-
-// Função helper para obter localização do vendedor
-const getLocalizacao = (vendedor: Seller): string => {
-  if (vendedor.endereco?.municipio && vendedor.endereco?.uf) {
-    return `${vendedor.endereco.municipio}, ${vendedor.endereco.uf}`;
-  }
-  return "Não informado";
 };
 
 export function TeamManagement() {
@@ -65,11 +49,86 @@ export function TeamManagement() {
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  
+  // Métricas calculadas do período
+  const [vendedorMetrics, setVendedorMetrics] = useState<Map<string, VendedorMetrics>>(new Map());
+  
+  // Filtro de período - usar mês/ano ao invés de data completa
+  const dataAtual = new Date();
+  const mesAtual = dataAtual.getMonth() + 1;
+  const anoAtual = dataAtual.getFullYear();
+  const [mesSelecionado, setMesSelecionado] = useState(mesAtual.toString().padStart(2, '0'));
+  const [anoSelecionado, setAnoSelecionado] = useState(anoAtual.toString());
+  const [editandoPeriodo, setEditandoPeriodo] = useState(false);
+
+  const periodoSelecionado = `${anoSelecionado}-${mesSelecionado}`;
+
+  // Funções para navegação de período
+  const avancarMes = () => {
+    const mesNum = parseInt(mesSelecionado);
+    const anoNum = parseInt(anoSelecionado);
+    
+    if (mesNum === 12) {
+      setMesSelecionado('01');
+      setAnoSelecionado((anoNum + 1).toString());
+    } else {
+      setMesSelecionado((mesNum + 1).toString().padStart(2, '0'));
+    }
+  };
+
+  const voltarMes = () => {
+    const mesNum = parseInt(mesSelecionado);
+    const anoNum = parseInt(anoSelecionado);
+    
+    if (mesNum === 1) {
+      setMesSelecionado('12');
+      setAnoSelecionado((anoNum - 1).toString());
+    } else {
+      setMesSelecionado((mesNum - 1).toString().padStart(2, '0'));
+    }
+  };
+
+  const handlePeriodoInputChange = (valor: string) => {
+    // Remove caracteres não numéricos e barra
+    const apenasNumeros = valor.replace(/[^\d/]/g, '');
+    
+    // Se tem barra, divide em mês e ano
+    if (apenasNumeros.includes('/')) {
+      const [mes, ano] = apenasNumeros.split('/');
+      
+      if (mes && mes.length <= 2) {
+        const mesNum = parseInt(mes);
+        if (mesNum >= 1 && mesNum <= 12) {
+          setMesSelecionado(mes.padStart(2, '0'));
+        }
+      }
+      
+      if (ano && ano.length === 4) {
+        setAnoSelecionado(ano);
+      }
+    }
+  };
+
+  const formatPeriodo = (periodo: string) => {
+    const [ano, mes] = periodo.split('-');
+    if (mes) {
+      const data = new Date(parseInt(ano), parseInt(mes) - 1);
+      return format(data, "MMMM/yyyy", { locale: ptBR });
+    }
+    return ano;
+  };
 
   // Carregar vendedores
   useEffect(() => {
     carregarVendedores();
   }, []);
+  
+  // Recarregar dados quando o período mudar
+  useEffect(() => {
+    if (mesSelecionado && anoSelecionado) {
+      carregarVendedores();
+    }
+  }, [mesSelecionado, anoSelecionado]);
 
   const carregarVendedores = async () => {
     try {
@@ -77,6 +136,24 @@ export function TeamManagement() {
       const vendedoresAPI = await api.get('vendedores');
       setSellers(vendedoresAPI);
       console.log('[TEAM] Vendedores carregados:', vendedoresAPI.length);
+      console.log('[TEAM] IDs dos vendedores:', vendedoresAPI.map((v: Seller) => ({ id: v.id, nome: v.nome, email: v.email })));
+      
+      // Calcular métricas reais do período
+      console.log('[TEAM] Calculando métricas para período:', periodoSelecionado);
+      const metrics = await calcularMetricasVendedores(periodoSelecionado, vendedoresAPI);
+      setVendedorMetrics(metrics);
+      console.log('[TEAM] Métricas calculadas para período:', periodoSelecionado);
+      console.log('[TEAM] Métricas por vendedor:');
+      metrics.forEach((metric, vendedorId) => {
+        console.log(`  - ${metric.vendedorNome} (${vendedorId}):`, {
+          vendasMes: metric.vendasMes,
+          qtdFechamentos: metric.qtdFechamentos,
+          positivacao: metric.positivacao,
+          meta: metric.meta,
+          progressoMeta: metric.progressoMeta
+        });
+      });
+      
     } catch (error) {
       console.error('[TEAM] Erro ao carregar vendedores, usando mock:', error);
       setSellers(mockSellers);
@@ -204,9 +281,15 @@ export function TeamManagement() {
   });
 
   // Calcular métricas dinâmicas da equipe
-  const positivacaoTotal = sellers.reduce((acc, v) => acc + (v.vendas?.positivacao || 0), 0);
+  const positivacaoTotal = sellers.reduce((acc, v) => {
+    const metrics = vendedorMetrics.get(v.id);
+    return acc + (metrics?.positivacao || 0);
+  }, 0);
   
-  const vendasTotaisMes = sellers.reduce((acc, v) => acc + (v.vendas?.mes || 0), 0);
+  const vendasTotaisMes = sellers.reduce((acc, v) => {
+    const metrics = vendedorMetrics.get(v.id);
+    return acc + (metrics?.vendasMes || 0);
+  }, 0);
   
   const performanceMedia = sellers.length > 0 ? Math.round(
     sellers.reduce((acc, v) => acc + calcularProgressoMeta(v), 0) / sellers.length
@@ -215,6 +298,22 @@ export function TeamManagement() {
   const taxaConversaoMedia = sellers.length > 0 ? Math.round(
     sellers.reduce((acc, v) => acc + (v.performance?.taxaConversao || 0), 0) / sellers.length
   ) : 0;
+
+  // Funções auxiliares
+  function calcularProgressoMeta(vendedor: Seller): number {
+    const metrics = vendedorMetrics.get(vendedor.id);
+    if (!metrics || !metrics.meta || metrics.meta === 0) {
+      return 0;
+    }
+    return Math.round((metrics.vendasMes / metrics.meta) * 100);
+  }
+
+  function getLocalizacao(vendedor: Seller): string {
+    const partes = [];
+    if (vendedor.cidade) partes.push(vendedor.cidade);
+    if (vendedor.uf) partes.push(vendedor.uf);
+    return partes.length > 0 ? partes.join(' - ') : 'Não informado';
+  }
 
   if (showSellerForm) {
     return (
@@ -245,7 +344,7 @@ export function TeamManagement() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Performance Mdia</CardTitle>
+            <CardTitle className="text-sm">Performance Média</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{performanceMedia}%</div>
@@ -285,6 +384,58 @@ export function TeamManagement() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Filtro de Período */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-4">
+            {/* Label */}
+            <Label className="text-sm font-medium">Período</Label>
+            
+            {/* Seletor de mês/ano com navegação */}
+            <div className="flex items-center border rounded-md bg-background">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 w-9 p-0 rounded-r-none border-r"
+                onClick={voltarMes}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              {editandoPeriodo ? (
+                <Input
+                  value={`${mesSelecionado}/${anoSelecionado}`}
+                  onChange={(e) => handlePeriodoInputChange(e.target.value)}
+                  onBlur={() => setEditandoPeriodo(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === 'Escape') {
+                      setEditandoPeriodo(false);
+                    }
+                  }}
+                  className="h-9 w-[150px] text-center border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-3"
+                  placeholder="MM/AAAA"
+                  autoFocus
+                />
+              ) : (
+                <button
+                  onClick={() => setEditandoPeriodo(true)}
+                  className="h-9 px-3 text-center min-w-[150px] hover:bg-accent transition-colors capitalize"
+                >
+                  {formatPeriodo(periodoSelecionado)}
+                </button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 w-9 p-0 rounded-l-none border-l"
+                onClick={avancarMes}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Toggle de Visualização */}
       <div className="flex justify-between items-center">
@@ -362,7 +513,18 @@ export function TeamManagement() {
             </Card>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 auto-rows-fr">
-              {sortedSellers.map((vendedor) => (
+              {sortedSellers.map((vendedor) => {
+                const metrics = vendedorMetrics.get(vendedor.id) || {
+                  vendedorId: vendedor.id,
+                  vendedorNome: vendedor.nome,
+                  vendasMes: 0,
+                  qtdFechamentos: 0,
+                  positivacao: 0,
+                  meta: 0,
+                  progressoMeta: 0
+                };
+
+                return (
                 <Card 
                   key={vendedor.id} 
                   className="cursor-pointer hover:shadow-lg transition-shadow flex flex-col"
@@ -388,30 +550,30 @@ export function TeamManagement() {
                     <div>
                       <div className="flex justify-between text-sm mb-2">
                         <span className="text-muted-foreground">Meta Mensal</span>
-                        <span className="font-medium">{calcularProgressoMeta(vendedor)}%</span>
+                        <span className="font-medium">{metrics.progressoMeta}%</span>
                       </div>
-                      <Progress value={calcularProgressoMeta(vendedor)} />
+                      <Progress value={metrics.progressoMeta} />
                     </div>
 
                     <div className="grid grid-cols-3 gap-3 pt-3 border-t">
                       <div>
                         <p className="text-xs text-muted-foreground">Vendas do Mês</p>
                         <p className="text-sm font-medium">
-                          R$ {((vendedor.vendas?.mes || 0) / 1000).toFixed(1)}k
+                          R$ {(metrics.vendasMes / 1000).toFixed(1)}k
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Fechamentos</p>
-                        <p className="text-sm font-medium">{vendedor.vendas?.qtdFechamentos || 0}</p>
+                        <p className="text-sm font-medium">{metrics.qtdFechamentos}</p>
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Positivação</p>
-                        <p className="text-sm font-medium">{vendedor.vendas?.positivacao || 0}</p>
+                        <p className="text-sm font-medium">{metrics.positivacao}</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+              )})}
             </div>
           )}
         </>
@@ -546,7 +708,18 @@ export function TeamManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedSellers.map((vendedor) => (
+                {sortedSellers.map((vendedor) => {
+                  const metrics = vendedorMetrics.get(vendedor.id) || {
+                    vendedorId: vendedor.id,
+                    vendedorNome: vendedor.nome,
+                    vendasMes: 0,
+                    qtdFechamentos: 0,
+                    positivacao: 0,
+                    meta: 0,
+                    progressoMeta: 0
+                  };
+
+                  return (
                   <TableRow
                     key={vendedor.id}
                     className="cursor-pointer hover:bg-muted/50"
@@ -572,22 +745,22 @@ export function TeamManagement() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      R$ {(vendedor.vendas?.mes || 0).toLocaleString("pt-BR")}
+                      R$ {metrics.vendasMes.toLocaleString("pt-BR")}
                     </TableCell>
-                    <TableCell className="text-center">{vendedor.vendas?.qtdFechamentos || 0}</TableCell>
+                    <TableCell className="text-center">{metrics.qtdFechamentos}</TableCell>
                     <TableCell className="text-center font-medium">
-                      {vendedor.vendas?.positivacao || 0}
+                      {metrics.positivacao}
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex items-center gap-2">
-                        <Progress value={calcularProgressoMeta(vendedor)} className="h-2 flex-1" />
+                        <Progress value={metrics.progressoMeta} className="h-2 flex-1" />
                         <span className="text-sm font-medium w-12 text-right">
-                          {calcularProgressoMeta(vendedor)}%
+                          {metrics.progressoMeta}%
                         </span>
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                )})}
               </TableBody>
             </Table>
           </CardContent>

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Venda, StatusVenda } from "../types/venda";
+import { NaturezaOperacao } from "../types/naturezaOperacao";
 import {
   Card,
   CardContent,
@@ -67,6 +68,7 @@ import {
   CommandList,
 } from "./ui/command";
 import { Textarea } from "./ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { 
   Search, 
   Plus, 
@@ -92,11 +94,16 @@ import {
   Plug,
   RefreshCw,
   Wrench,
+  FileText,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { api } from '../services/api';
 import { tinyERPSyncService } from '../services/tinyERPSync';
+import { erpAutoSendService } from '../services/erpAutoSendService';
+import { companyService } from '../services/companyService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Sale {
   id: string;
@@ -110,11 +117,13 @@ interface Sale {
   ordemCompraCliente?: string;
   empresa: string;
   vendedor: string;
+  vendedorId: string;
   vendedorIniciais: string;
   valor: number;
   produtos: string[];
   naturezaOperacao: string;
-  status: "concluida" | "em_andamento" | "pendente" | "cancelada";
+  naturezaOperacaoId: string;
+  status: StatusVenda; // ✅ CORRIGIDO: Usar StatusVenda direto do banco
   data: string;
   dataFechamento?: string;
   observacoes?: string;
@@ -125,17 +134,8 @@ interface Sale {
   };
 }
 
-// Função para converter Venda para Sale
+// ✅ CORRIGIDO: Função para converter Venda para Sale SEM mapeamento de status
 const convertVendaToSale = (venda: Venda): Sale => {
-  const statusMap: Record<StatusVenda, Sale['status']> = {
-    'Rascunho': 'pendente',
-    'Em Análise': 'pendente',     // Em Análise (Em Aberto no Tiny) = Pendente na UI
-    'Aprovado': 'em_andamento',
-    'Faturado': 'concluida',
-    'Concluído': 'concluida',  // Mapeia "Concluído" para "concluida"
-    'Cancelado': 'cancelada',
-  };
-
   // Extrair iniciais do vendedor
   const iniciais = venda.nomeVendedor
     .split(' ')
@@ -156,11 +156,13 @@ const convertVendaToSale = (venda: Venda): Sale => {
     ordemCompraCliente: venda.ordemCompraCliente,
     empresa: venda.nomeEmpresaFaturamento,
     vendedor: venda.nomeVendedor,
+    vendedorId: venda.vendedorId,
     vendedorIniciais: iniciais,
     valor: venda.valorPedido,
     produtos: venda.itens.map(item => item.descricaoProduto),
     naturezaOperacao: venda.nomeNaturezaOperacao,
-    status: statusMap[venda.status] || 'pendente',
+    naturezaOperacaoId: venda.naturezaOperacaoId,
+    status: venda.status, // ✅ USA STATUS DIRETO DO BANCO - SEM CONVERSÃO
     data: format(new Date(venda.dataPedido), "dd/MM/yyyy", { locale: ptBR }),
     dataFechamento: venda.status === 'Faturado' ? format(new Date(venda.updatedAt), "dd/MM/yyyy", { locale: ptBR }) : undefined,
     observacoes: venda.observacoesInternas,
@@ -168,11 +170,16 @@ const convertVendaToSale = (venda: Venda): Sale => {
   };
 };
 
-const statusConfig = {
-  concluida: { label: "Concluída", variant: "default" as const, color: "text-green-500" },
-  em_andamento: { label: "Em Andamento", variant: "secondary" as const, color: "text-blue-500" },
-  pendente: { label: "Pendente", variant: "outline" as const, color: "text-yellow-500" },
-  cancelada: { label: "Cancelada", variant: "destructive" as const, color: "text-red-500" }
+// ✅ CORRIGIDO: statusConfig para TODOS os StatusVenda possíveis
+const statusConfig: Record<StatusVenda, { label: string; variant: "default" | "secondary" | "outline" | "destructive"; color: string }> = {
+  'Rascunho': { label: "Rascunho", variant: "outline", color: "text-gray-500" },
+  'Em Análise': { label: "Em Análise", variant: "secondary", color: "text-yellow-600" },
+  'Aprovado': { label: "Aprovado", variant: "secondary", color: "text-blue-500" },
+  'Em Separação': { label: "Em Separação", variant: "secondary", color: "text-purple-500" },
+  'Faturado': { label: "Faturado", variant: "default", color: "text-green-600" },
+  'Concluído': { label: "Concluído", variant: "default", color: "text-green-500" },
+  'Enviado': { label: "Enviado", variant: "default", color: "text-cyan-500" }, // ✅ NOVO
+  'Cancelado': { label: "Cancelado", variant: "destructive", color: "text-red-500" }
 };
 
 // Mock data para naturezas de operação (virá das configurações)
@@ -195,38 +202,143 @@ interface SalesPageProps {
   onCustomDateRangeChange?: (range: { from: Date | undefined; to: Date | undefined }) => void;
 }
 
+// Funções de formatação de valores (mesma lógica do Dashboard)
+const formatCurrency = (value: number) => {
+  return value.toLocaleString('pt-BR', { 
+    style: 'currency', 
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+};
+
+const formatDisplayValue = (value: number) => {
+  // Se for >= 1 milhão, abreviar mostrando milhões e milhares
+  if (value >= 1000000) {
+    // Truncar para milhares (remover centenas e centavos)
+    const truncatedValue = Math.floor(value / 1000);
+    // Formatar com separador de milhar
+    return `R$ ${truncatedValue.toLocaleString('pt-BR')} M`;
+  }
+  
+  // Se for < 1 milhão, mostrar valor completo
+  return formatCurrency(value);
+};
+
 export function SalesPage({ 
   onNovaVenda, 
   onVisualizarVenda, 
   onEditarVenda,
   onIntegracaoERP,
-  period = "30",
+  period = "current_month",
   onPeriodChange,
   customDateRange = { from: undefined, to: undefined },
   onCustomDateRangeChange
 }: SalesPageProps) {
+  const { usuario } = useAuth();
+  const ehVendedor = usuario?.tipo === 'vendedor';
+  
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [enviandoParaERP, setEnviandoParaERP] = useState<string | null>(null);
+  const [naturezasOperacao, setNaturezasOperacao] = useState<NaturezaOperacao[]>([]);
   
-  // Carregar vendas do Supabase
+  // Carregar vendas e naturezas de operação do Supabase
   useEffect(() => {
-    carregarVendas();
+    carregarDados();
   }, []);
 
-  const carregarVendas = async () => {
+  const carregarDados = async () => {
     try {
-      console.log('[SALES-PAGE] Carregando vendas da API...');
-      const vendasAPI = await api.get('vendas');
+      console.log('[SALES-PAGE] Carregando dados da API...');
+      const [vendasAPI, naturezasAPI] = await Promise.all([
+        api.get('vendas'),
+        api.get('naturezas-operacao')
+      ]);
       console.log('[SALES-PAGE] Vendas recebidas da API:', vendasAPI.length);
+      console.log('[SALES-PAGE] Naturezas recebidas da API:', naturezasAPI.length);
+      
       const vendasConvertidas = vendasAPI.map(convertVendaToSale);
       setSales(vendasConvertidas);
+      setNaturezasOperacao(naturezasAPI || []);
       console.log('[SALES-PAGE] Vendas convertidas e carregadas:', vendasConvertidas.length);
     } catch (error) {
-      console.error('[SALES-PAGE] Erro ao carregar vendas:', error);
+      console.error('[SALES-PAGE] Erro ao carregar dados:', error);
       setSales([]);
+      setNaturezasOperacao([]);
       toast.error('Erro ao conectar com o banco de dados. Usando dados de demonstração.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Forçar sincronização com Tiny ERP
+  const handleSincronizarTinyERP = async () => {
+    try {
+      setSyncing(true);
+      console.log('[SYNC] 🔄 Iniciando sincronização manual com Tiny ERP...');
+      
+      // Buscar todas as vendas do banco
+      const vendasAPI = await api.get('vendas');
+      console.log('[SYNC] 📊 Vendas carregadas para sincronização:', vendasAPI.length);
+      
+      // Filtrar apenas vendas que têm integração com ERP
+      const vendasComERP = vendasAPI.filter((v: any) => 
+        v.integracaoERP?.erpPedidoId && 
+        v.status !== 'Rascunho' && 
+        v.status !== 'Cancelado'
+      );
+      console.log('[SYNC] 📦 Vendas com ERP para sincronizar:', vendasComERP.length);
+      
+      // Contar pedidos mockados
+      const pedidosMockados = vendasComERP.filter((v: any) => 
+        v.integracaoERP?.erpPedidoId?.startsWith('tiny-mock-')
+      ).length;
+      
+      const pedidosReais = vendasComERP.length - pedidosMockados;
+      
+      let descricao = `${pedidosReais} pedido(s) a processar`;
+      if (pedidosMockados > 0) {
+        descricao += ` (${pedidosMockados} pedido(s) mockado(s) ignorado(s))`;
+      }
+      descricao += '. Delay de 0.5s entre cada pedido para evitar bloqueio da API.';
+      
+      toast.info('🔄 Sincronizando pedidos...', {
+        description: descricao,
+        duration: 4000
+      });
+      
+      // Sincronizar todas as vendas
+      console.log('[SYNC] ⚙️ Chamando sincronizarTodasVendas...');
+      await tinyERPSyncService.sincronizarTodasVendas(vendasComERP);
+      console.log('[SYNC] ✅ Sincronização concluída!');
+      
+      toast.success('✅ Sincronização concluída!', {
+        description: `Processo finalizado. Verifique o console para detalhes.`,
+        duration: 5000
+      });
+      
+      // Recarregar dados atualizados
+      console.log('[SYNC] 🔄 Recarregando dados da página...');
+      await carregarDados();
+      
+    } catch (error) {
+      console.error('[SYNC] ❌ Erro ao sincronizar:', error);
+      
+      // Mensagem específica para rate limit
+      if (error instanceof Error && error.message.includes('Rate limit')) {
+        toast.error('🚫 Limite de requisições atingido', {
+          description: 'A API do Tiny ERP bloqueou temporariamente as requisições. Aguarde 2-3 minutos e tente novamente.',
+          duration: 8000
+        });
+      } else {
+        toast.error('❌ Erro na sincronização', {
+          description: error instanceof Error ? error.message : 'Erro desconhecido ao sincronizar com o ERP'
+        });
+      }
+    } finally {
+      setSyncing(false);
     }
   };
   const [searchTerm, setSearchTerm] = useState("");
@@ -245,8 +357,8 @@ export function SalesPage({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [naturezaPopoverOpen, setNaturezaPopoverOpen] = useState(false);
   const [selectedNatureza, setSelectedNatureza] = useState<string>("");
-  const [sortField, setSortField] = useState<keyof Sale | null>(null);
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [sortField, setSortField] = useState<keyof Sale | null>("data");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>(customDateRange);
   const [paginaAtual, setPaginaAtual] = useState(1);
@@ -293,6 +405,13 @@ export function SalesPage({
 
   // Filtrar vendas com busca aprimorada
   let filteredSales = sales.filter(sale => {
+    // 🔒 Filtro automático para vendedores: mostrar apenas suas próprias vendas
+    if (ehVendedor && usuario) {
+      if (sale.vendedorId !== usuario.id) {
+        return false;
+      }
+    }
+    
     // Busca expandida incluindo múltiplos campos
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch = 
@@ -308,45 +427,118 @@ export function SalesPage({
       sale.empresa.toLowerCase().includes(searchLower) ||
       sale.vendedor.toLowerCase().includes(searchLower); // Vendedor
     
-    const matchesStatus = statusFilter === "all" || sale.status === statusFilter;
-    
     // Filtro por período
     let matchesPeriod = true;
     if (period && period !== "custom") {
-      const saleDate = new Date(sale.data.split("/").reverse().join("-"));
+      // Converter data dd/MM/yyyy para Date no fuso horário LOCAL (evita bug de UTC)
+      const [dia, mes, ano] = sale.data.split("/").map(Number);
+      const saleDate = new Date(ano, mes - 1, dia);
+      saleDate.setHours(0, 0, 0, 0);
       const now = new Date();
       now.setHours(23, 59, 59, 999); // Fim do dia atual
       
-      switch (period) {
-        case "7":
-          const sevenDaysAgo = new Date(now);
-          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-          sevenDaysAgo.setHours(0, 0, 0, 0);
-          matchesPeriod = saleDate >= sevenDaysAgo && saleDate <= now;
-          break;
-        case "30":
-          const thirtyDaysAgo = new Date(now);
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          thirtyDaysAgo.setHours(0, 0, 0, 0);
-          matchesPeriod = saleDate >= thirtyDaysAgo && saleDate <= now;
-          break;
-        case "current_month":
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-          startOfMonth.setHours(0, 0, 0, 0);
-          matchesPeriod = saleDate >= startOfMonth && saleDate <= now;
-          break;
-        case "90":
-          const ninetyDaysAgo = new Date(now);
-          ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-          ninetyDaysAgo.setHours(0, 0, 0, 0);
-          matchesPeriod = saleDate >= ninetyDaysAgo && saleDate <= now;
-          break;
-        case "365":
-          const oneYearAgo = new Date(now);
-          oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-          oneYearAgo.setHours(0, 0, 0, 0);
-          matchesPeriod = saleDate >= oneYearAgo && saleDate <= now;
-          break;
+      // DEBUG: Log na primeira venda
+      if (sales.indexOf(sale) === 0) {
+        console.log('[SALES-PAGE] 🔍 Iniciando filtro de período:', {
+          periodo: period,
+          totalVendas: sales.length,
+          dataAtual: format(now, "dd/MM/yyyy HH:mm:ss", { locale: ptBR }),
+          primeiraVenda: {
+            id: sale.id,
+            data: sale.data
+          }
+        });
+      }
+      
+      // Verificar se é um período no formato YYYY-MM (mês específico)
+      if (period.includes('-')) {
+        const [year, month] = period.split('-').map(Number);
+        const periodStart = new Date(year, month - 1, 1);
+        periodStart.setHours(0, 0, 0, 0);
+        const periodEnd = new Date(year, month, 0); // Último dia do mês
+        periodEnd.setHours(23, 59, 59, 999);
+        matchesPeriod = saleDate >= periodStart && saleDate <= periodEnd;
+        
+        // DEBUG: Log detalhado para YYYY-MM
+        if (sales.indexOf(sale) === 0) {
+          console.log('[SALES-PAGE] 📅 Filtro YYYY-MM detectado:', {
+            periodo: period,
+            ano: year,
+            mes: month,
+            inicioMes: format(periodStart, "dd/MM/yyyy HH:mm:ss", { locale: ptBR }),
+            fimMes: format(periodEnd, "dd/MM/yyyy HH:mm:ss", { locale: ptBR })
+          });
+        }
+      } else {
+        // Períodos fixos (7, 30, 90, 365, current_month)
+        switch (period) {
+          case "7":
+            const sevenDaysAgo = new Date(now);
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            sevenDaysAgo.setHours(0, 0, 0, 0);
+            matchesPeriod = saleDate >= sevenDaysAgo && saleDate <= now;
+            break;
+          case "30":
+            const thirtyDaysAgo = new Date(now);
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            thirtyDaysAgo.setHours(0, 0, 0, 0);
+            matchesPeriod = saleDate >= thirtyDaysAgo && saleDate <= now;
+            break;
+          case "current_month":
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            startOfMonth.setHours(0, 0, 0, 0);
+            // Fim do mês: último dia do mês atual (31/12 para dezembro)
+            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            endOfMonth.setHours(23, 59, 59, 999);
+            matchesPeriod = saleDate >= startOfMonth && saleDate <= endOfMonth;
+            
+            // DEBUG: Log detalhado para current_month
+            if (sales.indexOf(sale) === 0) {
+              console.log('[SALES-PAGE] 📅 Filtro current_month detectado:', {
+                inicioMes: format(startOfMonth, "dd/MM/yyyy", { locale: ptBR }),
+                fimMes: format(endOfMonth, "dd/MM/yyyy", { locale: ptBR })
+              });
+              
+              // DEBUG: Analisar primeiras 30 vendas
+              console.log('[SALES-PAGE] 🔍 Analisando vendas do mês atual...');
+              const vendasDezembro = sales.filter(s => {
+                const [dia, mes, ano] = s.data.split('/');
+                return mes === '12' && ano === '2025';
+              });
+              
+              console.log(`[SALES-PAGE] 📊 Total de vendas em 12/2025 (pela string de data): ${vendasDezembro.length}`);
+              
+              // Testar conversão de data nas primeiras vendas
+              sales.slice(0, 10).forEach((s, idx) => {
+                const [dia, mes, ano] = s.data.split("/").map(Number);
+                const sd = new Date(ano, mes - 1, dia);
+                sd.setHours(0, 0, 0, 0);
+                const passa = sd >= startOfMonth && sd <= endOfMonth;
+                console.log(`[SALES-PAGE] Venda ${idx + 1}:`, {
+                  numero: s.numero,
+                  dataOriginal: s.data,
+                  dataConvertida: format(sd, "dd/MM/yyyy HH:mm:ss", { locale: ptBR }),
+                  timestamp: sd.getTime(),
+                  passa: passa,
+                  dentroInicio: sd >= startOfMonth,
+                  dentroFim: sd <= endOfMonth
+                });
+              });
+            }
+            break;
+          case "90":
+            const ninetyDaysAgo = new Date(now);
+            ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+            ninetyDaysAgo.setHours(0, 0, 0, 0);
+            matchesPeriod = saleDate >= ninetyDaysAgo && saleDate <= now;
+            break;
+          case "365":
+            const oneYearAgo = new Date(now);
+            oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+            oneYearAgo.setHours(0, 0, 0, 0);
+            matchesPeriod = saleDate >= oneYearAgo && saleDate <= now;
+            break;
+        }
       }
     } else if (period === "custom" && dateRange.from && dateRange.to) {
       const saleDate = new Date(sale.data.split("/").reverse().join("-"));
@@ -357,7 +549,37 @@ export function SalesPage({
       matchesPeriod = saleDate >= from && saleDate <= to;
     }
     
-    return matchesSearch && matchesStatus && matchesPeriod;
+    return matchesSearch && matchesPeriod;
+  });
+
+  // Vendas filtradas por busca e período (SEM filtro de status) - usado para totalizadores
+  const salesForCounters = filteredSales;
+  
+  // DEBUG: Log do resultado do filtro
+  useEffect(() => {
+    if (period && sales.length > 0) {
+      console.log('[SALES-PAGE] ✅ Resultado do filtro:', {
+        periodo: period,
+        totalVendasOriginais: sales.length,
+        vendasFiltradas: salesForCounters.length,
+        percentual: Math.round((salesForCounters.length / sales.length) * 100) + '%'
+      });
+      
+      // Mostrar distribuição por mês das vendas originais
+      const vendasPorMes: Record<string, number> = {};
+      sales.forEach(sale => {
+        const [dia, mes, ano] = sale.data.split('/');
+        const chave = `${mes}/${ano}`;
+        vendasPorMes[chave] = (vendasPorMes[chave] || 0) + 1;
+      });
+      console.log('[SALES-PAGE] 📊 Distribuição das vendas por mês:', vendasPorMes);
+    }
+  }, [period, sales.length, salesForCounters.length]);
+
+  // Aplicar filtro de status SOMENTE para a tabela
+  filteredSales = filteredSales.filter(sale => {
+    const matchesStatus = statusFilter === "all" || sale.status === statusFilter;
+    return matchesStatus;
   });
 
   // Ordenar vendas
@@ -396,13 +618,63 @@ export function SalesPage({
 
   // Calcular estatísticas baseadas nas vendas FILTRADAS
   const stats = useMemo(() => {
+    // Criar Set com IDs de naturezas que geram receita
+    const naturezasGeramReceita = new Set(
+      naturezasOperacao
+        .filter(n => n.geraReceita)
+        .map(n => n.id)
+    );
+    
+    // Filtrar vendas que geram receita e não estão canceladas (para Vendas Totais e Ticket Médio)
+    const vendasGeramReceitaNaoCanceladas = salesForCounters.filter(s => 
+      naturezasGeramReceita.has(s.naturezaOperacaoId) && s.status !== 'Cancelado'
+    );
+    
+    // Filtrar vendas concluídas que geram receita
+    const vendasConcluidas = salesForCounters.filter(s => 
+      naturezasGeramReceita.has(s.naturezaOperacaoId) && s.status === 'Concluído'
+    );
+    
+    // Filtrar vendas em andamento que geram receita (não canceladas e não concluídas)
+    const vendasEmAndamento = salesForCounters.filter(s => 
+      naturezasGeramReceita.has(s.naturezaOperacaoId) && 
+      s.status !== 'Cancelado' && 
+      s.status !== 'Concluído'
+    );
+    
+    // 🆕 Filtrar vendas que NÃO geram receita e não estão canceladas (para "Outros Pedidos")
+    const vendasOutrosPedidosNaoCanceladas = salesForCounters.filter(s => 
+      !naturezasGeramReceita.has(s.naturezaOperacaoId) && s.status !== 'Cancelado'
+    );
+    
+    // 🆕 Filtrar "Outros Pedidos" concluídos
+    const outrosPedidosConcluidos = salesForCounters.filter(s => 
+      !naturezasGeramReceita.has(s.naturezaOperacaoId) && s.status === 'Concluído'
+    );
+    
+    // 🆕 Filtrar "Outros Pedidos" em andamento (não cancelados e não concluídos)
+    const outrosPedidosEmAndamento = salesForCounters.filter(s => 
+      !naturezasGeramReceita.has(s.naturezaOperacaoId) && 
+      s.status !== 'Cancelado' && 
+      s.status !== 'Concluído'
+    );
+    
     return {
-      total: filteredSales.reduce((sum, sale) => sum + sale.valor, 0),
-      concluidas: filteredSales.filter(s => s.status === "concluida").length,
-      emAndamento: filteredSales.filter(s => s.status === "em_andamento").length,
-      ticketMedio: filteredSales.length > 0 ? filteredSales.reduce((sum, sale) => sum + sale.valor, 0) / filteredSales.length : 0
+      total: vendasGeramReceitaNaoCanceladas.reduce((sum, sale) => sum + sale.valor, 0),
+      totalVendas: vendasGeramReceitaNaoCanceladas.length,
+      concluidas: vendasConcluidas.length,
+      totalConcluidas: vendasConcluidas.reduce((sum, sale) => sum + sale.valor, 0),
+      emAndamento: vendasEmAndamento.length,
+      totalEmAndamento: vendasEmAndamento.reduce((sum, sale) => sum + sale.valor, 0),
+      ticketMedio: vendasGeramReceitaNaoCanceladas.length > 0 
+        ? vendasGeramReceitaNaoCanceladas.reduce((sum, sale) => sum + sale.valor, 0) / vendasGeramReceitaNaoCanceladas.length 
+        : 0,
+      // 🆕 Estatísticas de "Outros Pedidos"
+      outrosPedidosTotal: vendasOutrosPedidosNaoCanceladas.reduce((sum, sale) => sum + sale.valor, 0),
+      outrosPedidosConcluidos: outrosPedidosConcluidos.length,
+      outrosPedidosEmAndamento: outrosPedidosEmAndamento.length,
     };
-  }, [filteredSales]);
+  }, [salesForCounters, naturezasOperacao]);
 
   // Paginação
   const totalPaginas = Math.ceil(filteredSales.length / itensPorPagina);
@@ -480,6 +752,16 @@ export function SalesPage({
       const sucesso = await tinyERPSyncService.sincronizarVendaManual(
         vendaCompleta,
         async (vendaAtualizada) => {
+          console.log('[SALES-PAGE] Venda atualizada após sincronização:', {
+            id: vendaAtualizada.id,
+            numero: vendaAtualizada.numero,
+            status: vendaAtualizada.status,
+            integracaoERP: vendaAtualizada.integracaoERP,
+            notaFiscalId: vendaAtualizada.integracaoERP?.notaFiscalId,
+            notaFiscalNumero: vendaAtualizada.integracaoERP?.notaFiscalNumero,
+            notaFiscalChave: vendaAtualizada.integracaoERP?.notaFiscalChave
+          });
+          
           // Atualizar venda no backend
           await api.update('vendas', vendaAtualizada.id, vendaAtualizada);
           
@@ -494,13 +776,116 @@ export function SalesPage({
       if (sucesso) {
         toast.success('Status sincronizado com sucesso!');
       } else {
-        toast.error('Não foi possível sincronizar o status');
+        toast.error('Não foi possvel sincronizar o status');
       }
     } catch (error: any) {
       console.error('[SALES-PAGE] Erro ao sincronizar venda:', error);
       toast.error(`Erro ao sincronizar: ${error.message || 'Erro desconhecido'}`);
     } finally {
       setSincronizandoVenda(null);
+    }
+  };
+
+  // Enviar pedido manualmente ao ERP
+  const handleEnviarParaERP = async (saleId: string) => {
+    try {
+      setEnviandoParaERP(saleId);
+      console.log('[SALES-PAGE] Enviando pedido ao ERP:', saleId);
+      toast.info('Enviando pedido ao ERP...');
+      
+      // Buscar venda completa do backend
+      const vendaCompleta = await api.getById('vendas', saleId);
+      
+      if (!vendaCompleta) {
+        toast.error('Venda não encontrada');
+        return;
+      }
+      
+      console.log('[SALES-PAGE] Venda encontrada:', {
+        id: vendaCompleta.id,
+        numero: vendaCompleta.numero,
+        empresaFaturamentoId: vendaCompleta.empresaFaturamentoId,
+        status: vendaCompleta.status,
+        temIntegracaoERP: !!vendaCompleta.integracaoERP?.erpPedidoId
+      });
+      
+      // Verificar se já foi enviado
+      if (vendaCompleta.integracaoERP?.erpPedidoId) {
+        toast.warning('Este pedido já foi enviado ao ERP');
+        return;
+      }
+      
+      // Verificar se é rascunho
+      if (vendaCompleta.status === 'Rascunho') {
+        toast.error('Pedidos com status "Rascunho" não podem ser enviados ao ERP');
+        return;
+      }
+      
+      // Verificar se tem itens
+      if (!vendaCompleta.itens || vendaCompleta.itens.length === 0) {
+        toast.error('Não é possível enviar pedido sem itens ao ERP');
+        return;
+      }
+      
+      // Buscar empresa
+      if (!vendaCompleta.empresaFaturamentoId) {
+        toast.error('Empresa de faturamento não definida para este pedido');
+        return;
+      }
+      
+      const empresa = await companyService.getById(vendaCompleta.empresaFaturamentoId);
+      
+      if (!empresa) {
+        toast.error('Empresa de faturamento não encontrada');
+        return;
+      }
+      
+      console.log('[SALES-PAGE] Empresa encontrada:', {
+        id: empresa.id,
+        razaoSocial: empresa.razaoSocial,
+        integracoesERP: empresa.integracoesERP
+      });
+      
+      // Verificar se envio automático está habilitado
+      const envioHabilitado = erpAutoSendService.estaHabilitado(empresa);
+      
+      if (!envioHabilitado) {
+        toast.error('Envio ao ERP não está configurado para esta empresa');
+        return;
+      }
+      
+      // Enviar ao ERP
+      const resultado = await erpAutoSendService.enviarVendaComRetry(vendaCompleta, empresa);
+      
+      console.log('[SALES-PAGE] Resultado do envio:', resultado);
+      
+      if (resultado.sucesso && resultado.erpPedidoId) {
+        // Atualizar venda com dados de integração
+        vendaCompleta.integracaoERP = {
+          erpPedidoId: resultado.erpPedidoId,
+          sincronizacaoAutomatica: true,
+          tentativasSincronizacao: 0,
+        };
+        
+        // Salvar no backend
+        await api.update('vendas', vendaCompleta.id, vendaCompleta);
+        
+        // Atualizar lista local
+        const vendaConvertida = convertVendaToSale(vendaCompleta);
+        setSales(prevSales => 
+          prevSales.map(s => s.id === vendaConvertida.id ? vendaConvertida : s)
+        );
+        
+        toast.success(`Pedido enviado ao ERP com sucesso! (ID: ${resultado.erpPedidoId})`);
+      } else {
+        toast.error(`Erro ao enviar ao ERP: ${resultado.erro || 'Erro desconhecido'}`);
+      }
+      
+    } catch (error: any) {
+      console.error('[SALES-PAGE] Erro ao enviar pedido ao ERP:', error);
+      toast.error(`Erro ao enviar ao ERP: ${error.message || 'Erro desconhecido'}`);
+    } finally {
+      setEnviandoParaERP(null);
     }
   };
 
@@ -535,18 +920,27 @@ export function SalesPage({
   return (
     <div className="space-y-6">
       {/* Estatísticas */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm">Vendas Totais</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              R$ {(stats.total / 1000).toFixed(1)}k
-            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="text-2xl font-bold cursor-help">
+                    {formatDisplayValue(stats.total)}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{formatCurrency(stats.total)}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <p className="text-xs text-muted-foreground mt-1">
-              {filteredSales.length} transações
+              {stats.totalVendas} transações
             </p>
           </CardContent>
         </Card>
@@ -557,9 +951,20 @@ export function SalesPage({
             <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.concluidas}</div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="text-2xl font-bold cursor-help">
+                    {formatDisplayValue(stats.totalConcluidas)}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{formatCurrency(stats.totalConcluidas)}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <p className="text-xs text-muted-foreground mt-1">
-              {filteredSales.length > 0 ? Math.round((stats.concluidas / filteredSales.length) * 100) : 0}% do total
+              {stats.concluidas} vendas ({filteredSales.length > 0 ? Math.round((stats.concluidas / filteredSales.length) * 100) : 0}% do total)
             </p>
           </CardContent>
         </Card>
@@ -570,9 +975,20 @@ export function SalesPage({
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.emAndamento}</div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="text-2xl font-bold cursor-help">
+                    {formatDisplayValue(stats.totalEmAndamento)}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{formatCurrency(stats.totalEmAndamento)}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <p className="text-xs text-muted-foreground mt-1">
-              oportunidades ativas
+              {stats.emAndamento} oportunidades ativas
             </p>
           </CardContent>
         </Card>
@@ -583,11 +999,66 @@ export function SalesPage({
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              R$ {(stats.ticketMedio / 1000).toFixed(1)}k
-            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="text-2xl font-bold cursor-help">
+                    {formatDisplayValue(stats.ticketMedio)}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{formatCurrency(stats.ticketMedio)}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <p className="text-xs text-muted-foreground mt-1">
               por transação
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="cursor-help">
+                    <CardTitle className="text-sm">Outros Pedidos</CardTitle>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Operações que não geram receita</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="cursor-help">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Operações que não geram receita</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </CardHeader>
+          <CardContent>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="text-2xl font-bold cursor-help">
+                    {formatDisplayValue(stats.outrosPedidosTotal)}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{formatCurrency(stats.outrosPedidosTotal)}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.outrosPedidosConcluidos} concluídos · {stats.outrosPedidosEmAndamento} em andamento
             </p>
           </CardContent>
         </Card>
@@ -635,12 +1106,6 @@ export function SalesPage({
       <Card>
         <CardHeader>
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <CardTitle>Todas as Vendas</CardTitle>
-              <CardDescription>
-                Gerencie e acompanhe todas as transações de vendas
-              </CardDescription>
-            </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm">
                 <Download className="h-4 w-4 mr-2" />
@@ -648,17 +1113,21 @@ export function SalesPage({
               </Button>
               <Button size="sm" onClick={onNovaVenda}>
                 <Plus className="h-4 w-4 mr-2" />
-                Nova Venda
+                Novo Pedido
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" disabled={syncing}>
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuLabel>Mais Opções</DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSincronizarTinyERP} disabled={syncing}>
+                    <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
+                    {syncing ? 'Sincronizando...' : 'Sincronizar com Tiny ERP'}
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={onIntegracaoERP}>
                     <Plug className="h-4 w-4 mr-2" />
                     Integração ERP
@@ -713,7 +1182,7 @@ export function SalesPage({
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Natureza de Operação *</Label>
+                        <Label>Natureza de Operaão *</Label>
                         <Popover open={naturezaPopoverOpen} onOpenChange={setNaturezaPopoverOpen}>
                           <PopoverTrigger asChild>
                             <Button
@@ -810,10 +1279,15 @@ export function SalesPage({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os Status</SelectItem>
-                <SelectItem value="concluida">Concluídas</SelectItem>
-                <SelectItem value="em_andamento">Em Andamento</SelectItem>
-                <SelectItem value="pendente">Pendentes</SelectItem>
-                <SelectItem value="cancelada">Canceladas</SelectItem>
+                {/* ✅ CORRIGIDO: Listar TODOS os StatusVenda do banco */}
+                <SelectItem value="Rascunho">Rascunho</SelectItem>
+                <SelectItem value="Em Análise">Em Análise</SelectItem>
+                <SelectItem value="Aprovado">Aprovado</SelectItem>
+                <SelectItem value="Em Separação">Em Separação</SelectItem>
+                <SelectItem value="Faturado">Faturado</SelectItem>
+                <SelectItem value="Concluído">Concluído</SelectItem>
+                <SelectItem value="Enviado">Enviado</SelectItem>
+                <SelectItem value="Cancelado">Cancelado</SelectItem>
               </SelectContent>
             </Select>
             <Select 
@@ -835,24 +1309,36 @@ export function SalesPage({
             </Select>
           </div>
 
-          {/* Tabs por Status */}
+          {/* Tabs por Status - ✅ CORRIGIDO: Todos os StatusVenda */}
           <Tabs defaultValue="all" className="w-full">
             <div className="overflow-x-auto">
               <TabsList className="inline-flex w-auto min-w-full h-auto">
                 <TabsTrigger value="all" onClick={() => setStatusFilter("all")} className="whitespace-nowrap">
-                  Todas ({sales.length})
+                  Todas ({salesForCounters.length})
                 </TabsTrigger>
-                <TabsTrigger value="concluida" onClick={() => setStatusFilter("concluida")} className="whitespace-nowrap">
-                  Concluídas ({sales.filter(s => s.status === "concluida").length})
+                <TabsTrigger value="Rascunho" onClick={() => setStatusFilter("Rascunho")} className="whitespace-nowrap">
+                  Rascunho ({salesForCounters.filter(s => s.status === "Rascunho").length})
                 </TabsTrigger>
-                <TabsTrigger value="em_andamento" onClick={() => setStatusFilter("em_andamento")} className="whitespace-nowrap">
-                  Em Andamento ({sales.filter(s => s.status === "em_andamento").length})
+                <TabsTrigger value="Em Análise" onClick={() => setStatusFilter("Em Análise")} className="whitespace-nowrap">
+                  Em Análise ({salesForCounters.filter(s => s.status === "Em Análise").length})
                 </TabsTrigger>
-                <TabsTrigger value="pendente" onClick={() => setStatusFilter("pendente")} className="whitespace-nowrap">
-                  Pendentes ({sales.filter(s => s.status === "pendente").length})
+                <TabsTrigger value="Aprovado" onClick={() => setStatusFilter("Aprovado")} className="whitespace-nowrap">
+                  Aprovado ({salesForCounters.filter(s => s.status === "Aprovado").length})
                 </TabsTrigger>
-                <TabsTrigger value="cancelada" onClick={() => setStatusFilter("cancelada")} className="whitespace-nowrap">
-                  Canceladas ({sales.filter(s => s.status === "cancelada").length})
+                <TabsTrigger value="Em Separação" onClick={() => setStatusFilter("Em Separaç��o")} className="whitespace-nowrap">
+                  Em Separação ({salesForCounters.filter(s => s.status === "Em Separação").length})
+                </TabsTrigger>
+                <TabsTrigger value="Faturado" onClick={() => setStatusFilter("Faturado")} className="whitespace-nowrap">
+                  Faturado ({salesForCounters.filter(s => s.status === "Faturado").length})
+                </TabsTrigger>
+                <TabsTrigger value="Enviado" onClick={() => setStatusFilter("Enviado")} className="whitespace-nowrap">
+                  Enviado ({salesForCounters.filter(s => s.status === "Enviado").length})
+                </TabsTrigger>
+                <TabsTrigger value="Concluído" onClick={() => setStatusFilter("Concluído")} className="whitespace-nowrap">
+                  Concluído ({salesForCounters.filter(s => s.status === "Concluído").length})
+                </TabsTrigger>
+                <TabsTrigger value="Cancelado" onClick={() => setStatusFilter("Cancelado")} className="whitespace-nowrap">
+                  Cancelado ({salesForCounters.filter(s => s.status === "Cancelado").length})
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -968,7 +1454,7 @@ export function SalesPage({
                                 <span className="ml-2 text-xs">(Bloqueado)</span>
                               )}
                             </DropdownMenuItem>
-                            {sale.integracaoERP?.erpPedidoId && (
+                            {sale.integracaoERP?.erpPedidoId ? (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem 
@@ -977,6 +1463,17 @@ export function SalesPage({
                                 >
                                   <RefreshCw className={`h-4 w-4 mr-2 ${sincronizandoVenda === sale.id ? 'animate-spin' : ''}`} />
                                   {sincronizandoVenda === sale.id ? 'Sincronizando...' : 'Sincronizar Status'}
+                                </DropdownMenuItem>
+                              </>
+                            ) : sale.status !== 'Rascunho' && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  onClick={() => handleEnviarParaERP(sale.id)}
+                                  disabled={enviandoParaERP === sale.id}
+                                >
+                                  <Send className={`h-4 w-4 mr-2 ${enviandoParaERP === sale.id ? 'animate-pulse' : ''}`} />
+                                  {enviandoParaERP === sale.id ? 'Enviando...' : 'Enviar ao ERP'}
                                 </DropdownMenuItem>
                               </>
                             )}

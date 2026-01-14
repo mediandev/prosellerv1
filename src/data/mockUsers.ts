@@ -38,7 +38,7 @@ export const mockUsuarios: Usuario[] = [
   {
     id: "1",
     nome: "Admin Sistema",
-    email: "admin@vendaspro.com",
+    email: "admin@proseller.com",
     tipo: "backoffice",
     permissoes: [
       "clientes.visualizar",

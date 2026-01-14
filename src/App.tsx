@@ -11,23 +11,23 @@ import {
   UserCircle,
   Wallet,
   DollarSign,
-  LogOut,
-  Plug
+  LogOut
 } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { format } from "date-fns@4.1.0";
+import { ptBR } from "date-fns@4.1.0/locale";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { LoginPage } from "./components/LoginPage";
 import { ForgotPasswordPage } from "./components/ForgotPasswordPage";
+import { ProSellerLogo } from "./components/ProSellerLogo";
 import { DashboardMetrics, DashboardFilters } from "./components/DashboardMetrics";
 import { SalesChart } from "./components/SalesChart";
 import { RecentSalesTable } from "./components/RecentSalesTable";
+import { CanceledSalesTable } from "./components/CanceledSalesTable";
 import { TopSellersCard } from "./components/TopSellersCard";
 import { CustomerWalletCard } from "./components/CustomerWalletCard";
 import { SegmentSalesCard } from "./components/SegmentSalesCard";
 import { ABCCurveCard } from "./components/ABCCurveCard";
 import { TeamManagement } from "./components/TeamManagement";
-import { GoalsTracking } from "./components/GoalsTracking";
 import { SalesPage } from "./components/SalesPage";
 import { CustomersListPage } from "./components/CustomersListPage";
 import { CustomerFormPage } from "./components/CustomerFormPage";
@@ -49,6 +49,8 @@ import { ProductABCReportPage } from "./components/ProductABCReportPage";
 import { ClientsRiskReportPage } from "./components/ClientsRiskReportPage";
 import { RelatorioMixCliente } from "./components/RelatorioMixCliente";
 import { RelatorioROICliente } from "./components/RelatorioROICliente";
+import { AnaliseCurvaABCPage } from "./components/AnaliseCurvaABCPage";
+import { SolicitadoFaturadoReportPage } from "./components/SolicitadoFaturadoReportPage";
 import { TinyERPPedidosPage } from "./components/TinyERPPedidosPage";
 import { TinyERPModeIndicator } from "./components/TinyERPModeIndicator";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -71,11 +73,11 @@ type CustomerView = 'list' | 'create' | 'edit' | 'view';
 type PriceListView = 'settings' | 'create' | 'edit' | 'view';
 type SaleView = 'list' | 'create' | 'edit' | 'view';
 type ProductView = 'list' | 'create' | 'edit' | 'view';
-type ReportView = 'index' | 'vendas' | 'clientes-abc' | 'produtos-abc' | 'clientes-risco' | 'mix-cliente' | 'roi-clientes';
+type ReportView = 'index' | 'vendas' | 'clientes-abc' | 'produtos-abc' | 'clientes-risco' | 'mix-cliente' | 'roi-clientes' | 'analise-abc-dez2025';
 
 const menuItems: Array<{ id: Page; icon: any; label: string; backofficeOnly?: boolean }> = [
-  { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { id: "vendas", icon: ShoppingCart, label: "Vendas" },
+  { id: "dashboard", icon: LayoutDashboard, label: "Dashboards" },
+  { id: "vendas", icon: ShoppingCart, label: "Pedidos" },
   { id: "clientes", icon: UserCircle, label: "Clientes" },
   { id: "produtos", icon: Package, label: "Produtos" },
   { id: "equipe", icon: Users, label: "Equipe", backofficeOnly: true },
@@ -97,9 +99,8 @@ function Sidebar({ currentPage, onPageChange }: SidebarProps) {
   
   return (
     <div className="flex flex-col h-full bg-card border-r">
-      <div className="px-6 py-4 border-b flex-shrink-0">
-        <h1 className="text-xl font-bold">VendasPro</h1>
-        <p className="text-sm text-muted-foreground mt-1">Gestão Comercial</p>
+      <div className="px-6 py-4 border-b flex-shrink-0 h-[72px] flex items-center justify-center">
+        <ProSellerLogo />
       </div>
       
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -175,12 +176,12 @@ function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
 
 const pageConfig: Record<Page, { title: string; description: string }> = {
   dashboard: {
-    title: "Dashboard",
+    title: "Dashboards",
     description: "Bem-vindo de volta! Aqui está um resumo do seu desempenho."
   },
   vendas: {
-    title: "Vendas",
-    description: "Visualize e gerencie todas as vendas realizadas."
+    title: "Pedidos",
+    description: "Visualize e gerencie todos os pedidos realizados."
   },
   equipe: {
     title: "Gestão de Equipe",
@@ -242,12 +243,21 @@ function AppContent() {
     return `${year}-${month}`;
   };
   
-  const [dashboardPeriod, setDashboardPeriod] = useState<string>(getCurrentMonthPeriod());
-  const [showDataInit, setShowDataInit] = useState(false);
+  const [dashboardPeriod, setDashboardPeriod] = useState<string>("current_month");
+  const [dashboardCustomDateRange, setDashboardCustomDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({ 
+    from: undefined, 
+    to: undefined 
+  });
   const [dataInitialized, setDataInitialized] = useState(true); // Sempre inicializado
   
   // Estado para armazenar transações filtradas vindas do DashboardMetrics
   const [dashboardTransactions, setDashboardTransactions] = useState<Transaction[]>([]);
+
+  // 🆕 NOVO: Estado para armazenar TODAS as transações (incluindo canceladas) para CanceledSalesTable
+  const [dashboardAllTransactions, setDashboardAllTransactions] = useState<Transaction[]>([]);
+
+  // 🆕 NOVO: Estado para armazenar TODAS as transações SEM filtro de período (para Curva ABC)
+  const [dashboardRawTransactions, setDashboardRawTransactions] = useState<Transaction[]>([]);
 
   // Check if data needs initialization - DESABILITADO
   // useEffect(() => {
@@ -295,14 +305,14 @@ function AppContent() {
     
     console.log('🔍 Verificando modo Tiny ERP:', { modoSalvo, modoWindow });
     
-    // Se não tem nenhum modo configurado, iniciar em MOCK como padrão
+    // Se não tem nenhum modo configurado, iniciar em REAL como padrão
     if (!modoSalvo && !modoWindow) {
-      console.log('🔧 Tiny ERP: Inicializando em modo MOCK (padrão)');
-      localStorage.setItem('tinyERPMode', 'MOCK');
-      (window as any).__TINY_API_MODE__ = 'MOCK';
+      console.log('🔧 Tiny ERP: Inicializando em modo REAL (padrão)');
+      localStorage.setItem('tinyERPMode', 'REAL');
+      (window as any).__TINY_API_MODE__ = 'REAL';
     } else {
       // Usar o modo salvo
-      const modoAtual = modoSalvo || modoWindow || 'MOCK';
+      const modoAtual = modoSalvo || modoWindow || 'REAL';
       console.log(`✅ Tiny ERP: Modo ${modoAtual} carregado`);
       
       // Sincronizar localStorage e window
@@ -370,10 +380,12 @@ function AppContent() {
     segmentos: [],
     statusClientes: [],
     ufs: [],
+    statusVendas: "todas", // CORRIGIDO: Dashboard inicia com "todas" por padrão
+    curvasABC: [], // 🆕 NOVO: Filtro de Curva ABC de Clientes
   });
   
   // Estados para período de vendas
-  const [salesPeriod, setSalesPeriod] = useState<string>("30");
+  const [salesPeriod, setSalesPeriod] = useState<string>("current_month");
   const [salesCustomDateRange, setSalesCustomDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({ 
     from: undefined, 
     to: undefined 
@@ -398,7 +410,6 @@ function AppContent() {
   const [priceListView, setPriceListView] = useState<PriceListView>('settings');
   const [selectedPriceListId, setSelectedPriceListId] = useState<string | undefined>();
   const [listas, setListas] = useState<ListaPreco[]>([]);
-  const [loadingListas, setLoadingListas] = useState(true);
 
   // Estados para navegação de produtos
   const [productView, setProductView] = useState<ProductView>('list');
@@ -469,8 +480,26 @@ function AppContent() {
   };
 
   const handleVisualizarVenda = (vendaId: string) => {
+    console.log('[APP] 📋 handleVisualizarVenda chamado:', {
+      vendaId,
+      currentPage,
+      saleView
+    });
+    
+    // Mudar para página de vendas se não estiver nela
+    if (currentPage !== 'vendas') {
+      console.log('[APP] 🔄 Mudando para página de vendas...');
+      setCurrentPage('vendas');
+    }
+    
     setSaleView('view');
     setSelectedSaleId(vendaId);
+    
+    console.log('[APP] ✅ Navegação configurada:', {
+      page: 'vendas',
+      view: 'view',
+      saleId: vendaId
+    });
   };
 
   const handleEditarVenda = (vendaId: string) => {
@@ -694,10 +723,12 @@ function AppContent() {
             <DashboardMetrics 
               period={dashboardPeriod} 
               onPeriodChange={setDashboardPeriod}
-              onCustomDateRangeChange={setCustomDateRange}
+              onCustomDateRangeChange={setDashboardCustomDateRange}
               filters={dashboardFilters}
               onFiltersChange={setDashboardFilters}
               onTransactionsChange={setDashboardTransactions}
+              onAllTransactionsChange={setDashboardAllTransactions}
+              onRawTransactionsChange={setDashboardRawTransactions}
             />
             
             {/* Linha 2 - Gráfico Performance de Vendas + Card Top Vendedores */}
@@ -731,6 +762,8 @@ function AppContent() {
               />
               <ABCCurveCard 
                 transactions={getFilteredTransactions()} 
+                allTransactions={dashboardAllTransactions}
+                rawTransactions={dashboardRawTransactions}
                 currentFilters={dashboardFilters}
                 onFilterChange={setDashboardFilters}
               />
@@ -742,6 +775,17 @@ function AppContent() {
                 period={dashboardPeriod} 
                 filters={dashboardFilters}
                 transactions={dashboardTransactions}
+                onVisualizarVenda={handleVisualizarVenda}
+              />
+            </div>
+            
+            {/* Linha 5 - Vendas canceladas */}
+            <div>
+              <CanceledSalesTable 
+                period={dashboardPeriod} 
+                filters={dashboardFilters}
+                transactions={dashboardAllTransactions}
+                onVisualizarVenda={handleVisualizarVenda}
               />
             </div>
           </div>
@@ -858,6 +902,8 @@ function AppContent() {
           return <RelatorioMixCliente onNavigateBack={handleBackToReportsIndex} />;
         } else if (reportView === 'roi-clientes') {
           return <RelatorioROICliente onNavigateBack={handleBackToReportsIndex} />;
+        } else if (reportView === 'analise-abc-dez2025') {
+          return <AnaliseCurvaABCPage onBack={handleBackToReportsIndex} />;
         } else {
           return <ClientsRiskReportPage onNavigateBack={handleBackToReportsIndex} />;
         }
@@ -996,7 +1042,7 @@ function AppContent() {
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
-          <header className="border-b bg-card px-6 py-4 flex items-center gap-4">
+          <header className="border-b bg-card px-6 flex items-center gap-4 h-[72px]">
             <Button
               variant="ghost"
               size="icon"
@@ -1050,12 +1096,12 @@ function AppContent() {
       </div>
       <Toaster />
       
-      {/* Indicador de Modo Tiny ERP (apenas para usuários backoffice) */}
-      {usuario && usuario.tipo === 'backoffice' && (
+      {/* Indicador de Modo Tiny ERP - OCULTO: Sistema sempre em modo REAL */}
+      {/* {usuario && usuario.tipo === 'backoffice' && (
         <ErrorBoundary>
           <TinyERPModeIndicator />
         </ErrorBoundary>
-      )}
+      )} */}
     </>
   );
 }

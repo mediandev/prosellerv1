@@ -1,7 +1,7 @@
 import { Venda, ItemVenda } from '../types/venda';
 
 // Função para carregar vendas do localStorage
-function carregarVendasDoLocalStorage(): Venda[] {
+export function carregarVendasDoLocalStorage(): Venda[] {
   if (typeof window === 'undefined') return vendasIniciais;
   
   try {
@@ -41,7 +41,7 @@ export function salvarVendasNoLocalStorage(vendas: Venda[]) {
 }
 
 // Dados iniciais (padrão)
-const vendasIniciais: Venda[] = [
+export const vendasIniciais: Venda[] = [
   {
     id: 'VD-2025-001',
     numero: 'PV-2025-0001',

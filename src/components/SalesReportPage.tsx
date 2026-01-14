@@ -214,7 +214,9 @@ export function SalesReportPage({ onBack }: SalesReportPageProps) {
           groupKey = cliente?.grupoRede || "Sem Grupo";
           break;
         case "vendedor":
-          groupKey = venda.nomeVendedor;
+          // 🆕 CORRIGIDO: Buscar vendedor por ID, não por nome
+          const vendedor = vendedores.find(v => v.id === venda.vendedorId);
+          groupKey = vendedor?.nome || venda.nomeVendedor || "Vendedor não identificado";
           break;
         case "natureza":
           groupKey = venda.nomeNaturezaOperacao;
@@ -233,7 +235,7 @@ export function SalesReportPage({ onBack }: SalesReportPageProps) {
         ...vendas,
       ];
     });
-  }, [filteredSales, filters.groupBy, clientes]);
+  }, [filteredSales, filters.groupBy, clientes, vendedores]);
 
   // Calcular totais
   const totals = useMemo(() => {

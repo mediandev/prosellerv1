@@ -302,12 +302,6 @@ export function MetasManagement() {
     <div className="space-y-6">
       {/* Header com período selecionado */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Gestão de Metas</h2>
-          <p className="text-muted-foreground mt-1">
-            Configure e acompanhe as metas mensais dos vendedores
-          </p>
-        </div>
         <div className="flex items-center gap-3">
           <Select value={selectedMonth.toString()} onValueChange={(v) => setSelectedMonth(parseInt(v))}>
             <SelectTrigger className="w-[140px]">

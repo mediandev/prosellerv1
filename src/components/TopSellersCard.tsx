@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Trophy, Medal } from "lucide-react";
 import { DashboardFilters } from "./DashboardMetrics";
@@ -9,15 +9,6 @@ import {
   calculateTopSellers,
   TopSeller as Seller
 } from "../services/dashboardDataService";
-
-const periodDescriptions: Record<string, string> = {
-  "7": "Ranking dos últimos 7 dias",
-  "30": "Ranking do último mês",
-  "current_month": "Ranking do mês atual",
-  "90": "Ranking dos últimos 90 dias",
-  "365": "Ranking do último ano",
-  "custom": "Ranking do período personalizado",
-};
 
 interface TopSellersCardProps {
   period: string;
@@ -34,12 +25,37 @@ export function TopSellersCard({ period, filters, transactions }: TopSellersCard
     return null;
   }
   
+  // Função para formatar valores com a mesma regra dos cards de métricas
+  const formatDisplayValue = (value: number): string => {
+    // Se for >= 1 milhão, abreviar mostrando milhões
+    if (value >= 1000000) {
+      const truncatedValue = Math.floor(value / 1000);
+      return `R$ ${truncatedValue.toLocaleString('pt-BR')} M`;
+    }
+    
+    // Se for < 1 milhão, mostrar valor completo
+    return value.toLocaleString('pt-BR', { 
+      style: 'currency', 
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+  
   // Calculate top sellers from filtered transactions
   const topSellers = useMemo(() => {
     // Filtrar transações com vendedor identificado (não vazio/null/undefined)
-    const transacoesComVendedor = transactions.filter(t => 
-      t.vendedor && t.vendedor.trim() !== '' && t.vendedor !== 'N/A' && t.vendedor !== 'Não identificado'
-    );
+    const transacoesComVendedor = transactions.filter(t => {
+      if (!t.vendedor) return false;
+      const vendedorNormalizado = t.vendedor.trim().toLowerCase();
+      // Excluir vendedores não identificados ou inválidos
+      return vendedorNormalizado !== '' 
+        && vendedorNormalizado !== 'n/a' 
+        && vendedorNormalizado !== 'não identificado'
+        && vendedorNormalizado !== 'vendedor não identificado'
+        && vendedorNormalizado !== 'sem vendedor'
+        && vendedorNormalizado !== 'desconhecido';
+    });
     
     const sellers = calculateTopSellers(transacoesComVendedor);
     
@@ -67,9 +83,6 @@ export function TopSellersCard({ period, filters, transactions }: TopSellersCard
           <Trophy className="h-5 w-5 text-yellow-500" />
           Top Vendedores
         </CardTitle>
-        <CardDescription>
-          {periodDescriptions[period] || periodDescriptions["30"]}
-        </CardDescription>
       </CardHeader>
       <CardContent>
         {topSellers.length === 0 ? (
@@ -99,7 +112,7 @@ export function TopSellersCard({ period, filters, transactions }: TopSellersCard
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium">
-                    R$ {(seller.valor / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k
+                    {formatDisplayValue(seller.valor)}
                   </p>
                 </div>
               </div>

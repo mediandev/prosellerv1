@@ -19,6 +19,7 @@ interface ProductABCFilters {
   empresaEmitenteId: string;
   vendedorId: string;
   clienteId: string;
+  statusVendas: "concluidas" | "todas"; // NOVO: Filtro de status
 }
 
 interface ProductABCData {
@@ -79,6 +80,7 @@ export function ProductABCReportPage({ onBack }: ProductABCReportPageProps) {
     empresaEmitenteId: "all",
     vendedorId: "all",
     clienteId: "all",
+    statusVendas: "todas", // NOVO: Inicializar com "todas"
   });
 
   // Obter UFs únicas dos clientes
@@ -124,6 +126,14 @@ export function ProductABCReportPage({ onBack }: ProductABCReportPageProps) {
       // Filtro de Cliente
       if (filters.clienteId && filters.clienteId !== "all" && venda.clienteId !== filters.clienteId) {
         return false;
+      }
+
+      // CORRIGIDO: Filtro de Status - aceitar todas as variações de status concluído
+      if (filters.statusVendas === "concluidas") {
+        const statusConcluido = ['Faturado', 'Concluído', 'Concluída', 'faturado', 'concluido', 'concluida'].includes(venda.status || '');
+        if (!statusConcluido) {
+          return false;
+        }
       }
 
       return true;
@@ -180,16 +190,18 @@ export function ProductABCReportPage({ onBack }: ProductABCReportPageProps) {
     // Calcular percentual acumulado e classificar curva ABC
     let acumulado = 0;
     produtosData.forEach((produto) => {
-      acumulado += produto.percentual;
-      produto.percentualAcumulado = acumulado;
-
-      if (acumulado <= 80) {
+      // CORREÇÃO: Classificar ANTES de acumular o percentual atual
+      if (acumulado < 80) {
         produto.curvaABC = "A";
-      } else if (acumulado <= 95) {
+      } else if (acumulado < 95) {
         produto.curvaABC = "B";
       } else {
         produto.curvaABC = "C";
       }
+
+      // Agora sim, acumular
+      acumulado += produto.percentual;
+      produto.percentualAcumulado = acumulado;
     });
 
     return produtosData;
@@ -232,6 +244,7 @@ export function ProductABCReportPage({ onBack }: ProductABCReportPageProps) {
       empresaEmitenteId: "all",
       vendedorId: "all",
       clienteId: "all",
+      statusVendas: "todas", // NOVO: Resetar status
     });
   };
 
@@ -397,6 +410,20 @@ export function ProductABCReportPage({ onBack }: ProductABCReportPageProps) {
                     emptyText="Nenhum vendedor encontrado."
                   />
                 </div>
+              </div>
+
+              {/* Linha 3: Status das Vendas */}
+              <div className="space-y-2">
+                <Label>Status das Vendas</Label>
+                <Select value={filters.statusVendas} onValueChange={(value) => setFilters({ ...filters, statusVendas: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as vendas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem key="status-all" value="todas">Todas as vendas</SelectItem>
+                    <SelectItem key="status-concluidas" value="concluidas">Vendas concluídas</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompanies } from '../hooks/useCompanies';
-import { Venda, ItemVenda, StatusVenda } from '../types/venda';
+import { Venda, ItemVenda, StatusVenda, ItemFaturado } from '../types/venda';
 import { Cliente } from '../types/customer';
 import { Produto } from '../types/produto';
 import { CondicaoPagamento } from '../types/condicaoPagamento';
@@ -15,6 +15,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { Badge } from './ui/badge';
 import { 
   Select, 
   SelectContent, 
@@ -35,6 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from './ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -56,12 +58,14 @@ import {
   Lock,
   AlertCircle,
   Edit,
+  Send,
   X,
   Check,
-  ChevronsUpDown
+  ChevronsUpDown,
+  Receipt
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
-import { formatCurrency, formatCNPJ } from '../lib/masks';
+import { formatCurrency, formatCNPJ, formatCPF } from '../lib/masks';
 
 // Função auxiliar para converter Date para string local (yyyy-mm-dd) sem conversão de fuso horário
 const formatarDataParaInput = (data: Date | string): string => {
@@ -84,9 +88,18 @@ interface SaleFormPageProps {
   onVoltar: () => void;
 }
 
+// Função auxiliar para remover duplicatas de arrays por ID
+const removeDuplicatesById = <T extends { id: string }>(array: T[]): T[] => {
+  return Array.from(new Map(array.map(item => [item.id, item])).values());
+};
+
 export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   const { usuario, temPermissao } = useAuth();
-  const { companies } = useCompanies();
+  const { companies: companiesRaw } = useCompanies();
+  
+  // Garantir que companies não tem duplicatas
+  const companies = useMemo(() => removeDuplicatesById(companiesRaw), [companiesRaw]);
+  
   const [modoAtual, setModoAtual] = useState(modo);
   const isReadOnly = modoAtual === 'visualizar';
   const isBackoffice = usuario?.tipo === 'backoffice';
@@ -127,6 +140,23 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   // Dados de apoio
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  
+  // Estados para itens faturados
+  const [itensFaturados, setItensFaturados] = useState<ItemFaturado[]>([]);
+  const [loadingItensFaturados, setLoadingItensFaturados] = useState(false);
+  
+  // Estados para dados da NFe
+  const [dadosNFe, setDadosNFe] = useState<{
+    situacao?: string;
+    numero?: string;
+    serie?: string;
+    tipo?: string;
+    chaveAcesso?: string;
+    dataEmissao?: string;
+    naturezaOperacao?: string;
+  } | null>(null);
+  const [loadingDadosNFe, setLoadingDadosNFe] = useState(false);
+  
   const [naturezas, setNaturezas] = useState<NaturezaOperacao[]>([]);
   const [condicoes, setCondicoes] = useState<CondicaoPagamento[]>([]);
   const [listasPreco, setListasPreco] = useState<any[]>([]);
@@ -274,7 +304,8 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
     console.log('[VENDAS] Condições após filtro de pedido mínimo:', condicoesDisponiveis.length);
 
-    return condicoesDisponiveis;
+    // Remover duplicatas por ID
+    return removeDuplicatesById(condicoesDisponiveis);
   }, [formData.clienteId, formData.valorTotalProdutos, clientes, condicoes]);
 
   // Carregar dados iniciais
@@ -301,11 +332,12 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         ativas: naturezasAPI?.filter((n: any) => n.ativo).length || 0
       });
       
-      setClientes(clientesAPI);
-      setProdutos(produtosAPI);
-      setNaturezas(naturezasAPI);
-      setCondicoes(condicoesAPI);
-      setListasPreco(listasPrecoAPI);
+      // Remover duplicatas por ID antes de setar os estados
+      setClientes(removeDuplicatesById(clientesAPI));
+      setProdutos(removeDuplicatesById(produtosAPI));
+      setNaturezas(removeDuplicatesById(naturezasAPI));
+      setCondicoes(removeDuplicatesById(condicoesAPI));
+      setListasPreco(removeDuplicatesById(listasPrecoAPI));
 
       // Se for edição, carregar venda existente
       if (vendaId && modo !== 'criar') {
@@ -365,6 +397,436 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       setLoading(false);
     }
   };
+
+  // Função para buscar itens faturados da nota fiscal
+  const carregarItensFaturados = async () => {
+    if (
+      modoAtual !== 'visualizar' || 
+      !formData.integracaoERP?.erpPedidoId ||
+      !formData.empresaFaturamentoId
+    ) {
+      return;
+    }
+
+    const statusPermitidos = ['Faturado', 'Concluído'];
+    if (!statusPermitidos.includes(formData.status || '')) {
+      return;
+    }
+
+    try {
+      setLoadingItensFaturados(true);
+      console.log('[ITENS FATURADOS] Buscando detalhes do pedido no Tiny ERP:', formData.integracaoERP.erpPedidoId);
+
+      const pedidoData = await api.tinyObterPedido(
+        formData.empresaFaturamentoId,
+        formData.integracaoERP.erpPedidoId
+      );
+
+      console.log('[ITENS FATURADOS] Resposta completa do pedido:', JSON.stringify(pedidoData, null, 2));
+
+      const pedido = pedidoData.pedido || pedidoData.pedidos?.[0];
+      
+      if (!pedido) {
+        console.warn('[ITENS FATURADOS] Pedido não encontrado na resposta');
+        return;
+      }
+
+      // Verificar múltiplas possibilidades de estrutura para o ID da nota fiscal
+      const notaFiscalId = 
+        pedido.id_nota_fiscal || 
+        pedido.nota_fiscal?.id || 
+        pedido.notaFiscal?.id ||
+        pedido.nota?.id;
+
+      console.log('[ITENS FATURADOS] ID da Nota Fiscal encontrado:', notaFiscalId);
+      console.log('[ITENS FATURADOS] Estrutura do pedido:', {
+        id_nota_fiscal: pedido.id_nota_fiscal,
+        nota_fiscal: pedido.nota_fiscal,
+        notaFiscal: pedido.notaFiscal,
+        nota: pedido.nota,
+        situacao: pedido.situacao
+      });
+      
+      // Validar se o ID da nota fiscal é válido (diferente de "0", null, undefined, ou string vazia)
+      const notaFiscalIdValido = notaFiscalId && notaFiscalId !== '0' && notaFiscalId !== 0;
+      
+      if (notaFiscalIdValido) {
+        console.log('[ITENS FATURADOS] Tentando buscar nota fiscal:', notaFiscalId);
+        
+        try {
+          const notaFiscalData = await api.tinyObterNotaFiscal(
+            formData.empresaFaturamentoId,
+            notaFiscalId
+          );
+
+          console.log('[ITENS FATURADOS] Dados da nota fiscal recebidos:', notaFiscalData);
+
+          const notaFiscal = notaFiscalData.nota_fiscal;
+          
+          if (notaFiscal && notaFiscal.itens) {
+            // Log detalhado da estrutura dos itens para debug
+            console.log('[ITENS FATURADOS] 📋 Estrutura completa dos itens da NF:', JSON.stringify(notaFiscal.itens, null, 2));
+            
+            // Buscar dados completos dos produtos (incluindo EAN) em paralelo
+            const itensComEAN = await Promise.all(
+              (notaFiscal.itens || []).map(async (item: any, index: number) => {
+                const idProduto = item.id_produto || item.item?.id_produto;
+                
+                // Log individual de cada item para debug
+                console.log(`[ITENS FATURADOS] 🔍 Item ${index + 1} - Estrutura:`, {
+                  item_completo: item,
+                  id_produto: idProduto,
+                  gtin: item.gtin,
+                  'item.gtin': item.item?.gtin,
+                  codigo_ean: item.codigo_ean,
+                  ean: item.ean,
+                  valor_unitario: item.valor_unitario,
+                  'item.valor_unitario': item.item?.valor_unitario,
+                  valor_total: item.valor_total,
+                  'item.valor_total': item.item?.valor_total
+                });
+                
+                // Se tem ID do produto, buscar dados completos do Tiny para pegar o EAN
+                let eanDoProduto = null;
+                if (idProduto) {
+                  try {
+                    console.log(`[ITENS FATURADOS] 🔎 Buscando produto ${idProduto} no Tiny para obter EAN...`);
+                    const produtoCompleto = await api.tinyObterProduto(
+                      formData.empresaFaturamentoId!,
+                      idProduto
+                    );
+                    
+                    console.log(`[ITENS FATURADOS] 📦 Dados completos do produto ${idProduto}:`, {
+                      tem_produto: !!produtoCompleto.produto,
+                      gtin: produtoCompleto.produto?.gtin,
+                      codigo_barras: produtoCompleto.produto?.codigo_barras,
+                      gtin_ean: produtoCompleto.produto?.gtin_ean,
+                      ean: produtoCompleto.produto?.ean,
+                      status_processamento: produtoCompleto.status_processamento,
+                      status: produtoCompleto.status,
+                      produto_keys: produtoCompleto.produto ? Object.keys(produtoCompleto.produto) : []
+                    });
+                    
+                    eanDoProduto = produtoCompleto.produto?.gtin 
+                      || produtoCompleto.produto?.codigo_barras
+                      || produtoCompleto.produto?.gtin_ean
+                      || produtoCompleto.produto?.ean;
+                      
+                    if (eanDoProduto) {
+                      console.log(`[ITENS FATURADOS] ✅ EAN do produto ${idProduto}:`, eanDoProduto);
+                    } else {
+                      console.warn(`[ITENS FATURADOS] ⚠️ Produto ${idProduto} não possui EAN/GTIN cadastrado no Tiny ERP`);
+                    }
+                  } catch (error: any) {
+                    console.error(`[ITENS FATURADOS] ❌ Erro ao buscar EAN do produto ${idProduto}:`, {
+                      error: error.message,
+                      stack: error.stack,
+                      fullError: error
+                    });
+                    // Não falhar - continuar sem o EAN
+                  }
+                }
+                
+                // Extrair valores com fallback para estrutura aninhada item.item
+                const valorUnitario = parseFloat(item.valor_unitario || item.item?.valor_unitario || '0');
+                const quantidade = parseFloat(item.quantidade || item.item?.quantidade || '0');
+                const valorTotalDireto = item.valor_total || item.item?.valor_total;
+                
+                // Se valor_total não existir, calcular: quantidade * valor_unitario
+                const subtotal = valorTotalDireto 
+                  ? parseFloat(valorTotalDireto) 
+                  : valorUnitario * quantidade;
+                
+                return {
+                  id: `faturado-${index + 1}`,
+                  numero: index + 1,
+                  produtoId: idProduto,
+                  descricaoProduto: item.descricao || item.item?.descricao || '',
+                  codigoSku: item.codigo || item.item?.codigo || '',
+                  codigoEan: eanDoProduto || item.gtin || item.item?.gtin || item.codigo_ean || item.ean,
+                  valorUnitario,
+                  quantidade,
+                  subtotal,
+                  unidade: item.unidade || item.item?.unidade || 'UN',
+                  cfop: item.cfop || item.item?.cfop,
+                  ncm: item.ncm || item.item?.ncm,
+                  valorIpi: parseFloat(item.valor_ipi || item.item?.valor_ipi || '0'),
+                  valorIcms: parseFloat(item.valor_icms || item.item?.valor_icms || '0'),
+                  valorPis: parseFloat(item.valor_pis || item.item?.valor_pis || '0'),
+                  valorCofins: parseFloat(item.valor_cofins || item.item?.valor_cofins || '0'),
+                };
+              })
+            );
+
+            setItensFaturados(itensComEAN);
+            console.log('[ITENS FATURADOS] Itens faturados da NF carregados com sucesso:', itensComEAN.length);
+            console.log('[ITENS FATURADOS] 📊 Dados convertidos:', itensComEAN);
+            return;
+          }
+        } catch (nfError: any) {
+          // Log informativo em vez de warning (situação esperada quando NF ainda não foi emitida)
+          console.log('[ITENS FATURADOS] ℹ️ Não foi possível carregar a nota fiscal, usando itens do pedido');
+        }
+      } else if (notaFiscalId === '0' || notaFiscalId === 0) {
+        console.log('[ITENS FATURADOS] ℹ️ Nota fiscal ainda não emitida (ID = 0), usando itens do pedido');
+      } else {
+        console.log('[ITENS FATURADOS] ℹ️ ID da nota fiscal não encontrado, usando itens do pedido');
+      }
+
+      console.log('[ITENS FATURADOS] 📦 Carregando itens do pedido');
+      console.log('[ITENS FATURADOS] 📋 Estrutura completa dos itens do pedido:', JSON.stringify(pedido.itens, null, 2));
+      
+      if (pedido.itens && Array.isArray(pedido.itens) && pedido.itens.length > 0) {
+        // Processar itens do pedido e buscar EAN de cada produto
+        const itensConvertidos: ItemFaturado[] = await Promise.all(
+          pedido.itens.map(async (item: any, index: number) => {
+          // Log individual de cada item para debug
+          console.log(`[ITENS FATURADOS] 🔍 Item do pedido ${index + 1} - Estrutura:`, {
+            item_completo: item,
+            gtin: item.gtin,
+            'item.gtin': item.item?.gtin,
+            codigo_ean: item.codigo_ean,
+            ean: item.ean,
+            id_produto: item.id_produto,
+            'item.id_produto': item.item?.id_produto,
+            valor_unitario: item.valor_unitario,
+            'item.valor_unitario': item.item?.valor_unitario,
+            valor_total: item.valor_total,
+            'item.valor_total': item.item?.valor_total
+          });
+          
+          // Buscar ID do produto
+          const idProduto = item.id_produto || item.item?.id_produto;
+          
+          // Se tem ID do produto, buscar dados completos do Tiny para pegar o EAN
+          let eanDoProduto = null;
+          if (idProduto) {
+            try {
+              console.log(`[ITENS FATURADOS] 🔎 Buscando produto ${idProduto} no Tiny para obter EAN...`);
+              const produtoCompleto = await api.tinyObterProduto(
+                formData.empresaFaturamentoId!,
+                idProduto
+              );
+              
+              console.log(`[ITENS FATURADOS] 📦 Dados completos do produto ${idProduto}:`, {
+                tem_produto: !!produtoCompleto.produto,
+                gtin: produtoCompleto.produto?.gtin,
+                codigo_barras: produtoCompleto.produto?.codigo_barras,
+                gtin_ean: produtoCompleto.produto?.gtin_ean,
+                ean: produtoCompleto.produto?.ean,
+                status_processamento: produtoCompleto.status_processamento,
+                status: produtoCompleto.status,
+                produto_keys: produtoCompleto.produto ? Object.keys(produtoCompleto.produto) : []
+              });
+              
+              eanDoProduto = produtoCompleto.produto?.gtin 
+                || produtoCompleto.produto?.codigo_barras
+                || produtoCompleto.produto?.gtin_ean
+                || produtoCompleto.produto?.ean;
+                
+              if (eanDoProduto) {
+                console.log(`[ITENS FATURADOS] ✅ EAN do produto ${idProduto}:`, eanDoProduto);
+              } else {
+                console.warn(`[ITENS FATURADOS] ⚠️ Produto ${idProduto} não possui EAN/GTIN cadastrado no Tiny ERP`);
+              }
+            } catch (error: any) {
+              console.error(`[ITENS FATURADOS] ❌ Erro ao buscar EAN do produto ${idProduto}:`, {
+                error: error.message,
+                stack: error.stack,
+                fullError: error
+              });
+              // Não falhar - continuar sem o EAN
+            }
+          }
+          
+          // Extrair valores com fallback para estrutura aninhada item.item
+          const valorUnitario = parseFloat(item.valor_unitario || item.item?.valor_unitario || '0');
+          const quantidade = parseFloat(item.quantidade || item.item?.quantidade || '0');
+          const valorTotalDireto = item.valor_total || item.item?.valor_total;
+          
+          // Se valor_total não existir, calcular: quantidade * valor_unitario
+          const subtotal = valorTotalDireto 
+            ? parseFloat(valorTotalDireto) 
+            : valorUnitario * quantidade;
+          
+          return {
+            id: `faturado-pedido-${index + 1}`,
+            numero: index + 1,
+            produtoId: idProduto,
+            descricaoProduto: item.descricao || item.item?.descricao || '',
+            codigoSku: item.codigo || item.item?.codigo || '',
+            codigoEan: eanDoProduto || item.gtin || item.item?.gtin || item.codigo_ean || item.ean,
+            valorUnitario,
+            quantidade,
+            subtotal,
+            unidade: item.unidade || item.item?.unidade || 'UN',
+          };
+        })
+      );
+
+        setItensFaturados(itensConvertidos);
+        console.log('[ITENS FATURADOS] Itens do pedido carregados como fallback:', itensConvertidos.length);
+        console.log('[ITENS FATURADOS] 📊 Dados convertidos do pedido:', itensConvertidos);
+      } else {
+        console.warn('[ITENS FATURADOS] Pedido sem itens disponíveis');
+      }
+    } catch (error) {
+      console.error('[ITENS FATURADOS] Erro ao buscar itens faturados:', error);
+    } finally {
+      setLoadingItensFaturados(false);
+    }
+  };
+
+  useEffect(() => {
+    if (formData.id && modoAtual === 'visualizar' && formData.integracaoERP?.erpPedidoId) {
+      carregarItensFaturados();
+    }
+  }, [formData.id, formData.integracaoERP?.erpPedidoId, modoAtual]);
+
+  // Carregar dados completos da NFe quando necessário
+  const carregarDadosNFe = async () => {
+    setLoadingDadosNFe(true);
+    
+    // Se tiver ID da nota fiscal válido, buscar dados completos do ERP
+    if (formData.integracaoERP?.notaFiscalId && 
+        formData.integracaoERP.notaFiscalId !== '0' && 
+        formData.empresaFaturamentoId) {
+      try {
+        console.log('[DADOS NFE] Buscando dados da nota fiscal:', formData.integracaoERP.notaFiscalId);
+        
+        const notaFiscalData = await api.tinyObterNotaFiscal(
+          formData.empresaFaturamentoId,
+          formData.integracaoERP.notaFiscalId
+        );
+
+      console.log('[DADOS NFE] Dados recebidos:', notaFiscalData);
+
+      if (notaFiscalData?.nota_fiscal) {
+        const nf = notaFiscalData.nota_fiscal;
+        
+        console.log('[DADOS NFE] 🔍 Estrutura da nota fiscal:', {
+          situacao: nf.situacao,
+          situacao_nfe: nf.situacao_nfe,
+          data_emissao: nf.data_emissao,
+          data_hora_emissao: nf.data_hora_emissao,
+          numero: nf.numero,
+          serie: nf.serie,
+          chave_acesso: nf.chave_acesso,
+          tipo_nota: nf.tipo_nota,
+          tipo: nf.tipo,
+          tpNF: nf.tpNF,
+          finalidade: nf.finalidade,
+          natureza_operacao: nf.natureza_operacao,
+          cfop: nf.cfop
+        });
+        
+        // Mapear situação da SEFAZ
+        let situacaoTexto = 'Não informado';
+        if (nf.situacao) {
+          const situacaoMap: Record<string, string> = {
+            '1': 'Autorizada',
+            '2': 'Autorizada - Uso Denegado',
+            '3': 'Cancelada',
+            '4': 'Inutilizada',
+            '5': 'Denegada',
+            '6': 'Autorizada',  // Situação 6 também é Autorizada (emitida e autorizada pela SEFAZ)
+            '7': 'Autorizada',  // Situação 7 = Emitida DANFE (nota autorizada pela SEFAZ)
+          };
+          situacaoTexto = situacaoMap[nf.situacao.toString()] || `Situação ${nf.situacao}`;
+        }
+        
+        // Mapear tipo de NF baseado no campo "finalidade" (campo oficial da NFe)
+        let tipoNF = 'Não informado';
+        
+        if (nf.finalidade) {
+          const finalidadeMap: Record<string, string> = {
+            '1': 'Saída',           // NF-e Normal (venda/saída)
+            '2': 'Complementar',    // NF-e Complementar
+            '3': 'Ajuste',          // NF-e de Ajuste
+            '4': 'Entrada',         // Devolução de Mercadoria (entrada)
+          };
+          tipoNF = finalidadeMap[nf.finalidade.toString()] || `Finalidade ${nf.finalidade}`;
+        }
+        
+        const dadosMapeados = {
+          situacao: situacaoTexto,
+          numero: nf.numero || nf.numero_nfe || formData.integracaoERP?.notaFiscalNumero,
+          serie: nf.serie || nf.serie_nfe || '1',
+          tipo: tipoNF,
+          chaveAcesso: nf.chave_acesso || nf.chave_nfe || formData.integracaoERP?.notaFiscalChave,
+          dataEmissao: nf.data_emissao || nf.data_hora_emissao,
+          naturezaOperacao: nf.natureza_operacao || nf.natureza,
+        };
+        
+        console.log('[DADOS NFE] ✅ Dados mapeados para exibição:', dadosMapeados);
+        setDadosNFe(dadosMapeados);
+      } else {
+        console.warn('[DADOS NFE] ⚠️ Estrutura de nota fiscal não encontrada na resposta');
+      }
+      } catch (error: any) {
+        console.log('[DADOS NFE] ℹ️ Não foi possível carregar dados completos da NFe:', error?.message);
+        
+        // Usar dados parciais que já temos na venda
+        setDadosNFe({
+          numero: formData.integracaoERP?.notaFiscalNumero,
+          chaveAcesso: formData.integracaoERP?.notaFiscalChave,
+          dataEmissao: formData.dataFaturamento ? 
+            (typeof formData.dataFaturamento === 'string' ? 
+              formData.dataFaturamento : 
+              formData.dataFaturamento.toISOString()) : 
+            undefined,
+        });
+      } finally {
+        setLoadingDadosNFe(false);
+      }
+    } else {
+      // Se não tiver ID, usar apenas dados parciais que já estão salvos
+      console.log('[DADOS NFE] Usando dados parciais da NFe (sem ID para buscar do ERP)');
+      setDadosNFe({
+        numero: formData.integracaoERP?.notaFiscalNumero,
+        chaveAcesso: formData.integracaoERP?.notaFiscalChave,
+        dataEmissao: formData.dataFaturamento ? 
+          (typeof formData.dataFaturamento === 'string' ? 
+            formData.dataFaturamento : 
+            formData.dataFaturamento.toISOString()) : 
+          undefined,
+      });
+      setLoadingDadosNFe(false);
+    }
+  };
+
+  useEffect(() => {
+    // Mostrar dados da NFe se tiver qualquer indicação de nota fiscal
+    const temNotaFiscal = formData.integracaoERP?.notaFiscalId || 
+                          formData.integracaoERP?.notaFiscalNumero || 
+                          formData.integracaoERP?.notaFiscalChave;
+    
+    if (formData.id && modoAtual === 'visualizar' && temNotaFiscal) {
+      console.log('[DADOS NFE] Detectada nota fiscal:', {
+        notaFiscalId: formData.integracaoERP?.notaFiscalId,
+        notaFiscalNumero: formData.integracaoERP?.notaFiscalNumero,
+        notaFiscalChave: formData.integracaoERP?.notaFiscalChave,
+        erpPedidoId: formData.integracaoERP?.erpPedidoId
+      });
+      carregarDadosNFe();
+    }
+  }, [formData.id, formData.integracaoERP?.notaFiscalId, formData.integracaoERP?.notaFiscalNumero, modoAtual]);
+
+  // Log de debug para integração ERP
+  useEffect(() => {
+    if (modoAtual === 'visualizar' && formData.integracaoERP) {
+      console.log('[DEBUG INTEGRACAO ERP] Dados completos da integração:', {
+        integracaoERP: formData.integracaoERP,
+        erpPedidoId: formData.integracaoERP.erpPedidoId,
+        notaFiscalId: formData.integracaoERP.notaFiscalId,
+        notaFiscalNumero: formData.integracaoERP.notaFiscalNumero,
+        notaFiscalChave: formData.integracaoERP.notaFiscalChave,
+        erpStatus: formData.integracaoERP.erpStatus,
+        dataFaturamento: formData.dataFaturamento,
+        valorFaturado: formData.valorFaturado
+      });
+    }
+  }, [formData.integracaoERP, modoAtual]);
 
   // Auto-preencher dados do cliente (apenas ao criar nova venda)
   const [clienteJaCarregado, setClienteJaCarregado] = useState(false);
@@ -434,15 +896,27 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             empresaFaturamentoId = empresa.id;
             nomeEmpresaFaturamento = empresa.razaoSocial;
           } else {
-            // Se não encontrou, usar o nome armazenado no cliente mesmo que não esteja na lista
-            nomeEmpresaFaturamento = cliente.empresaFaturamento;
-            console.warn('[AUTO-PREENCHIMENTO] ⚠️ Empresa não encontrada na lista! Valor no cliente:', cliente.empresaFaturamento);
+            // ✅ FALLBACK: Usar primeira empresa disponível se o cliente tem empresa antiga/inválida
+            if (companies.length > 0) {
+              const primeiraEmpresa = companies[0];
+              empresaFaturamentoId = primeiraEmpresa.id;
+              nomeEmpresaFaturamento = primeiraEmpresa.razaoSocial;
+              console.log('[AUTO-PREENCHIMENTO] 🔄 Empresa do cliente não encontrada. Usando fallback:', {
+                empresaCliente: cliente.empresaFaturamento,
+                empresaFallback: primeiraEmpresa.razaoSocial,
+                id: primeiraEmpresa.id
+              });
+            } else {
+              nomeEmpresaFaturamento = cliente.empresaFaturamento;
+              console.error('[AUTO-PREENCHIMENTO] ❌ Nenhuma empresa cadastrada no sistema!');
+            }
           }
         }
         
-        // Se não encontrou empresa, NÃO usar fallback - deixar vazio para o usuário selecionar
-        if (!empresaFaturamentoId) {
-          console.warn('[AUTO-PREENCHIMENTO] ⚠️ Empresa de faturamento não definida. Campo ficará vazio.');
+        // Se não encontrou empresa, alertar mas NÃO bloquear
+        if (!empresaFaturamentoId && companies.length === 0) {
+          console.error('[AUTO-PREENCHIMENTO] ❌ CRÍTICO: Nenhuma empresa cadastrada no sistema!');
+          toast.error('Nenhuma empresa cadastrada! Configure as empresas antes de criar pedidos.');
         }
         
         console.log('[AUTO-PREENCHIMENTO] Resultado final:', {
@@ -572,15 +1046,27 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           empresaFaturamentoId = empresa.id;
           nomeEmpresaFaturamento = empresa.razaoSocial;
         } else {
-          // Se não encontrou, usar o nome armazenado no cliente mesmo que não esteja na lista
-          nomeEmpresaFaturamento = cliente.empresaFaturamento;
-          console.warn('[HANDLER] ⚠️ Empresa não encontrada na lista! Valor no cliente:', cliente.empresaFaturamento);
+          // ✅ FALLBACK: Usar primeira empresa disponível se o cliente tem empresa antiga/inválida
+          if (companies.length > 0) {
+            const primeiraEmpresa = companies[0];
+            empresaFaturamentoId = primeiraEmpresa.id;
+            nomeEmpresaFaturamento = primeiraEmpresa.razaoSocial;
+            console.log('[HANDLER] 🔄 Empresa do cliente não encontrada. Usando fallback:', {
+              empresaCliente: cliente.empresaFaturamento,
+              empresaFallback: primeiraEmpresa.razaoSocial,
+              id: primeiraEmpresa.id
+            });
+          } else {
+            nomeEmpresaFaturamento = cliente.empresaFaturamento;
+            console.error('[HANDLER] ❌ Nenhuma empresa cadastrada no sistema!');
+          }
         }
       }
       
-      // Se não encontrou empresa, NÃO usar fallback - deixar vazio para o usuário selecionar
-      if (!empresaFaturamentoId) {
-        console.warn('[HANDLER] ⚠️ Empresa de faturamento não definida. Campo ficará vazio.');
+      // Se não encontrou empresa, alertar mas NÃO bloquear
+      if (!empresaFaturamentoId && companies.length === 0) {
+        console.error('[HANDLER] ❌ CRÍTICO: Nenhuma empresa cadastrada no sistema!');
+        toast.error('Nenhuma empresa cadastrada! Configure as empresas antes de criar pedidos.');
       }
       
       console.log('[HANDLER] Resultado final:', {
@@ -758,7 +1244,76 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     toast.info('Edição cancelada');
   };
 
-  const handleSave = async () => {
+  // Função para renderizar os botões de ação (usada no topo e no final da página)
+  const renderActionButtons = () => {
+    return (
+      <div className="flex gap-2">
+        {/* Modo Visualização - Mostrar botão Editar */}
+        {isReadOnly && modo !== 'criar' && podeEditar && !pedidoBloqueado && (
+          <Button onClick={handleEntrarModoEdicao}>
+            <Edit className="h-4 w-4 mr-2" />
+            Editar
+          </Button>
+        )}
+        
+        {/* Modo Edição - Mostrar botões Cancelar, Salvar Rascunho e Enviar para Análise */}
+        {!isReadOnly && !pedidoBloqueado && (
+          <>
+            <Button 
+              variant="outline" 
+              onClick={modoAtual === 'editar' ? handleCancelarEdicao : onVoltar}
+            >
+              <X className="h-4 w-4 mr-2" />
+              Cancelar
+            </Button>
+            
+            {/* Botões de ação baseados no modo e status */}
+            {modoAtual === 'criar' ? (
+              // Ao CRIAR novo pedido: opção de Rascunho OU Enviar para Análise
+              <>
+                <Button 
+                  variant="outline"
+                  onClick={() => handleSave(true)}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Salvar como Rascunho
+                </Button>
+                
+                <Button onClick={() => handleSave(false)}>
+                  <Save className="h-4 w-4 mr-2" />
+                  Enviar para Análise
+                </Button>
+              </>
+            ) : modoAtual === 'editar' && formData.status === 'Rascunho' ? (
+              // Ao EDITAR rascunho: opção de manter Rascunho OU Enviar para Análise
+              <>
+                <Button 
+                  variant="outline"
+                  onClick={() => handleSave(true)}
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  Salvar Alterações
+                </Button>
+                
+                <Button onClick={() => handleSave(false)}>
+                  <Send className="h-4 w-4 mr-2" />
+                  Enviar para Análise
+                </Button>
+              </>
+            ) : (
+              // Ao EDITAR pedido normal: apenas Salvar Alterações
+              <Button onClick={() => handleSave(false)}>
+                <Save className="h-4 w-4 mr-2" />
+                Salvar Alterações
+              </Button>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const handleSave = async (salvarComoRascunho: boolean = false) => {
     // Marcar que houve tentativa de salvar
     setTentouSalvar(true);
     
@@ -768,37 +1323,51 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       return;
     }
 
-    // Coletar campos com erro
+    // ✅ NOVO: Validação flexível - Rascunhos não exigem todos os campos
     const erros = new Set<string>();
 
-    if (!formData.clienteId) {
-      erros.add('clienteId');
-      toast.error('Selecione um cliente');
-    }
+    // Se NÃO for rascunho, validar todos os campos obrigatórios
+    if (!salvarComoRascunho) {
+      if (!formData.clienteId) {
+        erros.add('clienteId');
+        toast.error('Selecione um cliente');
+      }
 
-    if (!formData.naturezaOperacaoId) {
-      erros.add('naturezaOperacaoId');
-      toast.error('Selecione uma natureza de operação');
-    }
+      if (!formData.naturezaOperacaoId) {
+        erros.add('naturezaOperacaoId');
+        toast.error('Selecione uma natureza de operação');
+      }
 
-    if (!formData.itens || formData.itens.length === 0) {
-      erros.add('itens');
-      toast.error('Adicione pelo menos um item ao pedido');
-    }
+      if (!formData.itens || formData.itens.length === 0) {
+        erros.add('itens');
+        toast.error('Adicione pelo menos um item ao pedido');
+      }
 
-    if (!formData.condicaoPagamentoId) {
-      erros.add('condicaoPagamentoId');
-      toast.error('Selecione uma condição de pagamento');
-    }
-    
-    if (!formData.empresaFaturamentoId) {
-      erros.add('empresaFaturamentoId');
-    }
+      if (!formData.condicaoPagamentoId) {
+        erros.add('condicaoPagamentoId');
+        toast.error('Selecione uma condição de pagamento');
+      }
+      
+      if (!formData.empresaFaturamentoId) {
+        erros.add('empresaFaturamentoId');
+      }
 
-    // Se houver erros, atualizar estado e parar
-    if (erros.size > 0) {
-      setCamposComErro(erros);
-      return;
+      // Se houver erros, atualizar estado e parar
+      if (erros.size > 0) {
+        setCamposComErro(erros);
+        return;
+      }
+    } else {
+      // ✅ Para rascunho, apenas validar que tem pelo menos UM campo preenchido
+      const temAlgumCampo = formData.clienteId || 
+                            formData.naturezaOperacaoId || 
+                            formData.itens?.length > 0 ||
+                            formData.observacoesInternas;
+      
+      if (!temAlgumCampo) {
+        toast.error('Preencha pelo menos um campo antes de salvar o rascunho');
+        return;
+      }
     }
     
     // Limpar erros se passou na validação
@@ -815,7 +1384,8 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       ...formData,
       id: vendaId || `venda-${Date.now()}`,
       numero: formData.numero || `PV-2025-${String(Date.now()).substring(7, 11)}`,
-      status: 'Em Análise',
+      // ✅ NOVO: Define status baseado no tipo de salvamento
+      status: salvarComoRascunho ? 'Rascunho' : 'Em Análise',
       createdAt: formData.createdAt || new Date(),
       updatedAt: new Date(),
       createdBy: usuario?.id || '',
@@ -848,8 +1418,9 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       observacoesNotaFiscal: vendaCompleta.observacoesNotaFiscal,
     });
     
-    // Se for criação de novo pedido, verificar envio automático ao ERP ANTES de adicionar ao array
-    if (modoAtual === 'criar' && formData.empresaFaturamentoId) {
+    // ✅ CORREÇÃO: NÃO enviar RASCUNHOS para o ERP
+    // Se for criação de novo pedido E NÃO for rascunho, verificar envio automático ao ERP
+    if (modoAtual === 'criar' && !salvarComoRascunho && formData.empresaFaturamentoId) {
       console.log('🔄 Iniciando verificação de envio automático...');
       console.log('🔄 vendaCompleta.empresaFaturamentoId:', vendaCompleta.empresaFaturamentoId);
       
@@ -863,16 +1434,23 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           console.log('📤 Envio automático habilitado?', envioHabilitado);
           
           if (envioHabilitado) {
-            console.log('✅ Iniciando envio ao ERP com venda:', {
+            // ✅ VALIDAÇÃO ADICIONAL: Verificar se tem itens ANTES de enviar
+            console.log('🔍 VERIFICAÇÃO PRÉ-ENVIO:', {
               id: vendaCompleta.id,
               numero: vendaCompleta.numero,
-              empresaFaturamentoId: vendaCompleta.empresaFaturamentoId,
+              status: vendaCompleta.status,
+              quantidadeItens: vendaCompleta.itens?.length || 0,
             });
             
-            toast.info('Enviando pedido ao ERP...');
-            
-            try {
-              const resultado = await erpAutoSendService.enviarVendaComRetry(vendaCompleta, empresa);
+            if (!vendaCompleta.itens || vendaCompleta.itens.length === 0) {
+              console.error('❌ BLOQUEIO: Tentativa de enviar pedido SEM ITENS ao ERP!');
+              toast.error('Não é possível enviar pedido sem itens ao ERP');
+            } else {
+              console.log('✅ Iniciando envio ao ERP');
+              toast.info('Enviando pedido ao ERP...');
+              
+              try {
+                const resultado = await erpAutoSendService.enviarVendaComRetry(vendaCompleta, empresa);
               console.log('📊 Resultado do envio:', resultado);
               
               if (resultado.sucesso && resultado.erpPedidoId) {
@@ -889,9 +1467,10 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                 toast.error(`Erro ao enviar ao ERP: ${resultado.erro}`);
                 console.error('❌ Erro no envio automático:', resultado.erro);
               }
-            } catch (error) {
-              console.error('❌ Erro inesperado no envio automático:', error);
-              toast.error('Erro inesperado ao enviar pedido ao ERP');
+              } catch (error) {
+                console.error('❌ Erro inesperado no envio automático:', error);
+                toast.error('Erro inesperado ao enviar pedido ao ERP');
+              }
             }
           } else {
             console.log('⚠️ Envio automático não está habilitado para esta empresa');
@@ -902,6 +1481,9 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       } catch (error) {
         console.error('❌ Erro ao buscar empresa:', error);
       }
+    } else if (salvarComoRascunho) {
+      // ✅ LOG: Rascunhos NÃO são enviados ao ERP
+      console.log('📝 Salvando como RASCUNHO - NÃO será enviado ao ERP');
     }
 
     // Persistir venda no Supabase (DEPOIS do envio ao ERP para já incluir os dados de integração)
@@ -914,7 +1496,12 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         console.log('✅ Venda atualizada no Supabase:', vendaCompleta.id);
       }
 
-      toast.success(modoAtual === 'criar' ? 'Pedido criado com sucesso!' : 'Pedido atualizado com sucesso!');
+      // ✅ NOVO: Mensagem diferente para rascunho
+      if (salvarComoRascunho) {
+        toast.success('Rascunho salvo com sucesso! Você pode continuar editando depois.');
+      } else {
+        toast.success(modoAtual === 'criar' ? 'Pedido criado e enviado para análise!' : 'Pedido atualizado com sucesso!');
+      }
     } catch (error: any) {
       console.error('[VENDAS] Erro ao salvar venda:', error);
       toast.error(`Erro ao salvar pedido: ${error.message || 'Erro desconhecido'}`);
@@ -1085,6 +1672,12 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                 {modo === 'criar' ? 'Novo Pedido de Venda' : 
                  modoAtual === 'editar' ? 'Editar Pedido de Venda' : 
                  'Visualizar Pedido de Venda'}
+                {/* ✅ NOVO: Badge indicando Rascunho */}
+                {formData.status === 'Rascunho' && (
+                  <Badge variant="outline" className="text-gray-500">
+                    Rascunho
+                  </Badge>
+                )}
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {formData.numero || 'Preencha as informações do pedido'}
@@ -1093,32 +1686,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           </div>
           
           {/* Botões de ação */}
-          <div className="flex gap-2">
-            {/* Modo Visualização - Mostrar botão Editar */}
-            {isReadOnly && modo !== 'criar' && podeEditar && !pedidoBloqueado && (
-              <Button onClick={handleEntrarModoEdicao}>
-                <Edit className="h-4 w-4 mr-2" />
-                Editar
-              </Button>
-            )}
-            
-            {/* Modo Edição - Mostrar botões Cancelar e Salvar */}
-            {!isReadOnly && !pedidoBloqueado && (
-              <>
-                <Button 
-                  variant="outline" 
-                  onClick={modoAtual === 'editar' ? handleCancelarEdicao : onVoltar}
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Cancelar
-                </Button>
-                <Button onClick={handleSave}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {modo === 'criar' ? 'Criar Pedido' : 'Salvar Alterações'}
-                </Button>
-              </>
-            )}
-          </div>
+          {renderActionButtons()}
         </div>
 
         {/* Alerta de Pedido Bloqueado */}
@@ -1213,7 +1781,12 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                                     </div>
                                     <div className="flex flex-wrap gap-2 text-xs text-muted-foreground mt-1">
                                       {cliente.cpfCnpj && (
-                                        <span>CNPJ: {formatCNPJ(cliente.cpfCnpj)}</span>
+                                        <span>
+                                          {cliente.tipoPessoa === 'Pessoa Física' ? 'CPF' : 'CNPJ'}: {' '}
+                                          {cliente.tipoPessoa === 'Pessoa Física' 
+                                            ? formatCPF(cliente.cpfCnpj) 
+                                            : formatCNPJ(cliente.cpfCnpj)}
+                                        </span>
                                       )}
                                       {cliente.nomeFantasia && cliente.razaoSocial && (
                                         <span>• {cliente.nomeFantasia}</span>
@@ -1240,7 +1813,13 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                 )}
                 {formData.clienteId && !campoTemErro('clienteId') && (
                   <p className="text-xs text-muted-foreground">
-                    Cliente selecionado: {formData.nomeCliente} - {formatCNPJ(formData.cnpjCliente || '')}
+                    Cliente selecionado: {formData.nomeCliente} - {(() => {
+                      const clienteSelecionado = clientes.find(c => c.id === formData.clienteId);
+                      if (clienteSelecionado?.tipoPessoa === 'Pessoa Física') {
+                        return formatCPF(formData.cnpjCliente || '');
+                      }
+                      return formatCNPJ(formData.cnpjCliente || '');
+                    })()}
                   </p>
                 )}
               </div>
@@ -1267,9 +1846,20 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
               </div>
 
               <div className="space-y-2">
-                <Label>CNPJ</Label>
+                <Label>
+                  {(() => {
+                    const clienteSelecionado = clientes.find(c => c.id === formData.clienteId);
+                    return clienteSelecionado?.tipoPessoa === 'Pessoa Física' ? 'CPF' : 'CNPJ';
+                  })()}
+                </Label>
                 <Input
-                  value={formatCNPJ(formData.cnpjCliente || '')}
+                  value={(() => {
+                    const clienteSelecionado = clientes.find(c => c.id === formData.clienteId);
+                    if (clienteSelecionado?.tipoPessoa === 'Pessoa Física') {
+                      return formatCPF(formData.cnpjCliente || '');
+                    }
+                    return formatCNPJ(formData.cnpjCliente || '');
+                  })()}
                   disabled
                   className="bg-muted"
                 />
@@ -1384,6 +1974,183 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         {/* Demais cards - Apenas após selecionar natureza de operação */}
         {mostrarDemaisCampos && (
           <>
+            {/* Dados NFe Vinculada - Apenas em modo visualização e status específicos */}
+            {(() => {
+              const statusComNotaFiscal = ['Faturado', 'Enviado', 'Concluído', 'Cancelado'];
+              const deveExibirNFe = statusComNotaFiscal.includes(formData.status || '');
+              
+              console.log('[DEBUG NFe] Verificando exibição da seção:', {
+                isReadOnly,
+                mostrarDemaisCampos,
+                status: formData.status,
+                deveExibirNFe,
+                integracaoERPCompleta: formData.integracaoERP,
+                deveExibir: isReadOnly && deveExibirNFe
+              });
+              
+              return isReadOnly && deveExibirNFe;
+            })() && (
+              <Card className="border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/10">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                    <Receipt className="h-5 w-5" />
+                    Dados NFe Vinculada
+                  </CardTitle>
+                  <CardDescription>
+                    Informações da nota fiscal emitida no ERP para este pedido
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loadingDadosNFe ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                      <span className="ml-3 text-muted-foreground">Carregando dados da NFe...</span>
+                    </div>
+                  ) : dadosNFe ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {/* Situação da NF */}
+                      {dadosNFe.situacao && (
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Situação SEFAZ</Label>
+                          <div className="flex items-center gap-2">
+                            <div className={`h-2 w-2 rounded-full ${
+                              dadosNFe.situacao.includes('Autorizada') ? 'bg-green-500' : 
+                              dadosNFe.situacao.includes('Cancelada') ? 'bg-red-500' : 
+                              dadosNFe.situacao.includes('Processando') ? 'bg-yellow-500' : 
+                              'bg-gray-500'
+                            }`} />
+                            <p className="font-medium">{dadosNFe.situacao}</p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Número da NF */}
+                      {dadosNFe.numero && (
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Número da NF</Label>
+                          <p className="font-medium">{dadosNFe.numero}</p>
+                        </div>
+                      )}
+                      
+                      {/* Série da NF */}
+                      {dadosNFe.serie && (
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Série</Label>
+                          <p className="font-medium">{dadosNFe.serie}</p>
+                        </div>
+                      )}
+                      
+                      {/* Tipo de NF */}
+                      {dadosNFe.tipo && (
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Tipo de NF</Label>
+                          <Badge variant={dadosNFe.tipo === 'Saída' ? 'default' : 'secondary'}>
+                            {dadosNFe.tipo}
+                          </Badge>
+                        </div>
+                      )}
+                      
+                      {/* Data de Emissão */}
+                      {dadosNFe.dataEmissao && (() => {
+                        try {
+                          // Função para converter data brasileira (DD/MM/YYYY) para Date
+                          const parseDataBrasileira = (dataStr: string): { data: Date | null, temHora: boolean } => {
+                            // Tentar formato ISO primeiro (YYYY-MM-DD ou ISO completo)
+                            if (dataStr.includes('-') || dataStr.includes('T')) {
+                              const data = new Date(dataStr);
+                              if (!isNaN(data.getTime())) {
+                                const temHora = dataStr.includes('T') || dataStr.includes(':');
+                                return { data, temHora };
+                              }
+                            }
+                            
+                            // Formato brasileiro DD/MM/YYYY ou DD/MM/YYYY HH:MM:SS
+                            const regex = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+                            const match = dataStr.match(regex);
+                            if (match) {
+                              const [, dia, mes, ano, hora, minuto, segundo] = match;
+                              const temHora = !!(hora && minuto);
+                              const data = new Date(
+                                parseInt(ano), 
+                                parseInt(mes) - 1, 
+                                parseInt(dia),
+                                temHora ? parseInt(hora) : 0,
+                                temHora ? parseInt(minuto) : 0,
+                                segundo ? parseInt(segundo) : 0
+                              );
+                              return { data, temHora };
+                            }
+                            
+                            return { data: null, temHora: false };
+                          };
+                          
+                          const { data, temHora } = parseDataBrasileira(dadosNFe.dataEmissao);
+                          
+                          if (!data || isNaN(data.getTime())) {
+                            console.error('[DADOS NFE] Data inválida:', dadosNFe.dataEmissao);
+                            return null;
+                          }
+                          
+                          return (
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Data de Emissão</Label>
+                              <p className="font-medium">
+                                {temHora ? (
+                                  data.toLocaleDateString('pt-BR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })
+                                ) : (
+                                  data.toLocaleDateString('pt-BR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric'
+                                  })
+                                )}
+                              </p>
+                            </div>
+                          );
+                        } catch (error) {
+                          console.error('[DADOS NFE] Erro ao formatar data:', error);
+                          return null;
+                        }
+                      })()}
+                      
+                      {/* Natureza de Operação da NF */}
+                      {dadosNFe.naturezaOperacao && (
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Natureza de Operação</Label>
+                          <p className="font-medium">{dadosNFe.naturezaOperacao}</p>
+                        </div>
+                      )}
+                      
+                      {/* Chave de Acesso - Ocupa largura completa */}
+                      {dadosNFe.chaveAcesso && (
+                        <div className="space-y-1 md:col-span-2 lg:col-span-3">
+                          <Label className="text-xs text-muted-foreground">Chave de Acesso</Label>
+                          <p className="font-mono text-sm break-all bg-muted p-2 rounded">
+                            {dadosNFe.chaveAcesso}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Dados não disponíveis</AlertTitle>
+                      <AlertDescription>
+                        Não foi possível carregar os dados completos da nota fiscal. 
+                        Verifique se a NFe foi emitida corretamente no ERP.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+            
             {/* Itens do Pedido */}
             <Card className={campoTemErro('itens') ? 'border-destructive' : ''}>
           <CardHeader>
@@ -1401,63 +2168,182 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             </div>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">Nº</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>EAN</TableHead>
-                  <TableHead className="text-right">Vlr. Tabela</TableHead>
-                  <TableHead className="text-right">Desc. %</TableHead>
-                  <TableHead className="text-right">Vlr. Unit.</TableHead>
-                  <TableHead className="text-right">Qtd</TableHead>
-                  <TableHead className="text-right">Subtotal</TableHead>
-                  {!isReadOnly && <TableHead className="w-12"></TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {!formData.itens || formData.itens.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={isReadOnly ? 9 : 10} className={`text-center ${campoTemErro('itens') ? 'text-destructive' : 'text-muted-foreground'}`}>
-                      {campoTemErro('itens') ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <AlertCircle className="h-4 w-4" />
-                          Adicione pelo menos um item ao pedido
-                        </span>
+            {/* Se estiver em modo visualização E tiver integração com ERP, mostrar abas */}
+            {isReadOnly && formData.integracaoERP?.erpPedidoId ? (
+              <Tabs defaultValue="solicitados" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="solicitados">Itens Solicitados</TabsTrigger>
+                  <TabsTrigger value="faturados">
+                    Itens Faturados
+                    {itensFaturados.length > 0 && ` (${itensFaturados.length})`}
+                  </TabsTrigger>
+                </TabsList>
+                
+                {/* Aba de Itens Solicitados */}
+                <TabsContent value="solicitados" className="mt-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">Nº</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>SKU</TableHead>
+                        <TableHead>EAN</TableHead>
+                        <TableHead className="text-right">Vlr. Tabela</TableHead>
+                        <TableHead className="text-right">Desc. %</TableHead>
+                        <TableHead className="text-right">Vlr. Unit.</TableHead>
+                        <TableHead className="text-right">Qtd</TableHead>
+                        <TableHead className="text-right">Subtotal</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {!formData.itens || formData.itens.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={9} className="text-center text-muted-foreground">
+                            Nenhum item adicionado
+                          </TableCell>
+                        </TableRow>
                       ) : (
-                        'Nenhum item adicionado'
+                        formData.itens.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell>{item.numero}</TableCell>
+                            <TableCell>{item.descricaoProduto}</TableCell>
+                            <TableCell>{item.codigoSku}</TableCell>
+                            <TableCell>{item.codigoEan || '-'}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.valorTabela)}</TableCell>
+                            <TableCell className="text-right">{item.percentualDesconto}%</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.valorUnitario)}</TableCell>
+                            <TableCell className="text-right">{item.quantidade} {item.unidade}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.subtotal)}</TableCell>
+                          </TableRow>
+                        ))
                       )}
-                    </TableCell>
+                    </TableBody>
+                  </Table>
+                </TabsContent>
+                
+                {/* Aba de Itens Faturados */}
+                <TabsContent value="faturados" className="mt-4">
+                  {loadingItensFaturados ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="text-center space-y-2">
+                        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
+                        <p className="text-sm text-muted-foreground">Carregando itens faturados...</p>
+                      </div>
+                    </div>
+                  ) : itensFaturados.length === 0 ? (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Itens faturados não disponíveis</AlertTitle>
+                      <AlertDescription>
+                        Não foi possível carregar os itens efetivamente faturados no ERP. 
+                        Isso pode ocorrer se o pedido ainda não foi faturado ou se a nota fiscal ainda não foi vinculada ao pedido.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">Nº</TableHead>
+                          <TableHead>Descrição</TableHead>
+                          <TableHead>SKU</TableHead>
+                          <TableHead>EAN</TableHead>
+                          <TableHead className="text-right">Vlr. Unit.</TableHead>
+                          <TableHead className="text-right">Qtd</TableHead>
+                          <TableHead className="text-right">Subtotal</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {itensFaturados.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell>{item.numero}</TableCell>
+                            <TableCell>{item.descricaoProduto}</TableCell>
+                            <TableCell>{item.codigoSku}</TableCell>
+                            <TableCell>{item.codigoEan || '-'}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.valorUnitario)}</TableCell>
+                            <TableCell className="text-right">{item.quantidade} {item.unidade}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.subtotal)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                  
+                  {/* Totais dos itens faturados */}
+                  {itensFaturados.length > 0 && (
+                    <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">Total Faturado:</span>
+                        <span className="text-lg font-bold">
+                          {formatCurrency(itensFaturados.reduce((sum, item) => sum + item.subtotal, 0))}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        * Este é o valor base para cálculo das comissões de vendas
+                      </p>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            ) : (
+              /* Tabela simples para modos de criação e edição */
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">Nº</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>EAN</TableHead>
+                    <TableHead className="text-right">Vlr. Tabela</TableHead>
+                    <TableHead className="text-right">Desc. %</TableHead>
+                    <TableHead className="text-right">Vlr. Unit.</TableHead>
+                    <TableHead className="text-right">Qtd</TableHead>
+                    <TableHead className="text-right">Subtotal</TableHead>
+                    {!isReadOnly && <TableHead className="w-12"></TableHead>}
                   </TableRow>
-                ) : (
-                  formData.itens.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>{item.numero}</TableCell>
-                      <TableCell>{item.descricaoProduto}</TableCell>
-                      <TableCell>{item.codigoSku}</TableCell>
-                      <TableCell>{item.codigoEan || '-'}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.valorTabela)}</TableCell>
-                      <TableCell className="text-right">{item.percentualDesconto}%</TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.valorUnitario)}</TableCell>
-                      <TableCell className="text-right">{item.quantidade} {item.unidade}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.subtotal)}</TableCell>
-                      {!isReadOnly && !pedidoBloqueado && (
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemoveItem(item.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      )}
+                </TableHeader>
+                <TableBody>
+                  {!formData.itens || formData.itens.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={isReadOnly ? 9 : 10} className={`text-center ${campoTemErro('itens') ? 'text-destructive' : 'text-muted-foreground'}`}>
+                        {campoTemErro('itens') ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <AlertCircle className="h-4 w-4" />
+                            Adicione pelo menos um item ao pedido
+                          </span>
+                        ) : (
+                          'Nenhum item adicionado'
+                        )}
+                      </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    formData.itens.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{item.numero}</TableCell>
+                        <TableCell>{item.descricaoProduto}</TableCell>
+                        <TableCell>{item.codigoSku}</TableCell>
+                        <TableCell>{item.codigoEan || '-'}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(item.valorTabela)}</TableCell>
+                        <TableCell className="text-right">{item.percentualDesconto}%</TableCell>
+                        <TableCell className="text-right">{formatCurrency(item.valorUnitario)}</TableCell>
+                        <TableCell className="text-right">{item.quantidade} {item.unidade}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(item.subtotal)}</TableCell>
+                        {!isReadOnly && !pedidoBloqueado && (
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveItem(item.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
 
@@ -1616,6 +2502,11 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             </div>
           </CardContent>
         </Card>
+
+        {/* Botões de ação no final da página */}
+        <div className="flex justify-end pt-6 border-t">
+          {renderActionButtons()}
+        </div>
 
             {/* Dialog Adicionar Item */}
       <Dialog open={addItemDialogOpen} onOpenChange={setAddItemDialogOpen}>

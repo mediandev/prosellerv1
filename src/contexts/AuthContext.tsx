@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Usuario, TipoUsuario } from '../types/user';
-import { api, getAuthToken } from '../services/api';
+import { api, getAuthToken, setAuthToken } from '../services/api';
 
 interface AuthContextType {
   usuario: Usuario | null;
@@ -181,9 +181,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
         
-        // Backend removido - apenas autenticação mock disponível
-        // Não tentar restaurar sessão do backend
-        api.auth.signout(); // Limpar qualquer token inválido
+        // Try to restore session from mock users
+        try {
+          // Se for token mock, já foi tratado acima
+          // Se for outro tipo de token, tentar buscar usuário via API
+          const { user } = await api.auth.me();
+          if (user) {
+            const usuarioComPermissoes = {
+              ...user,
+              permissoes: user.permissoes || getDefaultPermissoes(user.tipo),
+            };
+            setUsuario(usuarioComPermissoes);
+          }
+        } catch (error) {
+          // Silently fail - it's normal to not have a session on first load
+          console.log('[AuthContext] Nenhuma sessão ativa para restaurar');
+          api.auth.signout(); // Limpar qualquer token inválido
+        }
       }
       setLoading(false);
     };
@@ -237,24 +251,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, senha: string): Promise<boolean> => {
-    // Backend removido - apenas autenticação mock disponível
-    console.log('ℹ Usando autenticação mock (backend removido)...');
-    const usuarioMock = USUARIOS_MOCK.find(
-      (u) => u.email === email && u.senha === senha
-    );
-    
-    if (usuarioMock) {
+    try {
+      // Usar autenticação mock diretamente (sem Supabase)
+      console.log('[AuthContext] Tentando login:', { email, senhaLength: senha.length });
+      
+      // Buscar usuário nos mock
+      const usuarioMock = USUARIOS_MOCK.find(
+        (u) => u.email.toLowerCase().trim() === email.toLowerCase().trim() && u.senha === senha
+      );
+      
+      if (!usuarioMock) {
+        console.error('[AuthContext] ✗ Usuário não encontrado ou senha incorreta');
+        console.log('[AuthContext] Usuários disponíveis:', USUARIOS_MOCK.map(u => u.email));
+        return false;
+      }
+      
+      // Verificar se usuário está ativo
+      if (!usuarioMock.ativo) {
+        console.error('[AuthContext] ✗ Usuário inativo');
+        return false;
+      }
+      
       // Remove senha from the object before setting
       const { senha: _, ...usuarioSemSenha } = usuarioMock;
-      setUsuario(usuarioSemSenha);
+      
+      // Garantir que tem permissões
+      const usuarioComPermissoes = {
+        ...usuarioSemSenha,
+        permissoes: usuarioSemSenha.permissoes || getDefaultPermissoes(usuarioSemSenha.tipo),
+      };
+      
+      console.log('[AuthContext] ✓ Usuário encontrado, definindo estado...', {
+        id: usuarioComPermissoes.id,
+        nome: usuarioComPermissoes.nome,
+        tipo: usuarioComPermissoes.tipo,
+        permissoesCount: usuarioComPermissoes.permissoes?.length || 0
+      });
+      
       // Store a mock token for session
-      localStorage.setItem('auth_token', 'mock_token_' + usuarioMock.id);
-      console.log('✓ Login via autenticação mock');
+      const token = `mock_token_${usuarioMock.id}`;
+      localStorage.setItem('auth_token', token);
+      setAuthToken(token);
+      
+      // Atualizar estado do usuário
+      setUsuario(usuarioComPermissoes);
+      
+      console.log('[AuthContext] ✓ Login realizado com sucesso!');
       return true;
+    } catch (error: any) {
+      console.error('[AuthContext] ✗ Erro ao fazer login:', error);
+      return false;
     }
-    
-    console.error('✗ Credenciais inválidas');
-    return false;
   };
 
   const logout = () => {

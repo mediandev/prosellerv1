@@ -144,7 +144,7 @@ export function SellerFormIntegracoes({
               <p className="text-sm font-medium">Como funciona a integração?</p>
               <p className="text-sm text-muted-foreground">
                 Ao cadastrar o ID do vendedor no sistema Tiny ERP para cada empresa, os pedidos
-                enviados pelo VendasPro serão automaticamente vinculados ao vendedor correto no
+                enviados pelo ProSeller serão automaticamente vinculados ao vendedor correto no
                 ERP, facilitando o controle e evitando erros de lançamento.
               </p>
             </div>

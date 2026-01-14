@@ -73,11 +73,10 @@ export function SalesReport() {
       return filteredSales;
     }
 
-    const groups = new Map<string, typeof filteredSales>();
-
+    const groups = new Map<string, Venda[]>();
+    
     filteredSales.forEach((venda) => {
       let groupKey = "";
-      
       switch (filters.groupBy) {
         case "cliente":
           groupKey = venda.nomeCliente;
@@ -87,7 +86,9 @@ export function SalesReport() {
           groupKey = cliente?.grupoRede || "Sem Grupo";
           break;
         case "vendedor":
-          groupKey = venda.nomeVendedor;
+          // 🆕 CORRIGIDO: Buscar vendedor por ID, não por nome
+          const vendedor = mockSellers.find(v => v.id === venda.vendedorId);
+          groupKey = vendedor?.nome || venda.nomeVendedor || "Vendedor não identificado";
           break;
         case "natureza":
           groupKey = venda.nomeNaturezaOperacao;
@@ -106,7 +107,7 @@ export function SalesReport() {
         ...vendas,
       ];
     });
-  }, [filteredSales, filters.groupBy]);
+  }, [filteredSales, filters.groupBy, clientes, mockSellers]);
 
   // Calcular totais
   const totals = useMemo(() => {

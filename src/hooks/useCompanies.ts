@@ -21,12 +21,18 @@ export function useCompanies() {
     try {
       console.log('[useCompanies] Carregando empresas...');
       const data = await companyService.getAll();
-      setCompanies(data);
+      
+      // Remover duplicatas por ID
+      const uniqueCompanies = Array.from(
+        new Map(data.map(c => [c.id, c])).values()
+      );
+      
+      setCompanies(uniqueCompanies);
       
       const stats = await companyService.getStatistics();
       setStatistics(stats);
       
-      console.log('[useCompanies] Empresas carregadas:', data.length);
+      console.log('[useCompanies] Empresas carregadas:', uniqueCompanies.length);
     } catch (error) {
       console.error('[useCompanies] Erro ao carregar empresas:', error);
     } finally {

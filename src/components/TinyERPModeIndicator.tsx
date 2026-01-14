@@ -181,7 +181,7 @@ export function TinyERPModeIndicator() {
               <div className="space-y-2 text-sm">
                 <h4 className="font-semibold">Requisitos para modo REAL:</h4>
                 <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                  <li>Backend configurado ✅</li>
+                  <li>Backend Supabase Edge Functions configurado ✅</li>
                   <li>Token do Tiny ERP configurado na empresa</li>
                   <li>Envio automático habilitado nas configurações da empresa</li>
                   <li>Clientes e produtos devem existir no Tiny ERP</li>
@@ -192,7 +192,7 @@ export function TinyERPModeIndicator() {
                   <AlertTitle className="text-blue-800">Backend Configurado</AlertTitle>
                   <AlertDescription className="text-blue-700 space-y-2">
                     <p>
-                      O backend está configurado.
+                      O backend está pronto através do Supabase Edge Functions.
                       Certifique-se de configurar o token API do Tiny ERP em <strong>Configurações &gt; Empresas</strong>.
                     </p>
                   </AlertDescription>

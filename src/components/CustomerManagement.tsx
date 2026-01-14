@@ -473,12 +473,6 @@ export function CustomerManagement() {
       <Card>
         <CardHeader>
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <CardTitle>Base de Clientes</CardTitle>
-              <CardDescription>
-                Gerencie seus clientes e acompanhe indicadores estratégicos
-              </CardDescription>
-            </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm">
                 <Download className="h-4 w-4 mr-2" />

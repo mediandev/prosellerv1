@@ -1,8 +1,8 @@
-# Integração de E-mail - VendasPro
+# Integração de E-mail - ProSeller
 
 ## 📧 Visão Geral
 
-O sistema VendasPro possui integração completa com serviços de envio de e-mail para automatizar notificações e comunicações do sistema. Atualmente suporta três provedores principais:
+O sistema ProSeller possui integração completa com serviços de envio de e-mail para automatizar notificações e comunicações do sistema. Atualmente suporta três provedores principais:
 
 - **Resend** - Plataforma moderna de e-mail para desenvolvedores
 - **SendGrid** - Serviço confiável de envio de e-mails em escala
