@@ -429,6 +429,70 @@ export function SettingsPage({
     }
   };
 
+  // Helper: Máscara de moeda para input (formato: R$ 1.234,56)
+  const maskCurrencyInput = (value: string): string => {
+    // Remove tudo que não é dígito
+    const numbers = value.replace(/\D/g, '');
+    if (!numbers) return '';
+    
+    // Converte para número e divide por 100 para ter centavos
+    const amount = parseFloat(numbers) / 100;
+    
+    // Formata como moeda brasileira
+    return new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
+
+  // Helper: Converter valor formatado para número
+  const unmaskCurrency = (value: string): number => {
+    const numbers = value.replace(/\D/g, '');
+    if (!numbers) return 0;
+    return parseFloat(numbers) / 100;
+  };
+
+  // Helper: Formatar prazo de pagamento com "/" automático após 2 dígitos
+  const formatarPrazoInput = (value: string): string => {
+    // Remove tudo que não é dígito
+    const numbers = value.replace(/\D/g, '');
+    
+    if (!numbers) return '';
+    
+    // Adiciona "/" a cada 2 dígitos
+    return numbers
+      .split('')
+      .reduce((acc, digit, index) => {
+        if (index > 0 && index % 2 === 0) {
+          return acc + '/' + digit;
+        }
+        return acc + digit;
+      }, '');
+  };
+
+  // Helper: Processar prazo de pagamento (ex: "10/20/30" -> extrair parcelas e último valor)
+  const processarPrazoPagamento = (prazoInput: string): { parcelas: number; ultimoPrazo: number } => {
+    if (!prazoInput || prazoInput.trim() === '') {
+      return { parcelas: 1, ultimoPrazo: 0 };
+    }
+
+    const valores = prazoInput
+      .split('/')
+      .map(v => v.trim())
+      .filter(v => v !== '')
+      .map(v => parseFloat(v))
+      .filter(v => !isNaN(v) && v >= 0);
+
+    if (valores.length === 0) {
+      return { parcelas: 1, ultimoPrazo: 0 };
+    }
+
+    return {
+      parcelas: valores.length,
+      ultimoPrazo: valores[valores.length - 1], // Último valor
+    };
+  };
+
   const gerarNomeCondicaoPagamento = (
     formaPagamentoId: string,
     prazoPagamento: string,
@@ -439,14 +503,11 @@ export function SettingsPage({
     const formaPagamento = formasPagamento.find((f) => f.id === formaPagamentoId);
     if (!formaPagamento) return null;
 
-    const prazoFormatado = formatarPrazoPagamento(prazoPagamento);
-    let nomeCompleto = `${formaPagamento.nome} - ${prazoFormatado}`;
+    const { ultimoPrazo } = processarPrazoPagamento(prazoPagamento);
+    const prazoTexto = ultimoPrazo === 0 ? 'À vista' : `${ultimoPrazo} dias`;
+    const descontoTexto = descontoExtra > 0 ? `desc extra ${descontoExtra}%` : 'desc extra 0%';
 
-    if (descontoExtra > 0) {
-      nomeCompleto += ` com ${descontoExtra}% desconto`;
-    }
-
-    return nomeCompleto;
+    return `${formaPagamento.nome} - ${prazoTexto} - ${descontoTexto}`;
   };
 
   // Atualizar automaticamente o nome da condição quando os campos mudarem
@@ -472,20 +533,19 @@ export function SettingsPage({
       return;
     }
 
-    if (!newCondicaoPagamento.prazoPagamento) {
+    if (!newCondicaoPagamento.prazoPagamento || newCondicaoPagamento.prazoPagamento.trim() === '') {
       toast.error("O prazo de pagamento é obrigatório");
       return;
     }
 
-    if (!validarPrazoPagamento(newCondicaoPagamento.prazoPagamento)) {
-      toast.error(
-        "Formato de prazo inválido. Use formatos como: 30, 30/60, 28/56/84"
-      );
-      return;
-    }
-
     try {
-      const novaCondicao = await api.post('condicoes-pagamento', newCondicaoPagamento);
+      const novaCondicao = await api.post('condicoes-pagamento', {
+        action: 'create',
+        formaPagamentoId: newCondicaoPagamento.formaPagamentoId,
+        prazoPagamento: newCondicaoPagamento.prazoPagamento,
+        descontoExtra: newCondicaoPagamento.descontoExtra,
+        valorMinimo: newCondicaoPagamento.valorPedidoMinimo,
+      });
       
       setCondicoesPagamento([...condicoesPagamento, novaCondicao]);
       setNewCondicaoPagamento({
@@ -505,12 +565,15 @@ export function SettingsPage({
 
   const handleDeleteCondicaoPagamento = async (id: string) => {
     try {
-      await api.delete(`condicoes-pagamento/${id}`);
+      await api.delete('condicoes-pagamento', id, {
+        action: 'delete',
+        id,
+      });
       setCondicoesPagamento(condicoesPagamento.filter((c) => c.id !== id));
       toast.success("Condição de pagamento removida com sucesso!");
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao remover condição:', error);
-      toast.error("Erro ao remover condição de pagamento");
+      toast.error(error.message || "Erro ao remover condição de pagamento");
     }
   };
 
@@ -873,19 +936,25 @@ export function SettingsPage({
                           <Label htmlFor="condicao-prazo">
                             Prazo de Pagamento
                             <span className="text-xs text-muted-foreground ml-2">
-                              (Ex: 30, 30/60, 28/56/84)
+                              (Ex: 10/20/30/40)
                             </span>
                           </Label>
                           <Input
                             id="condicao-prazo"
                             value={newCondicaoPagamento.prazoPagamento}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              // Remove tudo que não é dígito
+                              const numbers = e.target.value.replace(/\D/g, '');
+                              
+                              // Formata automaticamente com "/" a cada 2 dígitos
+                              const formatted = formatarPrazoInput(numbers);
+                              
                               setNewCondicaoPagamento({
                                 ...newCondicaoPagamento,
-                                prazoPagamento: e.target.value,
-                              })
-                            }
-                            placeholder="30"
+                                prazoPagamento: formatted,
+                              });
+                            }}
+                            placeholder="10/20/30/40"
                           />
                         </div>
                       </div>
@@ -912,16 +981,26 @@ export function SettingsPage({
                           <Label htmlFor="condicao-valor-minimo">Valor Mínimo do Pedido</Label>
                           <Input
                             id="condicao-valor-minimo"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={newCondicaoPagamento.valorPedidoMinimo}
-                            onChange={(e) =>
+                            value={newCondicaoPagamento.valorPedidoMinimo > 0 
+                              ? `R$ ${maskCurrencyInput((Math.round(newCondicaoPagamento.valorPedidoMinimo * 100)).toString())}`
+                              : ''
+                            }
+                            onChange={(e) => {
+                              const numericValue = unmaskCurrency(e.target.value);
                               setNewCondicaoPagamento({
                                 ...newCondicaoPagamento,
-                                valorPedidoMinimo: parseFloat(e.target.value) || 0,
-                              })
-                            }
+                                valorPedidoMinimo: numericValue,
+                              });
+                            }}
+                            onBlur={(e) => {
+                              // Garantir formatação ao sair do campo
+                              const numericValue = unmaskCurrency(e.target.value);
+                              setNewCondicaoPagamento({
+                                ...newCondicaoPagamento,
+                                valorPedidoMinimo: numericValue,
+                              });
+                            }}
+                            placeholder="R$ 0,00"
                           />
                         </div>
                       </div>
@@ -961,18 +1040,15 @@ export function SettingsPage({
                 </TableHeader>
                 <TableBody>
                   {condicoesPagamento.map((condicao) => {
-                    const forma = formasPagamento.find(
-                      (f) => f.id === condicao.formaPagamentoId
-                    );
                     return (
                       <TableRow key={condicao.id}>
                         <TableCell className="font-medium">{condicao.nome}</TableCell>
-                        <TableCell>{forma?.nome || "N/A"}</TableCell>
+                        <TableCell>{condicao.formaPagamento || "N/A"}</TableCell>
                         <TableCell>
-                          {formatarPrazoPagamento(condicao.prazoPagamento)}
+                          {condicao.prazo === 0 ? 'À vista' : `${condicao.prazo} dias`}
                         </TableCell>
                         <TableCell>
-                          {calcularNumeroParcelas(condicao.prazoPagamento)}x
+                          {condicao.parcelas}x
                         </TableCell>
                         <TableCell>
                           {condicao.descontoExtra > 0 ? (
@@ -985,9 +1061,12 @@ export function SettingsPage({
                           )}
                         </TableCell>
                         <TableCell>
-                          {condicao.valorPedidoMinimo > 0 ? (
+                          {condicao.valorMinimo > 0 ? (
                             <span className="text-sm">
-                              R$ {condicao.valorPedidoMinimo.toFixed(2)}
+                              {condicao.valorMinimo.toLocaleString('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL',
+                              })}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">-</span>

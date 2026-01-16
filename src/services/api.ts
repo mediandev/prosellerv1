@@ -230,7 +230,7 @@ async function callEdgeFunction(
       headers: currentHeaders,
     };
     
-    if (body && (method === 'POST' || method === 'PUT')) {
+    if (body && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
       options.body = JSON.stringify(body);
     }
     
@@ -252,7 +252,7 @@ async function callEdgeFunction(
             headers: currentHeaders,
           };
           
-          if (body && (method === 'POST' || method === 'PUT')) {
+          if (body && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
             retryOptions.body = JSON.stringify(body);
           }
           
@@ -889,6 +889,64 @@ export const api = {
       }
     }
     
+    // Caso especial para formas de pagamento - usar edge function com action
+    if (entity === 'formas-pagamento') {
+      try {
+        console.log('[API] Buscando formas de pagamento via Edge Function formas-pagamento-v2...');
+        const response = await callEdgeFunction('formas-pagamento-v2', 'GET', undefined, undefined, { action: 'list' });
+        
+        // A resposta vem no formato { success: true, data: { formas: [...], total: ... } }
+        const formas = response.formas || response.data?.formas || [];
+        
+        console.log(`[API] ${formas.length} formas de pagamento encontradas`);
+        
+        return formas;
+      } catch (error) {
+        console.error('[API] Erro ao buscar formas de pagamento, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        return getStoredData(entityConfig.storageKey, entityConfig.data);
+      }
+    }
+    
+    // Caso especial para condições de pagamento - usar edge function com action
+    if (entity === 'condicoes-pagamento') {
+      try {
+        console.log('[API] Buscando condições de pagamento via Edge Function condicoes-pagamento-v2...');
+        const response = await callEdgeFunction('condicoes-pagamento-v2', 'GET', undefined, undefined, { action: 'list' });
+        
+        // A resposta vem no formato { success: true, data: { condicoes: [...], total: ... } }
+        const condicoes = response.condicoes || response.data?.condicoes || [];
+        
+        console.log(`[API] ${condicoes.length} condições de pagamento encontradas`);
+        
+        // Mapear para o formato esperado pelo frontend
+        return condicoes.map((cond: any) => ({
+          id: cond.id,
+          nome: cond.nome || '',
+          formaPagamento: cond.formaPagamento || '',
+          formaPagamentoId: cond.formaPagamentoId,
+          meioPagamento: cond.meioPagamento || '',
+          meioPagamentoId: cond.meioPagamentoId,
+          prazoPagamento: cond.prazo?.toString() || '0',
+          prazo: cond.prazo || 0,
+          parcelas: cond.parcelas || 1,
+          descontoExtra: cond.desconto || 0,
+          valorPedidoMinimo: cond.valorMinimo || 0,
+          valorMinimo: cond.valorMinimo || 0,
+          ativo: true, // Por padrão, todas as condições retornadas estão ativas
+          parcelamento: cond.parcelamento || false,
+          condicaoCredito: cond.condicaoCredito || false,
+          intervaloParcela: cond.intervaloParcela || [],
+        }));
+      } catch (error) {
+        console.error('[API] Erro ao buscar condições de pagamento, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        return getStoredData(entityConfig.storageKey, entityConfig.data);
+      }
+    }
+    
     // Caso especial para vendas
     if (entity === 'vendas') {
       const vendas = carregarVendasDoLocalStorage();
@@ -986,6 +1044,71 @@ export const api = {
   
   create: async (entity: string, data: any) => {
     console.log(`[API] POST /${entity}:`, data);
+    
+    // Caso especial para condições de pagamento - usar edge function com action
+    if (entity === 'condicoes-pagamento') {
+      try {
+        console.log('[API] Criando condição de pagamento via Edge Function condicoes-pagamento-v2...');
+        const response = await callEdgeFunction('condicoes-pagamento-v2', 'POST', {
+          action: 'create',
+          ...data,
+        });
+        
+        // A resposta vem no formato { success: true, data: { condicao: {...} } }
+        const condicao = response.condicao || response.data?.condicao || response;
+        
+        // Mapear para o formato esperado pelo frontend
+        return {
+          id: condicao.id,
+          nome: condicao.nome || '',
+          formaPagamento: condicao.formaPagamento || '',
+          formaPagamentoId: condicao.formaPagamentoId,
+          meioPagamento: condicao.meioPagamento || '',
+          meioPagamentoId: condicao.meioPagamentoId,
+          prazoPagamento: condicao.prazo?.toString() || '0',
+          prazo: condicao.prazo || 0,
+          parcelas: condicao.parcelas || 1,
+          descontoExtra: condicao.desconto || 0,
+          valorPedidoMinimo: condicao.valorMinimo || 0,
+          valorMinimo: condicao.valorMinimo || 0,
+          ativo: true,
+          parcelamento: condicao.parcelamento || false,
+          condicaoCredito: condicao.condicaoCredito || false,
+          intervaloParcela: condicao.intervaloParcela || [],
+        };
+      } catch (error) {
+        console.error('[API] Erro ao criar condição de pagamento:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para formas de pagamento - usar edge function com action
+    if (entity === 'formas-pagamento') {
+      try {
+        console.log('[API] Criando forma de pagamento via Edge Function formas-pagamento-v2...');
+        const response = await callEdgeFunction('formas-pagamento-v2', 'POST', {
+          action: 'create',
+          ...data,
+        });
+        
+        // A resposta vem no formato { success: true, data: { forma: {...} } }
+        return response.forma || response.data?.forma || response;
+      } catch (error) {
+        console.error('[API] Erro ao criar forma de pagamento, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
+        const novoItem = {
+          ...data,
+          id: data.id || `${entity}-${Date.now()}`,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        storedData.push(novoItem);
+        saveStoredData(entityConfig.storageKey, storedData);
+        return novoItem;
+      }
+    }
     
     // Caso especial para vendedores - criar usuário tipo vendedor e dados_vendedor
     if (entity === 'vendedores') {
@@ -1097,6 +1220,38 @@ export const api = {
   update: async (entity: string, id: string, data: any) => {
     console.log(`[API] PUT /${entity}/${id}:`, data);
     
+    // Caso especial para formas de pagamento - usar edge function com action
+    if (entity === 'formas-pagamento') {
+      try {
+        console.log('[API] Atualizando forma de pagamento via Edge Function formas-pagamento-v2...');
+        const response = await callEdgeFunction('formas-pagamento-v2', 'PUT', {
+          action: 'update',
+          id,
+          ...data,
+        });
+        
+        // A resposta vem no formato { success: true, data: { forma: {...} } }
+        return response.forma || response.data?.forma || response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar forma de pagamento, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
+        const index = storedData.findIndex((item: any) => item.id === id);
+        if (index === -1) {
+          throw new Error(`${entity} ${id} não encontrado`);
+        }
+        storedData[index] = {
+          ...storedData[index],
+          ...data,
+          id,
+          updatedAt: new Date(),
+        };
+        saveStoredData(entityConfig.storageKey, storedData);
+        return storedData[index];
+      }
+    }
+    
     // Caso especial para vendedores - atualizar usuário e dados_vendedor
     if (entity === 'vendedores') {
       try {
@@ -1195,15 +1350,63 @@ export const api = {
     return storedData[index];
   },
   
-  delete: async (entity: string, id: string) => {
-    console.log(`[API] DELETE /${entity}/${id} (mockado)`);
+  delete: async (entityOrPath: string, id?: string, body?: any) => {
+    // Se id não foi fornecido, assumir que entityOrPath é um path completo (ex: "formas-pagamento/123")
+    let entity: string
+    let entityId: string
+    
+    if (id === undefined) {
+      const parts = entityOrPath.split('/')
+      entity = parts[0]
+      entityId = parts[1] || ''
+    } else {
+      entity = entityOrPath
+      entityId = id
+    }
+    
+    console.log(`[API] DELETE /${entity}/${entityId}`);
+    
+    if (!entityId) {
+      throw new Error('ID é obrigatório para exclusão')
+    }
+    
+    // Caso especial para condições de pagamento - usar edge function com action
+    if (entity === 'condicoes-pagamento') {
+      try {
+        console.log('[API] Excluindo condição de pagamento via Edge Function condicoes-pagamento-v2...');
+        await callEdgeFunction('condicoes-pagamento-v2', 'DELETE', {
+          action: 'delete',
+          id: entityId,
+          ...body,
+        });
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir condição de pagamento:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para formas de pagamento - usar edge function com action
+    if (entity === 'formas-pagamento') {
+      try {
+        console.log('[API] Excluindo forma de pagamento via Edge Function formas-pagamento-v2...');
+        await callEdgeFunction('formas-pagamento-v2', 'DELETE', {
+          action: 'delete',
+          id: entityId,
+        });
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir forma de pagamento:', error);
+        throw error;
+      }
+    }
     
     // Caso especial para vendas
     if (entity === 'vendas') {
       const vendas = carregarVendasDoLocalStorage();
-      const index = vendas.findIndex(v => v.id === id);
+      const index = vendas.findIndex(v => v.id === entityId);
       if (index === -1) {
-        throw new Error(`Venda ${id} não encontrada`);
+        throw new Error(`Venda ${entityId} não encontrada`);
       }
       vendas.splice(index, 1);
       salvarVendasNoLocalStorage(vendas);
@@ -1216,10 +1419,10 @@ export const api = {
     }
     
     const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
-    const index = storedData.findIndex((item: any) => item.id === id);
+    const index = storedData.findIndex((item: any) => item.id === entityId);
     
     if (index === -1) {
-      throw new Error(`${entity} ${id} não encontrado`);
+      throw new Error(`${entity} ${entityId} não encontrado`);
     }
     
     storedData.splice(index, 1);
@@ -1230,7 +1433,7 @@ export const api = {
   
   // Generic POST for custom paths
   post: async (path: string, data: any = {}) => {
-    console.log(`[API] POST /${path} (mockado):`, data);
+    console.log(`[API] POST /${path}:`, data);
     
     // Rotas customizadas
     if (path.includes('aprovar')) {
@@ -1246,6 +1449,22 @@ export const api = {
     // Default: criar na entidade base
     const entity = path.split('/')[0];
     return api.create(entity, data);
+  },
+  
+  // Generic PUT for custom paths
+  put: async (path: string, data: any = {}) => {
+    console.log(`[API] PUT /${path}:`, data);
+    
+    // Extrair entidade e ID do path (formato: "entidade/id")
+    const parts = path.split('/');
+    const entity = parts[0];
+    const id = parts[1];
+    
+    if (!id) {
+      throw new Error('ID é obrigatório para atualização');
+    }
+    
+    return api.update(entity, id, data);
   },
   
   // Custom endpoints
