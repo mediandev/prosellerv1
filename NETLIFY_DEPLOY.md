@@ -98,6 +98,14 @@ Este arquivo garante que todas as rotas da aplicação sejam redirecionadas para
 - Certifique-se de que todas as dependências estão no `package.json`
 - Verifique se a versão do Node está correta
 
+### Erro de conflito de dependências (ERESOLVE)
+
+Se você encontrar erros como `ERESOLVE could not resolve` ou conflitos de peer dependencies:
+
+- O arquivo `netlify.toml` já está configurado para usar `--legacy-peer-deps`
+- Se o problema persistir, você pode adicionar a variável de ambiente `NPM_FLAGS` com valor `--legacy-peer-deps` no painel do Netlify
+- Certifique-se de que o `package-lock.json` está commitado no repositório
+
 ### Rotas não funcionam
 
 - Verifique se o arquivo `public/_redirects` está presente

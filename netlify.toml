@@ -1,6 +1,7 @@
 [build]
   # Comando para instalar dependências
-  command = "npm install && npm run build"
+  # Usa --legacy-peer-deps para evitar conflitos de peer dependencies
+  command = "npm install --legacy-peer-deps && npm run build"
   
   # Diretório onde o Vite gera os arquivos de build
   publish = "build"
