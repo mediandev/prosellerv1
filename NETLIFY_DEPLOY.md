@@ -37,16 +37,16 @@ O Netlify detectará automaticamente as configurações do arquivo `netlify.toml
 - **Publish directory:** `build`
 - **Node version:** `18` (ou superior)
 
-### 4. Configurar Variáveis de Ambiente (Opcional)
+### 4. Configurar Variáveis de Ambiente (Recomendado)
 
-Se você quiser usar variáveis de ambiente para as configurações do Supabase (recomendado):
+O código já está configurado para usar variáveis de ambiente. Para configurar no Netlify:
 
 1. No painel do Netlify, vá em **Site settings** → **Environment variables**
-2. Adicione as seguintes variáveis (se necessário):
-   - `VITE_SUPABASE_URL` - URL do seu projeto Supabase
+2. Adicione as seguintes variáveis:
+   - `VITE_SUPABASE_URL` - URL do seu projeto Supabase (ex: `https://xxoiqfraeolsqsmsheue.supabase.co`)
    - `VITE_SUPABASE_ANON_KEY` - Chave anônima do Supabase
 
-**Nota:** Atualmente, as configurações do Supabase estão hardcoded no arquivo `src/services/api.ts`. Para usar variáveis de ambiente, será necessário modificar esse arquivo.
+**Nota:** O código usa variáveis de ambiente com fallback para valores padrão. Se as variáveis não estiverem configuradas no Netlify, o sistema usará os valores padrão definidos no código.
 
 ### 5. Fazer o Deploy
 
