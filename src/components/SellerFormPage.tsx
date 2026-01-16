@@ -12,6 +12,7 @@ import { SellerFormComissoes } from "./SellerFormComissoes";
 import { SellerFormUsuario } from "./SellerFormUsuario";
 import { SellerFormIntegracoes } from "./SellerFormIntegracoes";
 import { SellerFormHistoricoVendas } from "./SellerFormHistoricoVendas";
+import { api } from "../services/api";
 
 interface SellerFormPageProps {
   vendedorId?: string;
@@ -145,6 +146,120 @@ export function SellerFormPage({
       }));
     }
   }, [formData.email]);
+
+  // Carregar dados do vendedor quando vendedorId for fornecido
+  useEffect(() => {
+    const loadVendedorData = async () => {
+      // Usar vendedorId ou vendedor?.id
+      const idToLoad = vendedorId || vendedor?.id;
+      
+      console.log('[SellerFormPage] useEffect executado:', { 
+        vendedorId, 
+        vendedorIdFromVendedor: vendedor?.id,
+        idToLoad,
+        mode,
+        hasVendedor: !!vendedor,
+        vendedorHasCompleteData: !!(vendedor?.cpf && vendedor?.telefone)
+      });
+      
+      if (!idToLoad || mode === "create") {
+        console.log('[SellerFormPage] Não carregando dados - condições não atendidas');
+        return; // Não carregar se não tem ID ou é criação
+      }
+
+      // Sempre carregar dados completos quando tiver ID
+      // Mesmo que já tenha dados básicos, precisamos garantir que temos todos os dados de dados_vendedor
+      console.log('[SellerFormPage] Carregando dados completos do vendedor...');
+
+      try {
+        console.log('[SellerFormPage] Iniciando carregamento de dados do vendedor:', idToLoad);
+        const data = await api.get('vendedores', { params: { id: idToLoad } });
+        
+        console.log('[SellerFormPage] Resposta da API:', data);
+        
+        if (data && data.length > 0) {
+          const vendedorData = data[0];
+          console.log('[SellerFormPage] Dados do vendedor carregados:', vendedorData);
+          
+          // Mapear dados para o formato do formulário
+          const mappedData: Partial<Seller> = {
+            id: vendedorData.id,
+            nome: vendedorData.nome || '',
+            iniciais: vendedorData.iniciais || generateInitials(vendedorData.nome || ''),
+            cpf: vendedorData.cpf || '',
+            email: vendedorData.email || '',
+            telefone: vendedorData.telefone || '',
+            dataAdmissao: vendedorData.dataAdmissao || new Date().toISOString().split("T")[0],
+            status: vendedorData.status || 'ativo',
+            acessoSistema: vendedorData.acessoSistema || false,
+            emailAcesso: vendedorData.emailAcesso || vendedorData.email || '',
+            contatosAdicionais: vendedorData.contatosAdicionais || [],
+            cnpj: vendedorData.cnpj || '',
+            razaoSocial: vendedorData.razaoSocial || '',
+            nomeFantasia: vendedorData.nomeFantasia || '',
+            inscricaoEstadual: vendedorData.inscricaoEstadual || '',
+            dadosBancarios: vendedorData.dadosBancarios || {
+              banco: '',
+              agencia: '',
+              digitoAgencia: '',
+              tipoConta: 'corrente',
+              numeroConta: '',
+              digitoConta: '',
+              nomeTitular: '',
+              cpfCnpjTitular: '',
+              tipoChavePix: 'cpf_cnpj',
+              chavePix: '',
+            },
+            endereco: vendedorData.endereco || {
+              cep: '',
+              logradouro: '',
+              numero: '',
+              complemento: '',
+              bairro: '',
+              uf: '',
+              municipio: '',
+              enderecoEntregaDiferente: false,
+            },
+            observacoesInternas: vendedorData.observacoesInternas || '',
+            metasAnuais: vendedorData.metasAnuais || [],
+            comissoes: vendedorData.comissoes || {
+              regraAplicavel: 'lista_preco',
+            },
+            usuario: vendedorData.usuario || {
+              usuarioCriado: false,
+              email: vendedorData.email || '',
+              conviteEnviado: false,
+              senhaDefinida: false,
+              requisitosSeguranca: true,
+              permissoes: {
+                dashboard: { visualizar: true, criar: false, editar: false, excluir: false },
+                vendas: { visualizar: true, criar: true, editar: true, excluir: false },
+                pipeline: { visualizar: true, criar: true, editar: true, excluir: false },
+                clientes: { visualizar: true, criar: true, editar: true, excluir: false },
+                metas: { visualizar: true, criar: false, editar: false, excluir: false },
+                comissoes: { visualizar: true, criar: false, editar: false, excluir: false },
+                produtos: { visualizar: true, criar: false, editar: false, excluir: false },
+                relatorios: { visualizar: true, criar: false, editar: false, excluir: false },
+                equipe: { visualizar: false, criar: false, editar: false, excluir: false },
+                configuracoes: { visualizar: false, criar: false, editar: false, excluir: false },
+              },
+            },
+            integracoes: vendedorData.integracoes || [],
+          };
+          
+          setFormData(mappedData);
+          console.log('[SellerFormPage] Dados mapeados e definidos no formulário:', mappedData);
+        } else {
+          console.warn('[SellerFormPage] Nenhum dado retornado da API');
+        }
+      } catch (error: any) {
+        console.error('[SellerFormPage] Erro ao carregar dados do vendedor:', error);
+        toast.error(`Erro ao carregar dados do vendedor: ${error.message || 'Erro desconhecido'}`);
+      }
+    };
+
+    loadVendedorData();
+  }, [vendedorId, vendedor?.id, mode]);
 
   const statusConfig = {
     ativo: { label: "Ativo", variant: "default" as const },

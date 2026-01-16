@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Usuario, TipoUsuario } from '../types/user';
-import { api, getAuthToken, setAuthToken } from '../services/api';
+import { api, getAuthToken, setAuthToken, isTokenExpiringSoon, refreshAuthToken } from '../services/api';
 
 interface AuthContextType {
   usuario: Usuario | null;
@@ -45,6 +45,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     checkSession();
   }, []);
+
+  // Verificar periodicamente se o token está próximo de expirar e fazer refresh automático
+  useEffect(() => {
+    if (!usuario) return; // Só verificar se há usuário logado
+    
+    // Verificar a cada 2 minutos
+    const interval = setInterval(async () => {
+      if (isTokenExpiringSoon()) {
+        console.log('[AuthContext] Token próximo de expirar, fazendo refresh automático...');
+        const refreshed = await refreshAuthToken();
+        if (!refreshed) {
+          console.warn('[AuthContext] Não foi possível renovar o token, fazendo logout...');
+          logout();
+        } else {
+          console.log('[AuthContext] Token renovado com sucesso');
+        }
+      }
+    }, 2 * 60 * 1000); // 2 minutos
+    
+    return () => clearInterval(interval);
+  }, [usuario]);
 
   const getDefaultPermissoes = (tipo: TipoUsuario): string[] => {
     if (tipo === 'backoffice') {

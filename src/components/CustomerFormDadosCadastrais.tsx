@@ -129,15 +129,37 @@ export function CustomerFormDadosCadastrais({
     carregarSegmentos();
   }, []);
 
-  // Carregar bancos
+  // Carregar bancos da API BrasilAPI
   useEffect(() => {
     const carregarBancos = async () => {
       try {
+        console.log('[CUSTOMER-FORM] Buscando bancos da API BrasilAPI...');
         const response = await fetch('https://brasilapi.com.br/api/banks/v1');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
-        setMockBanks(data || []);
+        console.log('[CUSTOMER-FORM] Bancos recebidos:', data.length);
+        
+        // Transformar dados da API para o formato esperado
+        const banks = data
+          .filter((bank: any) => bank.code !== null && bank.code !== undefined) // Filtrar bancos sem código
+          .map((bank: any) => ({
+            codigo: String(bank.code).padStart(3, '0'), // Garantir 3 dígitos com zeros à esquerda
+            nome: bank.name,
+            nomeCompleto: `${String(bank.code).padStart(3, '0')} - ${bank.fullName}`,
+            ispb: bank.ispb,
+            fullName: bank.fullName,
+            code: bank.code, // Manter code original para compatibilidade
+          }))
+          .sort((a: any, b: any) => a.codigo.localeCompare(b.codigo)); // Ordenar por código
+        
+        console.log('[CUSTOMER-FORM] Bancos processados:', banks.length);
+        setMockBanks(banks);
       } catch (error) {
-        console.error('[BANCOS] Erro ao carregar:', error);
+        console.error('[CUSTOMER-FORM] Erro ao carregar bancos da API:', error);
         setMockBanks([]);
       }
     };

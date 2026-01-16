@@ -318,6 +318,7 @@ export function TeamManagement() {
   if (showSellerForm) {
     return (
       <SellerFormPage
+        vendedorId={selectedVendedor?.id}
         vendedor={selectedVendedor || undefined}
         onBack={handleBack}
         onSave={handleSaveVendedor}

@@ -216,10 +216,10 @@ BEGIN
 
     -- Verificar email único (exceto para o próprio usuário)
     IF EXISTS (
-      SELECT 1 FROM public.user
-      WHERE LOWER(email) = LOWER(p_email)
-      AND user_id != p_user_id
-      AND deleted_at IS NULL
+      SELECT 1 FROM public.user u
+      WHERE LOWER(u.email) = LOWER(p_email)
+      AND u.user_id != p_user_id
+      AND u.deleted_at IS NULL
     ) THEN
       RAISE EXCEPTION 'Email já cadastrado para outro usuário';
     END IF;

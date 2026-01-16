@@ -4,6 +4,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 }
 
 interface AuthenticatedUser {
@@ -14,12 +16,36 @@ interface AuthenticatedUser {
 }
 
 interface UpdateUserBody {
+  // Campos da tabela user
   nome?: string
   email?: string
   tipo?: 'backoffice' | 'vendedor'
   ref_user_role_id?: number
   user_login?: string
   ativo?: boolean
+  
+  // Campos da tabela dados_vendedor (quando tipo = 'vendedor')
+  iniciais?: string
+  cpf?: string
+  telefone?: string
+  dataAdmissao?: string
+  status?: 'ativo' | 'inativo' | 'excluido'
+  cnpj?: string
+  razaoSocial?: string
+  nomeFantasia?: string
+  inscricaoEstadual?: string
+  endereco?: {
+    cep?: string
+    logradouro?: string
+    numero?: string
+    complemento?: string
+    bairro?: string
+    uf?: string
+    municipio?: string
+  }
+  observacoesInternas?: string
+  dadosBancarios?: any
+  contatosAdicionais?: any[]
 }
 
 // Helper: Valida JWT (mesmo código da get-user-v2)
@@ -121,8 +147,13 @@ serve(async (req) => {
   const startTime = Date.now()
   console.log('[UPDATE-USER-V2] Request received:', { method: req.method, url: req.url, timestamp: new Date().toISOString() })
 
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    console.log('[UPDATE-USER-V2] OPTIONS request, returning CORS headers')
+    return new Response('ok', { 
+      status: 200,
+      headers: corsHeaders 
+    })
   }
 
   try {
@@ -172,11 +203,12 @@ serve(async (req) => {
     if (body.user_login !== undefined) sanitizedData.user_login = sanitizeInput(body.user_login).trim()
     if (body.ativo !== undefined) sanitizedData.ativo = body.ativo
 
-    console.log('[UPDATE-USER-V2] Step 5: Calling RPC function...', { p_user_id: userId, p_updated_by: user.id })
+    console.log('[UPDATE-USER-V2] Step 5: Calling RPC function update_user_v2...', { p_user_id: userId, p_updated_by: user.id })
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       global: { headers: { Authorization: req.headers.get('Authorization') || '' } },
     })
 
+    // Atualizar tabela user
     const { data: rpcData, error: rpcError } = await supabase.rpc('update_user_v2', {
       p_user_id: userId,
       p_nome: sanitizedData.nome,
@@ -189,15 +221,71 @@ serve(async (req) => {
     })
 
     if (rpcError) {
-      console.error('[UPDATE-USER-V2] RPC Error:', { message: rpcError.message, details: rpcError.details, code: rpcError.code })
+      console.error('[UPDATE-USER-V2] RPC Error (update_user_v2):', { message: rpcError.message, details: rpcError.details, code: rpcError.code })
       throw new Error(`Database operation failed: ${rpcError.message}`)
     }
 
-    console.log('[UPDATE-USER-V2] RPC call successful:', { dataLength: rpcData?.length || 0 })
+    console.log('[UPDATE-USER-V2] RPC call successful (update_user_v2):', { dataLength: rpcData?.length || 0 })
 
     if (!rpcData || rpcData.length === 0) {
       console.error('[UPDATE-USER-V2] ERROR: RPC returned empty data')
       throw new Error('User not found')
+    }
+
+    // Se há dados de vendedor e o usuário é do tipo vendedor, atualizar dados_vendedor
+    const hasVendedorData = body.iniciais !== undefined || body.cpf !== undefined || body.telefone !== undefined ||
+      body.dataAdmissao !== undefined || body.status !== undefined || body.cnpj !== undefined ||
+      body.razaoSocial !== undefined || body.nomeFantasia !== undefined || body.inscricaoEstadual !== undefined ||
+      body.endereco !== undefined || body.observacoesInternas !== undefined || body.dadosBancarios !== undefined ||
+      body.contatosAdicionais !== undefined;
+
+    if (hasVendedorData) {
+      console.log('[UPDATE-USER-V2] Step 6: Updating dados_vendedor...')
+      
+      // Preparar dados para dados_vendedor
+      const dadosVendedorParams: any = {
+        p_user_id: userId,
+        p_updated_by: user.id,
+      };
+
+      if (body.nome !== undefined) dadosVendedorParams.p_nome = sanitizeInput(body.nome).trim();
+      if (body.iniciais !== undefined) dadosVendedorParams.p_iniciais = sanitizeInput(body.iniciais).trim();
+      if (body.cpf !== undefined) dadosVendedorParams.p_cpf = sanitizeInput(body.cpf).replace(/\D/g, '');
+      if (body.email !== undefined) dadosVendedorParams.p_email = sanitizeInput(body.email).toLowerCase().trim();
+      if (body.telefone !== undefined) dadosVendedorParams.p_telefone = sanitizeInput(body.telefone).replace(/\D/g, '');
+      if (body.dataAdmissao !== undefined) dadosVendedorParams.p_data_admissao = body.dataAdmissao;
+      if (body.status !== undefined) dadosVendedorParams.p_status = body.status;
+      if (body.cnpj !== undefined) dadosVendedorParams.p_cnpj = sanitizeInput(body.cnpj).replace(/\D/g, '');
+      if (body.razaoSocial !== undefined) dadosVendedorParams.p_razao_social = sanitizeInput(body.razaoSocial).trim();
+      if (body.nomeFantasia !== undefined) dadosVendedorParams.p_nome_fantasia = sanitizeInput(body.nomeFantasia).trim();
+      if (body.inscricaoEstadual !== undefined) dadosVendedorParams.p_inscricao_estadual = sanitizeInput(body.inscricaoEstadual).trim();
+      if (body.endereco) {
+        if (body.endereco.cep !== undefined) dadosVendedorParams.p_cep = sanitizeInput(body.endereco.cep).replace(/\D/g, '');
+        if (body.endereco.logradouro !== undefined) dadosVendedorParams.p_logradouro = sanitizeInput(body.endereco.logradouro).trim();
+        if (body.endereco.numero !== undefined) dadosVendedorParams.p_numero = sanitizeInput(body.endereco.numero).trim();
+        if (body.endereco.complemento !== undefined) dadosVendedorParams.p_complemento = sanitizeInput(body.endereco.complemento).trim();
+        if (body.endereco.bairro !== undefined) dadosVendedorParams.p_bairro = sanitizeInput(body.endereco.bairro).trim();
+        if (body.endereco.cidade !== undefined) dadosVendedorParams.p_cidade = sanitizeInput(body.endereco.cidade).trim();
+        if (body.endereco.uf !== undefined) dadosVendedorParams.p_estado = sanitizeInput(body.endereco.uf).toUpperCase().trim();
+        if (body.endereco.municipio !== undefined) dadosVendedorParams.p_cidade = sanitizeInput(body.endereco.municipio).trim();
+      }
+      if (body.observacoesInternas !== undefined) dadosVendedorParams.p_observacoes_internas = sanitizeInput(body.observacoesInternas).trim();
+      if (body.dadosBancarios !== undefined) dadosVendedorParams.p_dados_bancarios = body.dadosBancarios;
+      if (body.contatosAdicionais !== undefined) dadosVendedorParams.p_contatos_adicionais = body.contatosAdicionais;
+
+      const { data: dadosVendedorData, error: dadosVendedorError } = await supabase.rpc('update_dados_vendedor_v2', dadosVendedorParams);
+
+      if (dadosVendedorError) {
+        console.error('[UPDATE-USER-V2] RPC Error (update_dados_vendedor_v2):', {
+          message: dadosVendedorError.message,
+          details: dadosVendedorError.details,
+          code: dadosVendedorError.code
+        });
+        // Não falhar completamente, apenas logar o erro
+        console.warn('[UPDATE-USER-V2] WARNING: Failed to update dados_vendedor, but user was updated');
+      } else {
+        console.log('[UPDATE-USER-V2] dados_vendedor updated successfully:', { dataLength: dadosVendedorData?.length || 0 });
+      }
     }
 
     const duration = Date.now() - startTime

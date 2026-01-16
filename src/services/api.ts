@@ -69,13 +69,30 @@ function getDefaultPermissoes(tipo: TipoUsuario): string[] {
 }
 
 let authToken: string | null = null;
+let refreshToken: string | null = null;
+let tokenExpiryTime: number | null = null;
 
-export const setAuthToken = (token: string | null) => {
+export const setAuthToken = (token: string | null, refresh?: string | null, expiresIn?: number) => {
   authToken = token;
   if (token) {
     localStorage.setItem('auth_token', token);
+    // Calcular tempo de expiração (geralmente 1 hora = 3600 segundos)
+    if (expiresIn) {
+      tokenExpiryTime = Date.now() + (expiresIn * 1000);
+      localStorage.setItem('auth_token_expiry', tokenExpiryTime.toString());
+    }
   } else {
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_token_expiry');
+    tokenExpiryTime = null;
+  }
+  
+  if (refresh) {
+    refreshToken = refresh;
+    localStorage.setItem('refresh_token', refresh);
+  } else if (!token) {
+    localStorage.removeItem('refresh_token');
+    refreshToken = null;
   }
 };
 
@@ -83,17 +100,94 @@ export const getAuthToken = () => {
   if (!authToken) {
     authToken = localStorage.getItem('auth_token');
   }
+  if (!refreshToken) {
+    refreshToken = localStorage.getItem('refresh_token');
+  }
+  if (!tokenExpiryTime) {
+    const expiry = localStorage.getItem('auth_token_expiry');
+    tokenExpiryTime = expiry ? parseInt(expiry, 10) : null;
+  }
   return authToken;
 };
 
-// Helper para chamadas às Edge Functions
+export const getRefreshToken = () => {
+  if (!refreshToken) {
+    refreshToken = localStorage.getItem('refresh_token');
+  }
+  return refreshToken;
+};
+
+// Verificar se o token está próximo de expirar (menos de 5 minutos)
+export const isTokenExpiringSoon = (): boolean => {
+  if (!tokenExpiryTime) {
+    const expiry = localStorage.getItem('auth_token_expiry');
+    if (!expiry) return true; // Se não tem expiração, considerar como expirado
+    tokenExpiryTime = parseInt(expiry, 10);
+  }
+  
+  const now = Date.now();
+  const timeUntilExpiry = tokenExpiryTime - now;
+  const fiveMinutes = 5 * 60 * 1000; // 5 minutos em milissegundos
+  
+  return timeUntilExpiry < fiveMinutes;
+};
+
+// Função para fazer refresh do token
+export const refreshAuthToken = async (): Promise<boolean> => {
+  const currentRefreshToken = getRefreshToken();
+  if (!currentRefreshToken) {
+    console.log('[AUTH] Nenhum refresh token disponível');
+    return false;
+  }
+  
+  try {
+    console.log('[AUTH] Fazendo refresh do token...');
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        refresh_token: currentRefreshToken,
+      }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('[AUTH] Erro ao fazer refresh:', data);
+      // Se o refresh token também expirou, limpar tudo
+      setAuthToken(null);
+      return false;
+    }
+    
+    // Atualizar tokens
+    setAuthToken(data.access_token, data.refresh_token, data.expires_in);
+    console.log('[AUTH] Token renovado com sucesso');
+    return true;
+  } catch (error) {
+    console.error('[AUTH] Erro ao fazer refresh do token:', error);
+    setAuthToken(null);
+    return false;
+  }
+};
+
+// Helper para chamadas às Edge Functions com retry automático em caso de token expirado
 async function callEdgeFunction(
   functionName: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
   body?: any,
   path?: string,
-  queryParams?: Record<string, any>
+  queryParams?: Record<string, any>,
+  retryOn401: boolean = true
 ): Promise<any> {
+  // Verificar se o token está próximo de expirar e fazer refresh preventivo
+  if (isTokenExpiringSoon()) {
+    console.log('[API] Token próximo de expirar, fazendo refresh preventivo...');
+    await refreshAuthToken();
+  }
+  
   const token = getAuthToken();
   let url = `${SUPABASE_URL}/functions/v1/${functionName}${path ? `/${path}` : ''}`;
   
@@ -119,18 +213,67 @@ async function callEdgeFunction(
     headers['Authorization'] = `Bearer ${token}`;
   }
   
-  const options: RequestInit = {
-    method,
-    headers,
-  };
-  
-  if (body && (method === 'POST' || method === 'PUT')) {
-    options.body = JSON.stringify(body);
-  }
-  
-  try {
+  const makeRequest = async (): Promise<any> => {
+    const currentToken = getAuthToken();
+    const currentHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON_KEY,
+    };
+    
+    if (currentToken) {
+      currentHeaders['Authorization'] = `Bearer ${currentToken}`;
+    }
+    
+    const options: RequestInit = {
+      method,
+      headers: currentHeaders,
+    };
+    
+    if (body && (method === 'POST' || method === 'PUT')) {
+      options.body = JSON.stringify(body);
+    }
+    
     const response = await fetch(url, options);
     const data = await response.json();
+    
+    // Se receber 401 e tiver retry habilitado, tentar refresh
+    if (response.status === 401 && retryOn401) {
+      console.log('[API] Token expirado (401), tentando refresh...');
+      const refreshed = await refreshAuthToken();
+      
+      if (refreshed) {
+        // Tentar novamente com o novo token
+        const newToken = getAuthToken();
+        if (newToken) {
+          currentHeaders['Authorization'] = `Bearer ${newToken}`;
+          const retryOptions: RequestInit = {
+            method,
+            headers: currentHeaders,
+          };
+          
+          if (body && (method === 'POST' || method === 'PUT')) {
+            retryOptions.body = JSON.stringify(body);
+          }
+          
+          const retryResponse = await fetch(url, retryOptions);
+          const retryData = await retryResponse.json();
+          
+          if (!retryResponse.ok) {
+            throw new Error(retryData.error || retryData.message || `HTTP ${retryResponse.status}: ${retryResponse.statusText}`);
+          }
+          
+          // Edge Functions retornam { success: true, data: {...} }
+          if (retryData.success && retryData.data) {
+            return retryData.data;
+          }
+          
+          return retryData.data || retryData;
+        }
+      }
+      
+      // Se não conseguiu fazer refresh, retornar erro 401
+      throw new Error(data.error || data.message || 'Token expirado. Faça login novamente.');
+    }
     
     if (!response.ok) {
       throw new Error(data.error || data.message || `HTTP ${response.status}: ${response.statusText}`);
@@ -143,6 +286,10 @@ async function callEdgeFunction(
     
     // Fallback para formato direto
     return data.data || data;
+  };
+  
+  try {
+    return await makeRequest();
   } catch (error) {
     console.error(`[API] Error calling ${functionName}:`, error);
     throw error;
@@ -322,7 +469,9 @@ export const api = {
         // 2. Criar registro na tabela user via Edge Function
         // IMPORTANTE: Passar o auth_user_id para garantir que user_id = auth.id
         const token = authData.access_token;
-        setAuthToken(token);
+        const refresh = authData.refresh_token;
+        const expiresIn = authData.expires_in || 3600; // Default 1 hora se não fornecido
+        setAuthToken(token, refresh, expiresIn);
         
         const userResponse = await callEdgeFunction('create-user-v2', 'POST', {
           email,
@@ -374,8 +523,11 @@ export const api = {
           throw new Error(data.error_description || data.error || 'Email ou senha inválidos');
         }
         
+        // Armazenar access_token, refresh_token e expires_in
         const token = data.access_token;
-        setAuthToken(token);
+        const refresh = data.refresh_token;
+        const expiresIn = data.expires_in || 3600; // Default 1 hora se não fornecido
+        setAuthToken(token, refresh, expiresIn);
         
         // Buscar dados do usuário via Edge Function
         const userResponse = await callEdgeFunction('get-user-v2', 'GET', undefined, data.user.id);
@@ -602,6 +754,107 @@ export const api = {
     // Caso especial para vendedores - buscar usuários tipo vendedor
     if (entity === 'vendedores') {
       try {
+        // Se um ID específico foi fornecido, buscar dados completos do vendedor
+        if (options?.params?.id) {
+          console.log('[API] Buscando vendedor completo via Edge Function get-vendedor-completo-v2...', options.params.id);
+          const response = await callEdgeFunction('get-vendedor-completo-v2', 'GET', undefined, options.params.id);
+          
+          console.log('[API] Dados completos do vendedor recebidos:', response);
+          
+          // Mapear dados da resposta para formato Seller
+          const dadosVendedor = response.dados_vendedor || {};
+          const seller: Seller = {
+            id: response.user_id,
+            nome: response.nome || '',
+            iniciais: dadosVendedor.iniciais || (response.nome ? (() => {
+              const parts = response.nome.trim().split(" ");
+              if (parts.length >= 2) {
+                return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+              }
+              return response.nome.substring(0, 2).toUpperCase();
+            })() : ''),
+            cpf: dadosVendedor.cpf || '',
+            email: response.email || '',
+            telefone: dadosVendedor.telefone || '',
+            dataAdmissao: dadosVendedor.data_admissao ? new Date(dadosVendedor.data_admissao).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            status: (dadosVendedor.status as 'ativo' | 'inativo' | 'excluido') || 'ativo',
+            acessoSistema: !!response.user_id,
+            emailAcesso: response.email || '',
+            usuarioId: response.user_id,
+            contatosAdicionais: Array.isArray(dadosVendedor.contatos_adicionais) ? dadosVendedor.contatos_adicionais : [],
+            cnpj: dadosVendedor.cnpj || '',
+            razaoSocial: dadosVendedor.razao_social || '',
+            nomeFantasia: dadosVendedor.nome_fantasia || '',
+            inscricaoEstadual: dadosVendedor.inscricao_estadual || '',
+            dadosBancarios: dadosVendedor.dados_bancarios && typeof dadosVendedor.dados_bancarios === 'object' 
+              ? dadosVendedor.dados_bancarios 
+              : {
+                  banco: '',
+                  agencia: '',
+                  digitoAgencia: '',
+                  tipoConta: 'corrente',
+                  numeroConta: '',
+                  digitoConta: '',
+                  nomeTitular: '',
+                  cpfCnpjTitular: '',
+                  tipoChavePix: 'cpf_cnpj',
+                  chavePix: '',
+                },
+            endereco: {
+              cep: dadosVendedor.cep || '',
+              logradouro: dadosVendedor.logradouro || '',
+              numero: dadosVendedor.numero || '',
+              complemento: dadosVendedor.complemento || '',
+              bairro: dadosVendedor.bairro || '',
+              uf: dadosVendedor.estado || '',
+              municipio: dadosVendedor.cidade || '',
+              enderecoEntregaDiferente: false,
+            },
+            observacoesInternas: dadosVendedor.observacoes_internas || '',
+            metasAnuais: [],
+            comissoes: {
+              regraAplicavel: dadosVendedor.aliquotafixa ? 'aliquota_fixa' : 'lista_preco',
+              aliquotaFixa: dadosVendedor.aliquotafixa ? parseFloat(dadosVendedor.aliquotafixa) : undefined,
+            },
+            usuario: {
+              usuarioCriado: !!response.user_id,
+              email: response.email || '',
+              conviteEnviado: false,
+              senhaDefinida: !response.first_login,
+              requisitosSeguranca: true,
+              permissoes: {
+                dashboard: { visualizar: true, criar: false, editar: false, excluir: false },
+                vendas: { visualizar: true, criar: true, editar: true, excluir: false },
+                pipeline: { visualizar: true, criar: true, editar: true, excluir: false },
+                clientes: { visualizar: true, criar: true, editar: true, excluir: false },
+                metas: { visualizar: true, criar: false, editar: false, excluir: false },
+                comissoes: { visualizar: true, criar: false, editar: false, excluir: false },
+                produtos: { visualizar: true, criar: false, editar: false, excluir: false },
+                relatorios: { visualizar: true, criar: false, editar: false, excluir: false },
+                equipe: { visualizar: false, criar: false, editar: false, excluir: false },
+                configuracoes: { visualizar: false, criar: false, editar: false, excluir: false },
+              },
+            },
+            integracoes: [],
+            vendas: {
+              total: 0,
+              mes: 0,
+              qtdFechamentos: 0,
+              ticketMedio: 0,
+              positivacao: 0,
+            },
+            performance: {
+              taxaConversao: 0,
+              tempoMedioFechamento: 0,
+              clientesAtivos: 0,
+            },
+            historico: [],
+          };
+          
+          return [seller];
+        }
+        
+        // Buscar lista de vendedores
         console.log('[API] Buscando vendedores via Edge Function list-users-v2...');
         const response = await callEdgeFunction('list-users-v2', 'GET', undefined, undefined, {
           tipo: 'vendedor',
@@ -621,10 +874,6 @@ export const api = {
           
           if (params.status) {
             filtered = filtered.filter(s => s.status === params.status);
-          }
-          
-          if (params.id) {
-            filtered = filtered.filter(s => s.id === params.id);
           }
           
           return filtered;
@@ -737,7 +986,7 @@ export const api = {
   create: async (entity: string, data: any) => {
     console.log(`[API] POST /${entity}:`, data);
     
-    // Caso especial para vendedores - criar usuário tipo vendedor
+    // Caso especial para vendedores - criar usuário tipo vendedor e dados_vendedor
     if (entity === 'vendedores') {
       try {
         console.log('[API] Criando vendedor via Edge Function create-user-v2...');
@@ -754,6 +1003,46 @@ export const api = {
         const createdUser = userResponse.user || userResponse;
         
         console.log('[API] Usuário vendedor criado:', createdUser.user_id);
+        
+        // Se há dados adicionais do vendedor, atualizar dados_vendedor
+        const hasVendedorData = data.iniciais !== undefined || data.cpf !== undefined || data.telefone !== undefined ||
+          data.dataAdmissao !== undefined || data.status !== undefined || data.cnpj !== undefined ||
+          data.razaoSocial !== undefined || data.nomeFantasia !== undefined || data.inscricaoEstadual !== undefined ||
+          data.endereco !== undefined || data.observacoesInternas !== undefined || data.dadosBancarios !== undefined ||
+          data.contatosAdicionais !== undefined;
+        
+        if (hasVendedorData) {
+          console.log('[API] Criando registro em dados_vendedor...');
+          
+          // Preparar dados para dados_vendedor
+          const dadosVendedorData: any = {
+            nome: data.nome || createdUser.nome,
+            email: data.email || createdUser.email,
+          };
+          
+          if (data.iniciais !== undefined) dadosVendedorData.iniciais = data.iniciais;
+          if (data.cpf !== undefined) dadosVendedorData.cpf = data.cpf;
+          if (data.telefone !== undefined) dadosVendedorData.telefone = data.telefone;
+          if (data.dataAdmissao !== undefined) dadosVendedorData.dataAdmissao = data.dataAdmissao;
+          if (data.status !== undefined) dadosVendedorData.status = data.status;
+          if (data.cnpj !== undefined) dadosVendedorData.cnpj = data.cnpj;
+          if (data.razaoSocial !== undefined) dadosVendedorData.razaoSocial = data.razaoSocial;
+          if (data.nomeFantasia !== undefined) dadosVendedorData.nomeFantasia = data.nomeFantasia;
+          if (data.inscricaoEstadual !== undefined) dadosVendedorData.inscricaoEstadual = data.inscricaoEstadual;
+          if (data.endereco !== undefined) dadosVendedorData.endereco = data.endereco;
+          if (data.observacoesInternas !== undefined) dadosVendedorData.observacoesInternas = data.observacoesInternas;
+          if (data.dadosBancarios !== undefined) dadosVendedorData.dadosBancarios = data.dadosBancarios;
+          if (data.contatosAdicionais !== undefined) dadosVendedorData.contatosAdicionais = data.contatosAdicionais;
+          
+          // Atualizar dados_vendedor usando update-user-v2 (que também atualiza dados_vendedor)
+          try {
+            await callEdgeFunction('update-user-v2', 'PUT', dadosVendedorData, createdUser.user_id);
+            console.log('[API] Registro dados_vendedor criado/atualizado');
+          } catch (dadosVendedorError) {
+            console.warn('[API] Aviso: Erro ao criar dados_vendedor, mas usuário foi criado:', dadosVendedorError);
+            // Não falhar completamente, apenas logar o aviso
+          }
+        }
         
         // Converter para formato Seller
         const seller = usuarioToSeller(createdUser);
@@ -807,13 +1096,15 @@ export const api = {
   update: async (entity: string, id: string, data: any) => {
     console.log(`[API] PUT /${entity}/${id}:`, data);
     
-    // Caso especial para vendedores - atualizar usuário
+    // Caso especial para vendedores - atualizar usuário e dados_vendedor
     if (entity === 'vendedores') {
       try {
         console.log('[API] Atualizando vendedor via Edge Function update-user-v2...');
         
-        // Preparar dados para atualização do usuário
+        // Preparar dados completos para atualização
         const userData: any = {};
+        
+        // Campos da tabela user
         if (data.nome !== undefined) userData.nome = data.nome;
         if (data.email !== undefined || data.emailAcesso !== undefined) {
           userData.email = data.email || data.emailAcesso;
@@ -821,6 +1112,27 @@ export const api = {
         if (data.status !== undefined) {
           userData.ativo = data.status === 'ativo';
         }
+        if (data.tipo !== undefined) userData.tipo = data.tipo;
+        
+        // Campos da tabela dados_vendedor
+        if (data.iniciais !== undefined) userData.iniciais = data.iniciais;
+        if (data.cpf !== undefined) userData.cpf = data.cpf;
+        if (data.telefone !== undefined) userData.telefone = data.telefone;
+        if (data.dataAdmissao !== undefined) userData.dataAdmissao = data.dataAdmissao;
+        if (data.status !== undefined) userData.status = data.status;
+        if (data.cnpj !== undefined) userData.cnpj = data.cnpj;
+        if (data.razaoSocial !== undefined) userData.razaoSocial = data.razaoSocial;
+        if (data.nomeFantasia !== undefined) userData.nomeFantasia = data.nomeFantasia;
+        if (data.inscricaoEstadual !== undefined) userData.inscricaoEstadual = data.inscricaoEstadual;
+        if (data.endereco !== undefined) userData.endereco = data.endereco;
+        if (data.observacoesInternas !== undefined) userData.observacoesInternas = data.observacoesInternas;
+        if (data.dadosBancarios !== undefined) userData.dadosBancarios = data.dadosBancarios;
+        if (data.contatosAdicionais !== undefined) userData.contatosAdicionais = data.contatosAdicionais;
+        
+        console.log('[API] Dados completos para atualização:', {
+          userFields: Object.keys(userData).filter(k => ['nome', 'email', 'tipo', 'ativo'].includes(k)),
+          vendedorFields: Object.keys(userData).filter(k => !['nome', 'email', 'tipo', 'ativo'].includes(k))
+        });
         
         const userResponse = await callEdgeFunction('update-user-v2', 'PUT', userData, id);
         const updatedUser = userResponse.user || userResponse;

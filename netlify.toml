@@ -1,0 +1,38 @@
+[build]
+  # Comando para instalar dependências
+  command = "npm install && npm run build"
+  
+  # Diretório onde o Vite gera os arquivos de build
+  publish = "build"
+  
+  # Variáveis de ambiente durante o build (opcional)
+  # Você pode definir essas variáveis no painel do Netlify
+  # [build.environment]
+  #   NODE_VERSION = "18"
+
+# Configurações de redirecionamento para SPA
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers de segurança (opcional, mas recomendado)
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Headers específicos para assets estáticos
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Headers para HTML
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
