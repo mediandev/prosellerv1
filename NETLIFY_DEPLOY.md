@@ -33,9 +33,11 @@ git push
 O Netlify detectará automaticamente as configurações do arquivo `netlify.toml`, mas você pode configurar manualmente:
 
 **Build settings:**
-- **Build command:** `npm install && npm run build`
+- **Build command:** `npm install --legacy-peer-deps && npm run build`
 - **Publish directory:** `build`
 - **Node version:** `18` (ou superior)
+
+**Nota:** O arquivo `netlify.toml` já está configurado para desabilitar o plugin do Next.js (este projeto usa Vite, não Next.js). Se você encontrar erros relacionados ao plugin do Next.js, verifique se a variável `NETLIFY_NEXT_PLUGIN_SKIP` está definida como `"true"` no `netlify.toml`.
 
 ### 4. Configurar Variáveis de Ambiente (Recomendado)
 
@@ -105,6 +107,16 @@ Se você encontrar erros como `ERESOLVE could not resolve` ou conflitos de peer 
 - O arquivo `netlify.toml` já está configurado para usar `--legacy-peer-deps`
 - Se o problema persistir, você pode adicionar a variável de ambiente `NPM_FLAGS` com valor `--legacy-peer-deps` no painel do Netlify
 - Certifique-se de que o `package-lock.json` está commitado no repositório
+
+### Erro do plugin Next.js (@netlify/plugin-nextjs)
+
+Se você encontrar erros relacionados ao plugin do Next.js:
+
+- **Causa:** O Netlify detectou automaticamente o plugin do Next.js, mas este projeto usa Vite, não Next.js
+- **Solução:** O arquivo `netlify.toml` já está configurado com `NETLIFY_NEXT_PLUGIN_SKIP = "true"` para desabilitar o plugin
+- **Alternativa:** Se o erro persistir, você pode remover o plugin manualmente no painel do Netlify:
+  - Vá em **Site settings** → **Build & deploy** → **Plugins** → **Installed plugins**
+  - Desinstale o plugin `@netlify/plugin-nextjs` se estiver instalado
 
 ### Rotas não funcionam
 
