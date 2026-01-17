@@ -947,6 +947,27 @@ export const api = {
       }
     }
     
+    // Caso especial para produtos - usar edge function com action
+    if (entity === 'produtos') {
+      try {
+        console.log('[API] Listando produtos via Edge Function produtos-v2...');
+        const response = await callEdgeFunction('produtos-v2', 'GET', undefined, undefined, { action: 'list' });
+        
+        // callEdgeFunction já retorna data.data (o array), mas pode retornar o objeto completo em alguns casos
+        // Verificar se response é um array diretamente ou se tem a propriedade data
+        const produtos = Array.isArray(response) ? response : (response?.data || []);
+        
+        console.log(`[API] ${produtos.length} produtos encontrados`);
+        
+        return produtos;
+      } catch (error) {
+        console.error('[API] Erro ao listar produtos, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        return getStoredData(entityConfig.storageKey, entityConfig.data);
+      }
+    }
+    
     // Caso especial para vendas
     if (entity === 'vendas') {
       const vendas = carregarVendasDoLocalStorage();
@@ -1017,6 +1038,30 @@ export const api = {
   getById: async (entity: string, id: string) => {
     console.log(`[API] GET /${entity}/${id} (mockado)`);
     
+    // Caso especial para produtos - usar edge function com action
+    if (entity === 'produtos') {
+      try {
+        console.log('[API] Buscando produto via Edge Function produtos-v2...');
+        const response = await callEdgeFunction('produtos-v2', 'POST', {
+          action: 'get',
+          id,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao buscar produto, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        const data = getStoredData(entityConfig.storageKey, entityConfig.data);
+        const item = data.find((item: any) => item.id === id);
+        if (!item) {
+          throw new Error(`Produto ${id} não encontrado`);
+        }
+        return item;
+      }
+    }
+    
     // Caso especial para vendas
     if (entity === 'vendas') {
       const vendas = carregarVendasDoLocalStorage();
@@ -1079,6 +1124,34 @@ export const api = {
       } catch (error) {
         console.error('[API] Erro ao criar condição de pagamento:', error);
         throw error;
+      }
+    }
+    
+    // Caso especial para produtos - usar edge function com action
+    if (entity === 'produtos') {
+      try {
+        console.log('[API] Criando produto via Edge Function produtos-v2...');
+        const response = await callEdgeFunction('produtos-v2', 'POST', {
+          action: 'create',
+          ...data,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao criar produto, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
+        const novoItem = {
+          ...data,
+          id: data.id || `${entity}-${Date.now()}`,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        storedData.push(novoItem);
+        saveStoredData(entityConfig.storageKey, storedData);
+        return novoItem;
       }
     }
     
@@ -1219,6 +1292,38 @@ export const api = {
   
   update: async (entity: string, id: string, data: any) => {
     console.log(`[API] PUT /${entity}/${id}:`, data);
+    
+    // Caso especial para produtos - usar edge function com action
+    if (entity === 'produtos') {
+      try {
+        console.log('[API] Atualizando produto via Edge Function produtos-v2...');
+        const response = await callEdgeFunction('produtos-v2', 'PUT', {
+          action: 'update',
+          id,
+          ...data,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar produto, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
+        const index = storedData.findIndex((item: any) => item.id === id);
+        if (index === -1) {
+          throw new Error(`Produto ${id} não encontrado`);
+        }
+        storedData[index] = {
+          ...storedData[index],
+          ...data,
+          id,
+          updatedAt: new Date(),
+        };
+        saveStoredData(entityConfig.storageKey, storedData);
+        return storedData[index];
+      }
+    }
     
     // Caso especial para formas de pagamento - usar edge function com action
     if (entity === 'formas-pagamento') {
@@ -1382,6 +1487,21 @@ export const api = {
         return { success: true };
       } catch (error) {
         console.error('[API] Erro ao excluir condição de pagamento:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para produtos - usar edge function com action
+    if (entity === 'produtos') {
+      try {
+        console.log('[API] Excluindo produto via Edge Function produtos-v2...');
+        await callEdgeFunction('produtos-v2', 'DELETE', {
+          action: 'delete',
+          id: entityId,
+        });
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir produto:', error);
         throw error;
       }
     }
