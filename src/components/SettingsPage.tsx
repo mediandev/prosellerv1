@@ -1100,11 +1100,9 @@ export function SettingsPage({
       case "listas-preco":
         return (
           <PriceListManagement
-            onNovaListaPreco={onNovaListaPreco}
-            onEditarListaPreco={onEditarListaPreco}
-            onVisualizarListaPreco={onVisualizarListaPreco}
-            listas={listas}
-            onListasChange={onListasChange}
+            onNovaLista={onNovaListaPreco}
+            onEditarLista={onEditarListaPreco}
+            onVisualizarLista={onVisualizarListaPreco}
           />
         );
 

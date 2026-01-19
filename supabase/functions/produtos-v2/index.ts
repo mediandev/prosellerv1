@@ -133,164 +133,43 @@ serve(async (req) => {
 
     switch (action) {
       case 'list': {
-        console.log('[PRODUTOS-V2] Listing produtos...')
+        console.log('[PRODUTOS-V2] Listing produtos via RPC...')
 
-        // Buscar produtos
-        const { data: produtos, error: produtosError } = await supabase
-          .from('produto')
-          .select(`
-            produto_id,
-            foto,
-            descricao,
-            codigo_sku,
-            gtin,
-            marca,
-            tipo_id,
-            ncm,
-            cest,
-            unidade_id,
-            peso_liquido,
-            peso_bruto,
-            situacao,
-            ativo,
-            disponivel,
-            created_at,
-            updated_at,
-            nome_marca,
-            nome_tipo_produto,
-            sigla_unidade
-          `)
-          .is('deleted_at', null)
-          .order('created_at', { ascending: false })
+        // Chamar função RPC que retorna produtos formatados
+        const { data: produtos, error: rpcError } = await supabase
+          .rpc('list_produtos_v2')
 
-        if (produtosError) {
-          console.error('[PRODUTOS-V2] Query Error:', produtosError)
-          throw new Error(`Database operation failed: ${produtosError.message}`)
+        if (rpcError) {
+          console.error('[PRODUTOS-V2] RPC Error:', rpcError)
+          throw new Error(`Database operation failed: ${rpcError.message}`)
         }
 
-        // Buscar marcas relacionadas
-        const marcaIds = [...new Set((produtos || [])
-          .map((p: any) => p.marca)
-          .filter((id: any) => id !== null && id !== undefined))]
-
-        let marcas: any[] = []
-        if (marcaIds.length > 0) {
-          const { data, error } = await supabase
-            .from('marcas')
-            .select('id, nome')
-            .in('id', marcaIds)
-
-          if (error) {
-            console.error('[PRODUTOS-V2] Error fetching marcas:', error)
-          } else {
-            marcas = data || []
-          }
-        }
-
-        // Buscar tipos de produto relacionados
-        const tipoIds = [...new Set((produtos || [])
-          .map((p: any) => p.tipo_id)
-          .filter((id: any) => id !== null && id !== undefined))]
-
-        let tipos: any[] = []
-        if (tipoIds.length > 0) {
-          const { data, error } = await supabase
-            .from('ref_tipo_produto')
-            .select('id, nome')
-            .in('id', tipoIds)
-
-          if (error) {
-            console.error('[PRODUTOS-V2] Error fetching tipos:', error)
-          } else {
-            tipos = data || []
-          }
-        }
-
-        // Buscar unidades de medida relacionadas
-        const unidadeIds = [...new Set((produtos || [])
-          .map((p: any) => p.unidade_id)
-          .filter((id: any) => id !== null && id !== undefined))]
-
-        let unidades: any[] = []
-        if (unidadeIds.length > 0) {
-          const { data, error } = await supabase
-            .from('ref_unidade_medida')
-            .select('id, sigla')
-            .in('id', unidadeIds)
-
-          if (error) {
-            console.error('[PRODUTOS-V2] Error fetching unidades:', error)
-          } else {
-            unidades = data || []
-          }
-        }
-
-        // Criar mapas para lookup rápido (priorizar dados das tabelas auxiliares)
-        const marcaMap = new Map(
-          (marcas || []).map((m: any) => [
-            Number(m.id),
-            m.nome || ''
-          ])
-        )
-        const tipoMap = new Map(
-          (tipos || []).map((t: any) => [
-            Number(t.id),
-            t.nome || ''
-          ])
-        )
-        const unidadeMap = new Map(
-          (unidades || []).map((u: any) => [
-            Number(u.id),
-            u.sigla || ''
-          ])
-        )
-
-        // Formatar os dados para o frontend
-        // Priorizar dados das tabelas auxiliares sobre campos desnormalizados
-        const formattedProdutos = (produtos || []).map((prod: any) => {
-          const marcaId = prod.marca ? Number(prod.marca) : null
-          const tipoId = prod.tipo_id ? Number(prod.tipo_id) : null
-          const unidadeId = prod.unidade_id ? Number(prod.unidade_id) : null
-
-          // Usar dados das tabelas auxiliares quando disponíveis, senão usar campos desnormalizados
-          const nomeMarca = marcaId && marcaMap.has(marcaId) 
-            ? marcaMap.get(marcaId) 
-            : (prod.nome_marca || '')
-          
-          const nomeTipo = tipoId && tipoMap.has(tipoId)
-            ? tipoMap.get(tipoId)
-            : (prod.nome_tipo_produto || '')
-          
-          const siglaUnidade = unidadeId && unidadeMap.has(unidadeId)
-            ? unidadeMap.get(unidadeId)
-            : (prod.sigla_unidade || '')
-
-          return {
-            id: String(prod.produto_id),
-            foto: prod.foto || undefined,
-            descricao: prod.descricao || '',
-            codigoSku: prod.codigo_sku || '',
-            codigoEan: prod.gtin || undefined,
-            marcaId: marcaId ? String(marcaId) : '',
-            nomeMarca: nomeMarca,
-            tipoProdutoId: tipoId ? String(tipoId) : '',
-            nomeTipoProduto: nomeTipo,
-            ncm: prod.ncm || undefined,
-            cest: prod.cest || undefined,
-            unidadeId: unidadeId ? String(unidadeId) : '',
-            siglaUnidade: siglaUnidade,
-            pesoLiquido: prod.peso_liquido || 0,
-            pesoBruto: prod.peso_bruto || 0,
-            situacao: prod.situacao || 'Ativo',
-            ativo: prod.ativo !== false,
-            disponivel: prod.disponivel !== false,
-            createdAt: prod.created_at ? new Date(prod.created_at).toISOString() : new Date().toISOString(),
-            updatedAt: prod.updated_at ? new Date(prod.updated_at).toISOString() : new Date().toISOString(),
-          }
-        })
+        // Formatar os dados para o frontend (a RPC já retorna formatado, apenas ajustar tipos)
+        const formattedProdutos = (produtos || []).map((prod: any) => ({
+          id: String(prod.produto_id),
+          foto: prod.foto || undefined,
+          descricao: prod.descricao || '',
+          codigoSku: prod.codigo_sku || '',
+          codigoEan: prod.codigo_ean || undefined,
+          marcaId: prod.marca_id ? String(prod.marca_id) : '',
+          nomeMarca: prod.nome_marca || '',
+          tipoProdutoId: prod.tipo_produto_id ? String(prod.tipo_produto_id) : '',
+          nomeTipoProduto: prod.nome_tipo_produto || '',
+          ncm: prod.ncm || undefined,
+          cest: prod.cest || undefined,
+          unidadeId: prod.unidade_id ? String(prod.unidade_id) : '',
+          siglaUnidade: prod.sigla_unidade || '',
+          pesoLiquido: prod.peso_liquido || 0,
+          pesoBruto: prod.peso_bruto || 0,
+          situacao: prod.situacao || 'Ativo',
+          ativo: prod.ativo !== false,
+          disponivel: prod.disponivel !== false,
+          createdAt: prod.created_at ? new Date(prod.created_at).toISOString() : new Date().toISOString(),
+          updatedAt: prod.updated_at ? new Date(prod.updated_at).toISOString() : new Date().toISOString(),
+        }))
 
         const duration = Date.now() - startTime
-        console.log(`[PRODUTOS-V2] SUCCESS: Listed ${formattedProdutos.length} produtos (${duration}ms)`)
+        console.log(`[PRODUTOS-V2] SUCCESS: Listed ${formattedProdutos.length} produtos via RPC (${duration}ms)`)
 
         return createHttpSuccessResponse(
           formattedProdutos,
@@ -300,102 +179,44 @@ serve(async (req) => {
       }
 
       case 'get': {
-        console.log('[PRODUTOS-V2] Getting produto...', body)
+        console.log('[PRODUTOS-V2] Getting produto via RPC...', body)
 
         if (!body.id) {
           throw new Error('ID é obrigatório')
         }
 
-        const { data: produto, error: produtoError } = await supabase
-          .from('produto')
-          .select(`
-            produto_id,
-            foto,
-            descricao,
-            codigo_sku,
-            gtin,
-            marca,
-            tipo_id,
-            ncm,
-            cest,
-            unidade_id,
-            peso_liquido,
-            peso_bruto,
-            situacao,
-            ativo,
-            disponivel,
-            created_at,
-            updated_at,
-            nome_marca,
-            nome_tipo_produto,
-            sigla_unidade
-          `)
-          .eq('produto_id', parseInt(body.id))
-          .is('deleted_at', null)
-          .single()
+        // Chamar função RPC que retorna produto formatado
+        const { data: produtos, error: rpcError } = await supabase
+          .rpc('get_produto_v2', {
+            p_produto_id: parseInt(body.id)
+          })
 
-        if (produtoError) {
-          console.error('[PRODUTOS-V2] Query Error:', produtoError)
-          throw new Error(`Database operation failed: ${produtoError.message}`)
+        if (rpcError) {
+          console.error('[PRODUTOS-V2] RPC Error:', rpcError)
+          throw new Error(`Database operation failed: ${rpcError.message}`)
         }
 
-        if (!produto) {
+        if (!produtos || produtos.length === 0) {
           throw new Error('Produto não encontrado')
         }
 
-        // Buscar dados das tabelas auxiliares (priorizar sobre campos desnormalizados)
-        let nomeMarca = ''
-        if (produto.marca) {
-          const { data: marca } = await supabase
-            .from('marcas')
-            .select('nome')
-            .eq('id', produto.marca)
-            .single()
-          nomeMarca = marca?.nome || produto.nome_marca || ''
-        } else {
-          nomeMarca = produto.nome_marca || ''
-        }
+        const produto = produtos[0]
 
-        // Buscar nome do tipo (priorizar tabela auxiliar)
-        let nomeTipo = ''
-        if (produto.tipo_id) {
-          const { data: tipo } = await supabase
-            .from('ref_tipo_produto')
-            .select('nome')
-            .eq('id', produto.tipo_id)
-            .single()
-          nomeTipo = tipo?.nome || produto.nome_tipo_produto || ''
-        } else {
-          nomeTipo = produto.nome_tipo_produto || ''
-        }
-
-        // Buscar sigla da unidade (priorizar tabela auxiliar)
-        let siglaUnidade = ''
-        if (produto.unidade_id) {
-          const { data: unidade } = await supabase
-            .from('ref_unidade_medida')
-            .select('sigla')
-            .eq('id', produto.unidade_id)
-            .single()
-          siglaUnidade = unidade?.sigla || produto.sigla_unidade || ''
-        } else {
-          siglaUnidade = produto.sigla_unidade || ''
-        }
-
+        // Formatar os dados para o frontend (a RPC já retorna formatado, apenas ajustar tipos)
         const formattedProduto = {
           id: String(produto.produto_id),
           foto: produto.foto || undefined,
           descricao: produto.descricao || '',
           codigoSku: produto.codigo_sku || '',
-          codigoEan: produto.gtin || undefined,
-          marcaId: produto.marca ? String(produto.marca) : '',
-          nomeMarca: nomeMarca,
-          tipoProdutoId: produto.tipo_id ? String(produto.tipo_id) : '',
-          nomeTipoProduto: nomeTipo,
+          codigoEan: produto.codigo_ean || undefined,
+          marcaId: produto.marca_id ? String(produto.marca_id) : '',
+          nomeMarca: produto.nome_marca || '',
+          tipoProdutoId: produto.tipo_produto_id ? String(produto.tipo_produto_id) : '',
+          nomeTipoProduto: produto.nome_tipo_produto || '',
           ncm: produto.ncm || undefined,
           cest: produto.cest || undefined,
           unidadeId: produto.unidade_id ? String(produto.unidade_id) : '',
-          siglaUnidade: siglaUnidade,
+          siglaUnidade: produto.sigla_unidade || '',
           pesoLiquido: produto.peso_liquido || 0,
           pesoBruto: produto.peso_bruto || 0,
           situacao: produto.situacao || 'Ativo',
@@ -406,7 +227,7 @@ serve(async (req) => {
         }
 
         const duration = Date.now() - startTime
-        console.log(`[PRODUTOS-V2] SUCCESS: Got produto ${formattedProduto.id} (${duration}ms)`)
+        console.log(`[PRODUTOS-V2] SUCCESS: Got produto ${formattedProduto.id} via RPC (${duration}ms)`)
 
         return createHttpSuccessResponse(
           formattedProduto,
@@ -439,10 +260,10 @@ serve(async (req) => {
           throw new Error('Unidade de medida é obrigatória')
         }
 
-        // Buscar nome da marca
+        // Buscar nome da marca (campo 'descricao' na tabela marcas)
         const { data: marca } = await supabase
           .from('marcas')
-          .select('nome')
+          .select('descricao')
           .eq('id', parseInt(body.marcaId))
           .single()
 
@@ -482,7 +303,7 @@ serve(async (req) => {
           situacao: body.situacao || 'Ativo',
           ativo: body.situacao === 'Ativo',
           disponivel: body.disponivel !== false,
-          nome_marca: marca.nome,
+          nome_marca: marca.descricao,
           nome_tipo_produto: tipo.nome,
           sigla_unidade: unidade?.sigla || '',
         }
@@ -509,7 +330,7 @@ serve(async (req) => {
           codigoSku: novoProduto.codigo_sku || '',
           codigoEan: novoProduto.gtin || undefined,
           marcaId: novoProduto.marca ? String(novoProduto.marca) : '',
-          nomeMarca: novoProduto.nome_marca || marca.nome,
+          nomeMarca: novoProduto.nome_marca || marca.descricao,
           tipoProdutoId: novoProduto.tipo_id ? String(novoProduto.tipo_id) : '',
           nomeTipoProduto: novoProduto.nome_tipo_produto || tipo.nome,
           ncm: novoProduto.ncm || undefined,
@@ -558,14 +379,14 @@ serve(async (req) => {
 
         if (body.marcaId !== undefined) {
           updateData.marca = parseInt(body.marcaId)
-          // Buscar nome da marca
+          // Buscar nome da marca (campo 'descricao' na tabela marcas)
           const { data: marca } = await supabase
             .from('marcas')
-            .select('nome')
+            .select('descricao')
             .eq('id', parseInt(body.marcaId))
             .single()
           if (marca) {
-            updateData.nome_marca = marca.nome
+            updateData.nome_marca = marca.descricao
           }
         }
 

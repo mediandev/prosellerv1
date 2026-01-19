@@ -64,24 +64,107 @@ export function PriceListFormPage({ lista, modo, onVoltar, onSalvar }: PriceList
     }
   };
 
+  // Carregar detalhes completos da lista quando tiver ID (editar/visualizar)
   useEffect(() => {
-    if (lista) {
-      setNome(lista.nome);
-      setTipoComissao(lista.tipoComissao);
-      setPercentualFixo(lista.percentualFixo?.toString() || '10');
-      setFaixasDesconto(
-        lista.faixasDesconto || [
-          {
-            id: '1',
-            descontoMin: 0,
-            descontoMax: 10,
-            percentualComissao: 10,
-          },
-        ]
-      );
-      setProdutosPreco(lista.produtos);
-    }
-  }, [lista]);
+    const carregarListaCompleta = async () => {
+      if (lista?.id && (modo === 'editar' || modo === 'visualizar')) {
+        try {
+          console.log('[LISTA-PRECO-FORM] Carregando detalhes completos da lista:', lista.id);
+          const listaCompleta = await api.getById('listas-preco', lista.id);
+          console.log('[LISTA-PRECO-FORM] Lista completa carregada:', listaCompleta);
+          
+          // Atualizar estado com dados completos
+          setNome(listaCompleta.nome || lista.nome);
+          setTipoComissao(listaCompleta.tipoComissao || lista.tipoComissao);
+          setPercentualFixo(listaCompleta.percentualFixo?.toString() || '10');
+          
+          // Formatar produtos para o formato esperado
+          const produtosFormatados = (listaCompleta.produtos || []).map((p: any) => ({
+            produtoId: String(p.produtoId || p.produto_id || p.id),
+            preco: parseFloat(p.preco || 0),
+            desconto: parseFloat(p.desconto || 0),
+          }));
+          console.log('[LISTA-PRECO-FORM] Produtos formatados:', produtosFormatados);
+          setProdutosPreco(produtosFormatados);
+          
+          // Formatar faixas de desconto
+          const faixasFormatadas = (listaCompleta.faixasDesconto || []).map((f: any, index: number) => {
+            const descontoMax = f.descontoMax !== null && f.descontoMax !== undefined 
+              ? parseFloat(f.descontoMax) 
+              : (f.descontoMaximo !== null && f.descontoMaximo !== undefined 
+                ? parseFloat(f.descontoMaximo) 
+                : null);
+            
+            return {
+              id: String(f.id || `faixa-${index + 1}`),
+              descontoMin: parseFloat(f.descontoMin || f.descontoMinimo || 0),
+              descontoMax: descontoMax,
+              percentualComissao: parseFloat(f.percentualComissao || f.percentual_comissao || 0),
+            };
+          });
+          console.log('[LISTA-PRECO-FORM] Faixas formatadas:', faixasFormatadas);
+          
+          if (faixasFormatadas.length > 0) {
+            setFaixasDesconto(faixasFormatadas);
+          } else if (listaCompleta.tipoComissao === 'conforme_desconto') {
+            // Se for conforme desconto mas não tem faixas, criar uma padrão
+            setFaixasDesconto([
+              {
+                id: '1',
+                descontoMin: 0,
+                descontoMax: 10,
+                percentualComissao: 10,
+              },
+            ]);
+          }
+          
+          console.log('[LISTA-PRECO-FORM] Dados atualizados:', {
+            produtos: produtosFormatados.length,
+            faixas: faixasFormatadas.length,
+          });
+        } catch (error) {
+          console.error('[LISTA-PRECO-FORM] Erro ao carregar lista completa:', error);
+          toast.error('Erro ao carregar detalhes da lista de preço.');
+          
+          // Usar dados básicos da prop como fallback
+          if (lista) {
+            setNome(lista.nome);
+            setTipoComissao(lista.tipoComissao);
+            setPercentualFixo(lista.percentualFixo?.toString() || '10');
+            setProdutosPreco(lista.produtos || []);
+            setFaixasDesconto(
+              lista.faixasDesconto || [
+                {
+                  id: '1',
+                  descontoMin: 0,
+                  descontoMax: 10,
+                  percentualComissao: 10,
+                },
+              ]
+            );
+          }
+        }
+      } else if (lista) {
+        // Se não tem ID (criar) ou não precisa carregar, usar dados da prop
+        setNome(lista.nome);
+        setTipoComissao(lista.tipoComissao);
+        setPercentualFixo(lista.percentualFixo?.toString() || '10');
+        setFaixasDesconto(
+          lista.faixasDesconto || [
+            {
+              id: '1',
+              descontoMin: 0,
+              descontoMax: 10,
+              percentualComissao: 10,
+            },
+          ]
+        );
+        setProdutosPreco(lista.produtos || []);
+      }
+    };
+
+    carregarListaCompleta();
+  }, [lista, modo]);
 
   const handleSave = () => {
     if (!nome.trim()) {

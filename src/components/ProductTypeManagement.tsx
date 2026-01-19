@@ -120,21 +120,16 @@ export function ProductTypeManagement() {
 
     try {
       if (editingTipo) {
-        const tipoAtualizado = { 
-          ...editingTipo, 
-          ...formData, 
-          updatedAt: new Date() 
-        };
-        await api.update('tiposProduto', editingTipo.id, tipoAtualizado);
+        await api.update('tiposProduto', editingTipo.id, {
+          nome: formData.nome.trim(),
+          descricao: formData.descricao.trim() || undefined,
+        });
         toast.success("Tipo de produto atualizado com sucesso!");
       } else {
-        const newTipo: TipoProduto = {
-          id: crypto.randomUUID(),
-          ...formData,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        await api.create('tiposProduto', newTipo);
+        await api.create('tiposProduto', {
+          nome: formData.nome.trim(),
+          descricao: formData.descricao.trim() || undefined,
+        });
         toast.success("Tipo de produto cadastrado com sucesso!");
       }
 
@@ -157,6 +152,8 @@ export function ProductTypeManagement() {
       } catch (error: any) {
         console.error('[TIPOS-PRODUTO] Erro ao excluir tipo:', error);
         toast.error(`Erro ao excluir tipo: ${error.message || 'Erro desconhecido'}`);
+        setDeleteDialogOpen(false);
+        setTipoToDelete(null);
       }
     }
   };
@@ -221,20 +218,6 @@ export function ProductTypeManagement() {
                       placeholder="Descreva o tipo de produto..."
                       rows={3}
                     />
-                  </div>
-                  <div className="flex items-center gap-4 pt-2">
-                    <input
-                      type="checkbox"
-                      id="ativo"
-                      checked={formData.ativo}
-                      onChange={(e) =>
-                        setFormData({ ...formData, ativo: e.target.checked })
-                      }
-                      className="h-4 w-4"
-                    />
-                    <Label htmlFor="ativo" className="cursor-pointer">
-                      Tipo ativo
-                    </Label>
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">

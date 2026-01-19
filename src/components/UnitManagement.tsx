@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
-import { mockUnidadesMedida } from "../data/mockUnidadesMedida";
 import { UnidadeMedida } from "../types/produto";
 import { Plus, Edit, Trash2, Search, Ruler, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { toast } from "sonner@2.0.3";
@@ -38,11 +37,12 @@ export function UnitManagement() {
     try {
       console.log('[UNIDADES] Carregando unidades da API...');
       const unidadesAPI = await api.get('unidadesMedida');
-      setUnidades(unidadesAPI);
-      console.log('[UNIDADES] Unidades carregadas:', unidadesAPI.length);
+      setUnidades(Array.isArray(unidadesAPI) ? unidadesAPI : []);
+      console.log('[UNIDADES] Unidades carregadas:', unidadesAPI?.length || 0);
     } catch (error) {
-      console.error('[UNIDADES] Erro ao carregar unidades, usando mock:', error);
-      setUnidades(mockUnidadesMedida);
+      console.error('[UNIDADES] Erro ao carregar unidades:', error);
+      setUnidades([]);
+      toast.error('Erro ao carregar unidades de medida da API.');
     } finally {
       setLoading(false);
     }
@@ -119,21 +119,17 @@ export function UnitManagement() {
 
     try {
       if (editingUnidade) {
-        const unidadeAtualizada = { 
-          ...editingUnidade, 
-          ...formData, 
-          updatedAt: new Date() 
-        };
-        await api.update('unidadesMedida', editingUnidade.id, unidadeAtualizada);
+        await api.update('unidadesMedida', editingUnidade.id, {
+          sigla: formData.sigla.trim().toUpperCase(),
+          descricao: formData.descricao.trim(),
+          ativo: formData.ativo,
+        });
         toast.success("Unidade de medida atualizada com sucesso!");
       } else {
-        const newUnidade: UnidadeMedida = {
-          id: crypto.randomUUID(),
-          ...formData,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        await api.create('unidadesMedida', newUnidade);
+        await api.create('unidadesMedida', {
+          sigla: formData.sigla.trim().toUpperCase(),
+          descricao: formData.descricao.trim(),
+        });
         toast.success("Unidade de medida cadastrada com sucesso!");
       }
 
@@ -156,6 +152,8 @@ export function UnitManagement() {
       } catch (error: any) {
         console.error('[UNIDADES] Erro ao excluir unidade:', error);
         toast.error(`Erro ao excluir unidade: ${error.message || 'Erro desconhecido'}`);
+        setDeleteDialogOpen(false);
+        setUnidadeToDelete(null);
       }
     }
   };

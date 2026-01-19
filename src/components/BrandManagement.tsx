@@ -116,21 +116,14 @@ export function BrandManagement() {
 
     try {
       if (editingMarca) {
-        const marcaAtualizada = { 
-          ...editingMarca, 
-          ...formData, 
-          updatedAt: new Date() 
-        };
-        await api.update('marcas', editingMarca.id, marcaAtualizada);
+        await api.update('marcas', editingMarca.id, {
+          nome: formData.nome.trim(),
+        });
         toast.success("Marca atualizada com sucesso!");
       } else {
-        const newMarca: Marca = {
-          id: crypto.randomUUID(),
-          ...formData,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        await api.create('marcas', newMarca);
+        await api.create('marcas', {
+          nome: formData.nome.trim(),
+        });
         toast.success("Marca cadastrada com sucesso!");
       }
 
@@ -153,6 +146,8 @@ export function BrandManagement() {
       } catch (error: any) {
         console.error('[MARCAS] Erro ao excluir marca:', error);
         toast.error(`Erro ao excluir marca: ${error.message || 'Erro desconhecido'}`);
+        setDeleteDialogOpen(false);
+        setMarcaToDelete(null);
       }
     }
   };
@@ -205,20 +200,6 @@ export function BrandManagement() {
                       }
                       placeholder="Ex: Dell, Samsung, LG..."
                     />
-                  </div>
-                  <div className="flex items-center gap-4 pt-2">
-                    <input
-                      type="checkbox"
-                      id="ativo"
-                      checked={formData.ativo}
-                      onChange={(e) =>
-                        setFormData({ ...formData, ativo: e.target.checked })
-                      }
-                      className="h-4 w-4"
-                    />
-                    <Label htmlFor="ativo" className="cursor-pointer">
-                      Marca ativa
-                    </Label>
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">

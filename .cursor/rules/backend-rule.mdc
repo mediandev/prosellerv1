@@ -53,6 +53,51 @@ Tabelas com RLS (Camada de Dados)
 6. **Rate Limiting** - Controlar taxa de requisições
 7. **Logging e Métricas** - Registrar operações e performance
 
+### Regras Obrigatórias
+
+#### 1. SEMPRE usar Funções RPC
+- **NUNCA** faça queries diretas nas tabelas dentro de Edge Functions
+- **SEMPRE** crie funções RPC para operações no banco de dados
+- Edge Functions devem apenas orquestrar chamadas RPC
+- RPCs encapsulam toda a lógica de negócio e queries complexas
+
+#### 2. SEMPRE usar Logs Detalhados
+- Use a função `logDetailed()` para todos os logs importantes
+- Logs devem incluir: timestamp, level (INFO/WARN/ERROR), message, e dados relevantes
+- Log todas as chamadas RPC com duração
+- Log todos os erros com stack trace
+- Log início e fim de cada ação importante
+
+```typescript
+// Helper: Log detalhado
+function logDetailed(level: 'INFO' | 'WARN' | 'ERROR', message: string, data?: any) {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    level,
+    message,
+    ...(data && { data }),
+  }
+  console.log(JSON.stringify(logEntry))
+}
+
+// Exemplo de uso:
+logDetailed('INFO', '[FUNCTION-NAME] Executing action via RPC...', {
+  action: 'create',
+  userId: user.id,
+  dataKeys: Object.keys(body),
+})
+
+const rpcStartTime = Date.now()
+const { data: rpcData, error: rpcError } = await supabase.rpc('function_name', params)
+const rpcDuration = Date.now() - rpcStartTime
+
+logDetailed('INFO', '[FUNCTION-NAME] RPC call completed', {
+  duration: `${rpcDuration}ms`,
+  hasError: !!rpcError,
+  dataType: typeof rpcData,
+})
+```
+
 ### Template Padrão de Edge Function
 
 ```typescript

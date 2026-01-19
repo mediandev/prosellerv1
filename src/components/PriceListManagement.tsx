@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, DollarSign, Percent, TrendingUp, Eye } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -13,19 +13,36 @@ interface PriceListManagementProps {
   onNovaLista?: () => void;
   onEditarLista?: (listaId: string) => void;
   onVisualizarLista?: (listaId: string) => void;
-  listas?: ListaPreco[];
-  onListasChange?: (listas: ListaPreco[]) => void;
 }
 
 export function PriceListManagement({ 
   onNovaLista, 
   onEditarLista, 
   onVisualizarLista,
-  listas: listasExternas,
-  onListasChange,
 }: PriceListManagementProps) {
-  const listas = listasExternas || [];
-  const setListas = onListasChange || (() => {});
+  const [listas, setListas] = useState<ListaPreco[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Carregar listas
+  useEffect(() => {
+    carregarListas();
+  }, []);
+
+  const carregarListas = async () => {
+    try {
+      setLoading(true);
+      console.log('[PRICE-LIST] Carregando listas de preço da API...');
+      const listasAPI = await api.get('listas-preco');
+      setListas(Array.isArray(listasAPI) ? listasAPI : []);
+      console.log('[PRICE-LIST] Listas carregadas:', listasAPI?.length || 0);
+    } catch (error) {
+      console.error('[PRICE-LIST] Erro ao carregar listas:', error);
+      setListas([]);
+      toast.error('Erro ao carregar listas de preço da API.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     open: boolean;
@@ -52,13 +69,13 @@ export function PriceListManagement({
     if (!deleteConfirm.id) return;
 
     try {
-      await api.delete('listasPreco', deleteConfirm.id);
-      setListas(listas.filter((l) => l.id !== deleteConfirm.id));
+      await api.delete('listas-preco', deleteConfirm.id);
       toast.success(`Lista de preço "${deleteConfirm.name}" excluída com sucesso!`);
-    } catch (error) {
+      setDeleteConfirm({ open: false, id: null, name: null });
+      await carregarListas(); // Recarregar após exclusão
+    } catch (error: any) {
       console.error('[PRICE-LIST] Erro ao excluir lista:', error);
-      toast.error('Erro ao excluir lista de preço');
-    } finally {
+      toast.error(error.message || 'Erro ao excluir lista de preço');
       setDeleteConfirm({ open: false, id: null, name: null });
     }
   };
@@ -96,7 +113,13 @@ export function PriceListManagement({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {listas.length === 0 ? (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      Carregando listas de preço...
+                    </TableCell>
+                  </TableRow>
+                ) : listas.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                       Nenhuma lista de preço cadastrada
@@ -113,7 +136,7 @@ export function PriceListManagement({
                       </TableCell>
                       <TableCell>
                         <span className="text-muted-foreground">
-                          {lista.produtos.length} produto(s)
+                          {lista.totalProdutos || lista.produtos?.length || 0} produto(s)
                         </span>
                       </TableCell>
                       <TableCell>
@@ -128,10 +151,10 @@ export function PriceListManagement({
                             <span>{lista.percentualFixo}%</span>
                           </div>
                         )}
-                        {lista.tipoComissao === 'conforme_desconto' && lista.faixasDesconto && (
+                        {lista.tipoComissao === 'conforme_desconto' && (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <TrendingUp className="h-4 w-4" />
-                            <span>{lista.faixasDesconto.length} faixa(s)</span>
+                            <span>{lista.totalFaixas || lista.faixasDesconto?.length || 0} faixa(s)</span>
                           </div>
                         )}
                       </TableCell>

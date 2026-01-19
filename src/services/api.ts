@@ -73,6 +73,9 @@ let authToken: string | null = null;
 let refreshToken: string | null = null;
 let tokenExpiryTime: number | null = null;
 
+// Cache e controle de chamadas para listas de preço
+let listasPrecoLoadingPromise: Promise<any> | null = null;
+
 export const setAuthToken = (token: string | null, refresh?: string | null, expiresIn?: number) => {
   authToken = token;
   if (token) {
@@ -183,9 +186,15 @@ async function callEdgeFunction(
   queryParams?: Record<string, any>,
   retryOn401: boolean = true
 ): Promise<any> {
+  console.log(`[EDGE-FUNCTION] 🔵 Iniciando chamada à Edge Function: ${functionName}`);
+  console.log(`[EDGE-FUNCTION] 📋 Método: ${method}`);
+  if (body) {
+    console.log(`[EDGE-FUNCTION] 📦 Body:`, body);
+  }
+  
   // Verificar se o token está próximo de expirar e fazer refresh preventivo
   if (isTokenExpiringSoon()) {
-    console.log('[API] Token próximo de expirar, fazendo refresh preventivo...');
+    console.log('[EDGE-FUNCTION] Token próximo de expirar, fazendo refresh preventivo...');
     await refreshAuthToken();
   }
   
@@ -204,6 +213,9 @@ async function callEdgeFunction(
       url += `?${params.toString()}`;
     }
   }
+  
+  console.log(`[EDGE-FUNCTION] 🌐 URL: ${url}`);
+  console.log(`[EDGE-FUNCTION] 🔑 Token presente: ${token ? 'Sim' : 'Não'}`);
   
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -234,8 +246,15 @@ async function callEdgeFunction(
       options.body = JSON.stringify(body);
     }
     
+    console.log(`[EDGE-FUNCTION] 📡 Fazendo requisição ${method} para ${url}...`);
+    const startTime = Date.now();
     const response = await fetch(url, options);
+    const duration = Date.now() - startTime;
+    console.log(`[EDGE-FUNCTION] ⏱️  Tempo de resposta: ${duration}ms`);
+    console.log(`[EDGE-FUNCTION] 📊 Status: ${response.status} ${response.statusText}`);
+    
     const data = await response.json();
+    console.log(`[EDGE-FUNCTION] ✅ Resposta recebida:`, data);
     
     // Se receber 401 e tiver retry habilitado, tentar refresh
     if (response.status === 401 && retryOn401) {
@@ -265,34 +284,43 @@ async function callEdgeFunction(
           
           // Edge Functions retornam { success: true, data: {...} }
           if (retryData.success && retryData.data) {
+            console.log(`[EDGE-FUNCTION] ✅ Retorno após retry (401):`, retryData.data);
             return retryData.data;
           }
           
+          console.log(`[EDGE-FUNCTION] ✅ Retorno após retry (401):`, retryData);
           return retryData.data || retryData;
         }
       }
       
       // Se não conseguiu fazer refresh, retornar erro 401
+      console.error(`[EDGE-FUNCTION] ❌ Erro 401: Token expirado`);
       throw new Error(data.error || data.message || 'Token expirado. Faça login novamente.');
     }
     
     if (!response.ok) {
+      console.error(`[EDGE-FUNCTION] ❌ Erro na resposta:`, data);
       throw new Error(data.error || data.message || `HTTP ${response.status}: ${response.statusText}`);
     }
     
     // Edge Functions retornam { success: true, data: {...} }
     if (data.success && data.data) {
+      console.log(`[EDGE-FUNCTION] ✅ Retorno com sucesso:`, data.data);
       return data.data;
     }
     
     // Fallback para formato direto
-    return data.data || data;
+    console.log(`[EDGE-FUNCTION] ✅ Retorno:`, data);
+    const result = data.data || data;
+    console.log(`[EDGE-FUNCTION] 🎉 Chamada à ${functionName} concluída com sucesso!`);
+    return result;
   };
   
   try {
-    return await makeRequest();
+    const result = await makeRequest();
+    return result;
   } catch (error) {
-    console.error(`[API] Error calling ${functionName}:`, error);
+    console.error(`[EDGE-FUNCTION] ❌ Erro ao chamar ${functionName}:`, error);
     throw error;
   }
 }
@@ -423,6 +451,7 @@ function usuarioToSeller(user: any): Seller {
 }
 
 // Mapeamento de entidades para dados mock
+
 const entityMap: Record<string, { data: any[], storageKey: string }> = {
   'clientes': { data: mockClientes, storageKey: 'mockClientes' },
   'vendedores': { data: mockSellers, storageKey: 'mockVendedores' },
@@ -889,6 +918,107 @@ export const api = {
       }
     }
     
+    // Caso especial para listas de preço - usar edge function com action
+    if (entity === 'listas-preco' || entity === 'listasPreco') {
+      try {
+        console.log('[API] ===== INICIANDO BUSCA DE LISTAS DE PREÇO =====');
+        
+        // Se já há uma chamada em andamento, aguardar ela
+        if (listasPrecoLoadingPromise) {
+          console.log('[API] ⏳ Aguardando chamada de listas de preço em andamento...');
+          const result = await listasPrecoLoadingPromise;
+          console.log('[API] ✅ Retornando resultado da chamada em andamento:', result.length);
+          return result;
+        }
+        
+        // Criar promise única para evitar múltiplas chamadas simultâneas
+        console.log('[API] 🚀 Criando nova chamada à Edge Function listas-preco-v2...');
+        listasPrecoLoadingPromise = (async () => {
+          try {
+            console.log('[API] 📞 CHAMANDO Edge Function: listas-preco-v2 com action: list');
+            console.log('[API] 📡 URL:', `${SUPABASE_URL}/functions/v1/listas-preco-v2`);
+            const response = await callEdgeFunction('listas-preco-v2', 'POST', { action: 'list' });
+            console.log('[API] ✅ Resposta recebida da Edge Function (tipo):', typeof response, 'É array?', Array.isArray(response));
+            console.log('[API] ✅ Resposta recebida da Edge Function (conteúdo):', JSON.stringify(response).substring(0, 500));
+            
+            // callEdgeFunction já extrai data.data se existir, mas vamos tratar ambos os casos
+            let listas: any[] = [];
+            if (Array.isArray(response)) {
+              // Se já veio como array (callEdgeFunction extraiu data.data), usar diretamente
+              listas = response;
+              console.log('[API] ✅ Resposta é array, usando diretamente. Tamanho:', listas.length);
+            } else if (response && typeof response === 'object') {
+              // Se veio como objeto, tentar extrair o array
+              if (Array.isArray(response.data)) {
+                listas = response.data;
+                console.log('[API] ✅ Extraído array de response.data. Tamanho:', listas.length);
+              } else if (response.success && Array.isArray(response.data)) {
+                listas = response.data;
+                console.log('[API] ✅ Extraído array de response.data (com success). Tamanho:', listas.length);
+              } else {
+                console.warn('[API] ⚠️ Formato de resposta inesperado:', response);
+                console.warn('[API] ⚠️ response.data existe?', !!response.data, 'É array?', Array.isArray(response.data));
+                console.warn('[API] ⚠️ response.success?', response.success);
+                listas = [];
+              }
+            } else {
+              console.warn('[API] ⚠️ Resposta não é array nem objeto:', typeof response, response);
+              listas = [];
+            }
+            
+            console.log('[API] 📊 Listas recebidas (após tratamento):', listas.length);
+            if (listas.length > 0) {
+              console.log('[API] 📋 Primeira lista (exemplo):', listas[0]);
+            } else {
+              console.warn('[API] ⚠️ Nenhuma lista encontrada após tratamento!');
+            }
+            
+            // Formatar para o frontend - apenas dados básicos para listagem
+            const formattedListas = listas.map((lista: any) => {
+              // A Edge Function já formata os dados, mas vamos garantir compatibilidade
+              return {
+                id: String(lista.id),
+                nome: lista.nome || '',
+                produtos: [], // Não carregar produtos na listagem - será carregado no get individual
+                tipoComissao: lista.tipoComissao || lista.tipo_comissao || 'fixa',
+                percentualFixo: lista.percentualFixo || (lista.tipoComissao === 'fixa' ? 10 : undefined),
+                faixasDesconto: [], // Não carregar faixas na listagem - será carregado no get individual
+                totalProdutos: lista.totalProdutos || lista.total_produtos || 0,
+                totalFaixas: lista.totalFaixas || lista.total_faixas_comissao || 0,
+                ativo: lista.ativo !== false,
+                createdAt: lista.createdAt ? new Date(lista.createdAt) : (lista.created_at ? new Date(lista.created_at) : new Date()),
+                updatedAt: lista.updatedAt ? new Date(lista.updatedAt) : (lista.updated_at ? new Date(lista.updated_at) : new Date()),
+              };
+            });
+            
+            console.log('[API] ✨ Listas formatadas:', formattedListas.length);
+            if (formattedListas.length > 0) {
+              console.log('[API] 📋 Primeira lista formatada (exemplo):', formattedListas[0]);
+            } else {
+              console.warn('[API] ⚠️ Nenhuma lista formatada!');
+            }
+            
+            return formattedListas;
+          } catch (error) {
+            console.error('[API] ❌ ERRO ao chamar Edge Function:', error);
+            throw error;
+          } finally {
+            // Limpar promise após completar
+            listasPrecoLoadingPromise = null;
+            console.log('[API] ===== FINALIZANDO BUSCA DE LISTAS DE PREÇO =====');
+          }
+        })();
+        
+        return await listasPrecoLoadingPromise;
+      } catch (error) {
+        listasPrecoLoadingPromise = null; // Limpar em caso de erro
+        console.error('[API] Erro ao buscar listas de preço, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap['listas-preco'];
+        return getStoredData(entityConfig.storageKey, entityConfig.data);
+      }
+    }
+    
     // Caso especial para formas de pagamento - usar edge function com action
     if (entity === 'formas-pagamento') {
       try {
@@ -941,6 +1071,66 @@ export const api = {
         }));
       } catch (error) {
         console.error('[API] Erro ao buscar condições de pagamento, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        return getStoredData(entityConfig.storageKey, entityConfig.data);
+      }
+    }
+    
+    // Caso especial para marcas - usar edge function com action
+    if (entity === 'marcas') {
+      try {
+        console.log('[API] Listando marcas via Edge Function marcas-v2...');
+        const response = await callEdgeFunction('marcas-v2', 'GET', undefined, undefined, { action: 'list' });
+        
+        // callEdgeFunction já retorna data.data (o array)
+        const marcas = Array.isArray(response) ? response : (response?.data || []);
+        
+        console.log(`[API] ${marcas.length} marcas encontradas`);
+        
+        return marcas;
+      } catch (error) {
+        console.error('[API] Erro ao listar marcas, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        return getStoredData(entityConfig.storageKey, entityConfig.data);
+      }
+    }
+    
+    // Caso especial para tipos de produto - usar edge function com action
+    if (entity === 'tiposProduto') {
+      try {
+        console.log('[API] Listando tipos de produto via Edge Function tipos-produto-v2...');
+        const response = await callEdgeFunction('tipos-produto-v2', 'GET', undefined, undefined, { action: 'list' });
+        
+        // callEdgeFunction já retorna data.data (o array)
+        const tipos = Array.isArray(response) ? response : (response?.data || []);
+        
+        console.log(`[API] ${tipos.length} tipos de produto encontrados`);
+        
+        return tipos;
+      } catch (error) {
+        console.error('[API] Erro ao listar tipos de produto, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        return getStoredData(entityConfig.storageKey, entityConfig.data);
+      }
+    }
+    
+    // Caso especial para unidades de medida - usar edge function com action
+    if (entity === 'unidadesMedida') {
+      try {
+        console.log('[API] Listando unidades de medida via Edge Function unidades-medida-v2...');
+        const response = await callEdgeFunction('unidades-medida-v2', 'GET', undefined, undefined, { action: 'list' });
+        
+        // callEdgeFunction já retorna data.data (o array)
+        const unidades = Array.isArray(response) ? response : (response?.data || []);
+        
+        console.log(`[API] ${unidades.length} unidades de medida encontradas`);
+        
+        return unidades;
+      } catch (error) {
+        console.error('[API] Erro ao listar unidades de medida, usando mock:', error);
         // Fallback para mock em caso de erro
         const entityConfig = entityMap[entity];
         return getStoredData(entityConfig.storageKey, entityConfig.data);
@@ -1038,6 +1228,38 @@ export const api = {
   getById: async (entity: string, id: string) => {
     console.log(`[API] GET /${entity}/${id} (mockado)`);
     
+    // Caso especial para listas de preço - usar edge function com action get
+    if (entity === 'listas-preco' || entity === 'listasPreco') {
+      try {
+        console.log('[API] Buscando lista de preço individual via Edge Function listas-preco-v2...', id);
+        const response = await callEdgeFunction('listas-preco-v2', 'POST', {
+          action: 'get',
+          id,
+        });
+        
+        console.log('[API] ✅ Resposta da lista de preço individual:', response);
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        const lista = response.data || response;
+        
+        // Formatar para o frontend
+        return {
+          id: String(lista.id),
+          nome: lista.nome || '',
+          produtos: lista.produtos || [],
+          tipoComissao: lista.tipoComissao || 'fixa',
+          percentualFixo: lista.percentualFixo,
+          faixasDesconto: lista.faixasDesconto || [],
+          ativo: lista.ativo !== false,
+          createdAt: lista.createdAt ? new Date(lista.createdAt) : new Date(),
+          updatedAt: lista.updatedAt ? new Date(lista.updatedAt) : new Date(),
+        };
+      } catch (error) {
+        console.error('[API] Erro ao buscar lista de preço individual:', error);
+        throw error;
+      }
+    }
+    
     // Caso especial para produtos - usar edge function com action
     if (entity === 'produtos') {
       try {
@@ -1127,6 +1349,59 @@ export const api = {
       }
     }
     
+    // Caso especial para marcas - usar edge function com action
+    if (entity === 'marcas') {
+      try {
+        console.log('[API] Criando marca via Edge Function marcas-v2...');
+        const response = await callEdgeFunction('marcas-v2', 'POST', {
+          action: 'create',
+          nome: data.nome,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao criar marca:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para tipos de produto - usar edge function com action
+    if (entity === 'tiposProduto') {
+      try {
+        console.log('[API] Criando tipo de produto via Edge Function tipos-produto-v2...');
+        const response = await callEdgeFunction('tipos-produto-v2', 'POST', {
+          action: 'create',
+          nome: data.nome,
+          descricao: data.descricao,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao criar tipo de produto:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para unidades de medida - usar edge function com action
+    if (entity === 'unidadesMedida') {
+      try {
+        console.log('[API] Criando unidade de medida via Edge Function unidades-medida-v2...');
+        const response = await callEdgeFunction('unidades-medida-v2', 'POST', {
+          action: 'create',
+          sigla: data.sigla,
+          descricao: data.descricao,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao criar unidade de medida:', error);
+        throw error;
+      }
+    }
+    
     // Caso especial para produtos - usar edge function com action
     if (entity === 'produtos') {
       try {
@@ -1152,6 +1427,39 @@ export const api = {
         storedData.push(novoItem);
         saveStoredData(entityConfig.storageKey, storedData);
         return novoItem;
+      }
+    }
+    
+    // Caso especial para listas de preço - usar edge function com action
+    if (entity === 'listas-preco' || entity === 'listasPreco') {
+      try {
+        console.log('[API] Criando lista de preço via Edge Function listas-preco-v2...');
+        const response = await callEdgeFunction('listas-preco-v2', 'POST', {
+          action: 'create',
+          ...data,
+        });
+        
+        // Limpar promise para permitir nova busca
+        listasPrecoLoadingPromise = null;
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        const lista = response.data || response;
+        
+        // Formatar para o frontend
+        return {
+          id: String(lista.id),
+          nome: lista.nome || '',
+          produtos: lista.produtos || [],
+          tipoComissao: lista.tipoComissao || 'fixa',
+          percentualFixo: lista.percentualFixo,
+          faixasDesconto: lista.faixasDesconto || [],
+          ativo: lista.ativo !== false,
+          createdAt: lista.createdAt ? new Date(lista.createdAt) : new Date(),
+          updatedAt: lista.updatedAt ? new Date(lista.updatedAt) : new Date(),
+        };
+      } catch (error) {
+        console.error('[API] Erro ao criar lista de preço:', error);
+        throw error;
       }
     }
     
@@ -1292,6 +1600,97 @@ export const api = {
   
   update: async (entity: string, id: string, data: any) => {
     console.log(`[API] PUT /${entity}/${id}:`, data);
+    
+    // Caso especial para marcas - usar edge function com action
+    if (entity === 'marcas') {
+      try {
+        console.log('[API] Atualizando marca via Edge Function marcas-v2...');
+        const response = await callEdgeFunction('marcas-v2', 'POST', {
+          action: 'update',
+          id,
+          nome: data.nome,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar marca:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para tipos de produto - usar edge function com action
+    if (entity === 'tiposProduto') {
+      try {
+        console.log('[API] Atualizando tipo de produto via Edge Function tipos-produto-v2...');
+        const response = await callEdgeFunction('tipos-produto-v2', 'POST', {
+          action: 'update',
+          id,
+          nome: data.nome,
+          descricao: data.descricao,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar tipo de produto:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para unidades de medida - usar edge function com action
+    if (entity === 'unidadesMedida') {
+      try {
+        console.log('[API] Atualizando unidade de medida via Edge Function unidades-medida-v2...');
+        const response = await callEdgeFunction('unidades-medida-v2', 'POST', {
+          action: 'update',
+          id,
+          sigla: data.sigla,
+          descricao: data.descricao,
+          ativo: data.ativo,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar unidade de medida:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para listas de preço - usar edge function com action
+    if (entity === 'listas-preco' || entity === 'listasPreco') {
+      try {
+        console.log('[API] Atualizando lista de preço via Edge Function listas-preco-v2...');
+        const response = await callEdgeFunction('listas-preco-v2', 'POST', {
+          action: 'update',
+          id,
+          ...data,
+        });
+        
+        // Limpar promise para permitir nova busca
+        listasPrecoLoadingPromise = null;
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        const lista = response.data || response;
+        
+        // Formatar para o frontend
+        return {
+          id: String(lista.id),
+          nome: lista.nome || '',
+          produtos: lista.produtos || [],
+          tipoComissao: lista.tipoComissao || 'fixa',
+          percentualFixo: lista.percentualFixo,
+          faixasDesconto: lista.faixasDesconto || [],
+          ativo: lista.ativo !== false,
+          createdAt: lista.createdAt ? new Date(lista.createdAt) : new Date(),
+          updatedAt: lista.updatedAt ? new Date(lista.updatedAt) : new Date(),
+        };
+      } catch (error) {
+        console.error('[API] Erro ao atualizar lista de preço:', error);
+        throw error;
+      }
+    }
     
     // Caso especial para produtos - usar edge function com action
     if (entity === 'produtos') {
@@ -1487,6 +1886,70 @@ export const api = {
         return { success: true };
       } catch (error) {
         console.error('[API] Erro ao excluir condição de pagamento:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para marcas - usar edge function com action
+    if (entity === 'marcas') {
+      try {
+        console.log('[API] Excluindo marca via Edge Function marcas-v2...');
+        await callEdgeFunction('marcas-v2', 'POST', {
+          action: 'delete',
+          id: entityId,
+        });
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir marca:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para tipos de produto - usar edge function com action
+    if (entity === 'tiposProduto') {
+      try {
+        console.log('[API] Excluindo tipo de produto via Edge Function tipos-produto-v2...');
+        await callEdgeFunction('tipos-produto-v2', 'POST', {
+          action: 'delete',
+          id: entityId,
+        });
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir tipo de produto:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para unidades de medida - usar edge function com action
+    if (entity === 'unidadesMedida') {
+      try {
+        console.log('[API] Excluindo unidade de medida via Edge Function unidades-medida-v2...');
+        await callEdgeFunction('unidades-medida-v2', 'POST', {
+          action: 'delete',
+          id: entityId,
+        });
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir unidade de medida:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para listas de preço - usar edge function com action
+    if (entity === 'listas-preco' || entity === 'listasPreco') {
+      try {
+        console.log('[API] Excluindo lista de preço via Edge Function listas-preco-v2...');
+        await callEdgeFunction('listas-preco-v2', 'POST', {
+          action: 'delete',
+          id: entityId,
+        });
+        
+        // Limpar promise para permitir nova busca
+        listasPrecoLoadingPromise = null;
+        
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir lista de preço:', error);
         throw error;
       }
     }
