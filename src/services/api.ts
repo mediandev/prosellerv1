@@ -918,6 +918,42 @@ export const api = {
       }
     }
     
+    // Caso especial para clientes - usar edge function com action
+    if (entity === 'clientes') {
+      try {
+        console.log('[API] ===== INICIANDO BUSCA DE CLIENTES =====');
+        console.log('[API] 📞 CHAMANDO Edge Function: clientes-v2 com action: list');
+        const response = await callEdgeFunction('clientes-v2', 'POST', { action: 'list' });
+        console.log('[API] ✅ Resposta recebida da Edge Function:', response);
+
+        // A resposta pode vir como objeto { success: true, data: [...] } ou diretamente como array
+        let clientes: any[] = [];
+        if (Array.isArray(response)) {
+          clientes = response;
+        } else if (response && response.data && Array.isArray(response.data)) {
+          clientes = response.data;
+        } else if (response && response.success && Array.isArray(response.data)) {
+          clientes = response.data;
+        } else {
+          console.warn('[API] ⚠️ Formato de resposta inesperado:', response);
+          clientes = [];
+        }
+
+        console.log('[API] 📊 Clientes recebidos:', clientes.length);
+        if (clientes.length > 0) {
+          console.log('[API] 📋 Primeiro cliente (exemplo):', clientes[0]);
+        }
+        console.log('[API] ===== FINALIZANDO BUSCA DE CLIENTES =====');
+        
+        return clientes;
+      } catch (error) {
+        console.error('[API] Erro ao buscar clientes:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        return getStoredData(entityConfig.storageKey, entityConfig.data);
+      }
+    }
+    
     // Caso especial para listas de preço - usar edge function com action
     if (entity === 'listas-preco' || entity === 'listasPreco') {
       try {
