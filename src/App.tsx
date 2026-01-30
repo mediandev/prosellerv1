@@ -582,28 +582,18 @@ function AppContent() {
     setSelectedProductId(undefined);
   };
 
-  const handleSalvarProduto = async (produto: Produto) => {
-    try {
-      const isEditing = selectedProductId != null && selectedProductId !== '';
-
-      if (isEditing) {
-        // Editar: usar sempre o id da rota para evitar duplicação (lista pode não estar em sync)
-        const idToUpdate = produto.id || selectedProductId;
-        await api.update('produtos', idToUpdate, produto);
-      } else {
-        // Criar novo produto
-        const created = await api.create('produtos', produto) as Produto;
-        if (created?.id) {
-          setProdutos((prev) => [...prev, created]);
-        }
-      }
-
-      setProdutosListRefreshKey((k) => k + 1);
-      handleVoltarListaProdutos();
-    } catch (error: any) {
-      console.error('[APP] Erro ao salvar produto:', error);
-      toast.error(`Erro ao salvar produto: ${error.message || 'Erro desconhecido'}`);
+  const handleSalvarProduto = (produto: Produto) => {
+    // A API já foi chamada pelo ProductFormPage (salvarProduto). Aqui só atualizamos
+    // o estado local e forçamos o refresh da lista para exibir o novo/atualizado produto.
+    if (produto?.id) {
+      setProdutos((prev) => {
+        const idx = prev.findIndex((p) => p.id === produto.id);
+        if (idx >= 0) return prev.map((p, i) => (i === idx ? produto : p));
+        return [...prev, produto];
+      });
     }
+    setProdutosListRefreshKey((k) => k + 1);
+    handleVoltarListaProdutos();
   };
 
   // Handlers para navegação de relatórios
