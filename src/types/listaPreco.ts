@@ -19,6 +19,10 @@ export interface ListaPreco {
   tipoComissao: TipoComissao;
   percentualFixo?: number; // usado quando tipoComissao = 'fixa'
   faixasDesconto?: FaixaDesconto[]; // usado quando tipoComissao = 'conforme_desconto'
+  /** Total de produtos na lista (vindo da API, pode divergir de produtos.length) */
+  totalProdutos?: number;
+  /** Total de faixas de desconto (vindo da API) */
+  totalFaixas?: number;
   ativo: boolean;
   createdAt: Date;
   updatedAt: Date;

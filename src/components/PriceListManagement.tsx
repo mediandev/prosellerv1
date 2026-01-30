@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, DollarSign, Percent, TrendingUp, Eye } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -10,22 +10,42 @@ import { ListaPreco } from '../types/listaPreco';
 import { api } from '../services/api';
 
 interface PriceListManagementProps {
-  onNovaLista?: () => void;
-  onEditarLista?: (listaId: string) => void;
-  onVisualizarLista?: (listaId: string) => void;
+  onNovaListaPreco?: () => void;
+  onEditarListaPreco?: (listaId: string) => void;
+  onVisualizarListaPreco?: (listaId: string) => void;
   listas?: ListaPreco[];
   onListasChange?: (listas: ListaPreco[]) => void;
 }
 
-export function PriceListManagement({ 
-  onNovaLista, 
-  onEditarLista, 
-  onVisualizarLista,
+export function PriceListManagement({
+  onNovaListaPreco,
+  onEditarListaPreco,
+  onVisualizarListaPreco,
   listas: listasExternas,
   onListasChange,
 }: PriceListManagementProps) {
   const listas = listasExternas || [];
   const setListas = onListasChange || (() => {});
+
+  // Chamar a edge function ao abrir a página (Listas de Preço) para ter dados atualizados
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api.get('listas-preco');
+        if (!cancelled && onListasChange) {
+          onListasChange(Array.isArray(data) ? data : []);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          console.error('[PRICE-LIST] Erro ao carregar listas:', e);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onListasChange]);
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     open: boolean;
@@ -52,7 +72,7 @@ export function PriceListManagement({
     if (!deleteConfirm.id) return;
 
     try {
-      await api.delete('listasPreco', deleteConfirm.id);
+      await api.delete('listas-preco', deleteConfirm.id);
       setListas(listas.filter((l) => l.id !== deleteConfirm.id));
       toast.success(`Lista de preço "${deleteConfirm.name}" excluída com sucesso!`);
     } catch (error) {
@@ -77,7 +97,7 @@ export function PriceListManagement({
                 Gerencie as tabelas de preço e regras de comissionamento
               </CardDescription>
             </div>
-            <Button onClick={onNovaLista}>
+            <Button onClick={onNovaListaPreco}>
               <Plus className="h-4 w-4 mr-2" />
               Nova Lista de Preço
             </Button>
@@ -113,7 +133,7 @@ export function PriceListManagement({
                       </TableCell>
                       <TableCell>
                         <span className="text-muted-foreground">
-                          {lista.produtos.length} produto(s)
+                          {lista.totalProdutos ?? (lista.produtos ?? []).length} produto(s)
                         </span>
                       </TableCell>
                       <TableCell>
@@ -128,10 +148,10 @@ export function PriceListManagement({
                             <span>{lista.percentualFixo}%</span>
                           </div>
                         )}
-                        {lista.tipoComissao === 'conforme_desconto' && lista.faixasDesconto && (
+                        {lista.tipoComissao === 'conforme_desconto' && (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <TrendingUp className="h-4 w-4" />
-                            <span>{lista.faixasDesconto.length} faixa(s)</span>
+                            <span>{lista.totalFaixas ?? (lista.faixasDesconto ?? []).length} faixa(s)</span>
                           </div>
                         )}
                       </TableCell>
@@ -140,7 +160,7 @@ export function PriceListManagement({
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => onVisualizarLista?.(lista.id)}
+                            onClick={() => onVisualizarListaPreco?.(lista.id)}
                             title="Visualizar lista de preço"
                           >
                             <Eye className="h-4 w-4" />
@@ -148,7 +168,7 @@ export function PriceListManagement({
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => onEditarLista?.(lista.id)}
+                            onClick={() => onEditarListaPreco?.(lista.id)}
                             title="Editar lista de preço"
                           >
                             <Edit2 className="h-4 w-4" />

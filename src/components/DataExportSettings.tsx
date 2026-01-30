@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
 import { Badge } from './ui/badge';
 import { exportService } from '../services/exportService';
+import { api } from '../services/api';
 import { Download, FileSpreadsheet, CheckCircle2, Database, Package, ShoppingCart, UserCircle, Users } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
@@ -28,33 +29,54 @@ export function DataExportSettings() {
     setLastExport(null);
 
     try {
-      // Simula delay de processamento
-      await new Promise(resolve => setTimeout(resolve, 800));
-
       let result: ExportResult;
 
       switch (tipo) {
-        case 'vendas':
-          result = exportService.exportVendas();
+        case 'vendas': {
+          const vendas = await api.get('vendas');
+          const list = Array.isArray(vendas) ? vendas : [];
+          result = exportService.exportVendas(list);
           break;
-        case 'clientes':
-          result = exportService.exportClientes();
+        }
+        case 'clientes': {
+          const clientes = await api.get('clientes');
+          const list = Array.isArray(clientes) ? clientes : [];
+          result = exportService.exportClientes(list);
           break;
-        case 'produtos':
-          result = exportService.exportProdutos();
+        }
+        case 'produtos': {
+          const produtos = await api.get('produtos');
+          const list = Array.isArray(produtos) ? produtos : [];
+          result = exportService.exportProdutos(list);
           break;
-        case 'vendedores':
-          result = exportService.exportVendedores();
+        }
+        case 'vendedores': {
+          const vendedores = await api.get('vendedores');
+          const list = Array.isArray(vendedores) ? vendedores : [];
+          result = exportService.exportVendedores(list);
           break;
-        case 'todos':
-          result = exportService.exportTodosDados();
+        }
+        case 'todos': {
+          const [vendas, clientes, produtos, vendedores] = await Promise.all([
+            api.get('vendas'),
+            api.get('clientes'),
+            api.get('produtos'),
+            api.get('vendedores'),
+          ]);
+          result = exportService.exportTodosDados(
+            Array.isArray(vendas) ? vendas : [],
+            Array.isArray(clientes) ? clientes : [],
+            Array.isArray(produtos) ? produtos : [],
+            Array.isArray(vendedores) ? vendedores : []
+          );
           break;
+        }
         default:
           throw new Error('Tipo de exportação inválido');
       }
 
       setLastExport(result);
-      
+
       if (result.success) {
         toast.success('Exportação concluída!', {
           description: `Arquivo ${result.fileName} salvo com sucesso`,

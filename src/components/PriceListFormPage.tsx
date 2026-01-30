@@ -28,6 +28,7 @@ interface PriceListFormPageProps {
 export function PriceListFormPage({ lista, modo, onVoltar, onSalvar }: PriceListFormPageProps) {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [loadingProdutos, setLoadingProdutos] = useState(true);
+  const [loadingLista, setLoadingLista] = useState(false);
   const isReadOnly = modo === 'visualizar';
 
   // Form state
@@ -44,7 +45,7 @@ export function PriceListFormPage({ lista, modo, onVoltar, onSalvar }: PriceList
   ]);
   const [produtosPreco, setProdutosPreco] = useState<ProdutoPreco[]>([]);
 
-  // Carregar produtos do Supabase
+  // Carregar produtos do catálogo
   useEffect(() => {
     carregarProdutos();
   }, []);
@@ -64,24 +65,75 @@ export function PriceListFormPage({ lista, modo, onVoltar, onSalvar }: PriceList
     }
   };
 
+  // Ao abrir para editar ou visualizar: buscar lista completa na edge function (produtos associados e faixas)
   useEffect(() => {
-    if (lista) {
-      setNome(lista.nome);
-      setTipoComissao(lista.tipoComissao);
-      setPercentualFixo(lista.percentualFixo?.toString() || '10');
-      setFaixasDesconto(
-        lista.faixasDesconto || [
-          {
-            id: '1',
-            descontoMin: 0,
-            descontoMax: 10,
-            percentualComissao: 10,
-          },
-        ]
-      );
-      setProdutosPreco(lista.produtos);
+    if (!lista?.id || (modo !== 'editar' && modo !== 'visualizar')) {
+      if (lista) {
+        setNome(lista.nome);
+        setTipoComissao(lista.tipoComissao);
+        setPercentualFixo(lista.percentualFixo?.toString() || '10');
+        setFaixasDesconto(
+          lista.faixasDesconto || [
+            { id: '1', descontoMin: 0, descontoMax: 10, percentualComissao: 10 },
+          ]
+        );
+        setProdutosPreco(lista.produtos ?? []);
+      }
+      return;
     }
-  }, [lista]);
+
+    let cancelled = false;
+    setLoadingLista(true);
+
+    (async () => {
+      try {
+        console.log('[LISTA-PRECO] Carregando lista de preço por ID:', lista.id);
+        const listaCompleta = await api.getById('listas-preco', lista.id);
+        if (cancelled) return;
+
+        const res = listaCompleta as any;
+        setNome(res.nome ?? '');
+        setTipoComissao((res.tipoComissao as TipoComissao) ?? 'fixa');
+        setPercentualFixo(res.percentualFixo?.toString() ?? '10');
+        setFaixasDesconto(
+          Array.isArray(res.faixasDesconto) && res.faixasDesconto.length > 0
+            ? res.faixasDesconto
+            : [{ id: '1', descontoMin: 0, descontoMax: 10, percentualComissao: 10 }]
+        );
+        // Normalizar produtos: API pode retornar produtos_preco, itens, ou objetos com produto_id/valor
+        const rawProdutos =
+          res.produtos ??
+          res.produtos_preco ??
+          res.itens ??
+          res.items ??
+          [];
+        const produtosNorm: ProdutoPreco[] = Array.isArray(rawProdutos)
+          ? rawProdutos.map((p: any) => ({
+              produtoId: String(
+                p.produtoId ?? p.produto_id ?? p.productId ?? p.product_id ?? p.id ?? ''
+              ),
+              preco: Number(
+                p.preco ?? p.valor ?? p.price ?? p.preco_unitario ?? p.valor_unitario ?? 0
+              ),
+            }))
+          : [];
+        setProdutosPreco(produtosNorm);
+        console.log('[LISTA-PRECO] Lista carregada, produtos associados:', produtosNorm.length);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('[LISTA-PRECO] Erro ao carregar lista:', error);
+          toast.error('Erro ao carregar dados da lista de preço.');
+          onVoltar();
+        }
+      } finally {
+        if (!cancelled) setLoadingLista(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lista?.id, modo, onVoltar]);
 
   const handleSave = () => {
     if (!nome.trim()) {
@@ -204,6 +256,29 @@ export function PriceListFormPage({ lista, modo, onVoltar, onSalvar }: PriceList
     if (modo === 'editar') return 'Editar Lista de Preço';
     return 'Visualizar Lista de Preço';
   };
+
+  if (loadingLista) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={onVoltar}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-3xl">{getTituloPage()}</h1>
+            <p className="text-muted-foreground mt-1">
+              Carregando dados da lista e produtos associados...
+            </p>
+          </div>
+        </div>
+        <Card>
+          <CardContent className="flex items-center justify-center py-16">
+            <p className="text-muted-foreground">Aguarde...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

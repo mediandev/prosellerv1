@@ -110,45 +110,47 @@ export const exportService = {
     return { success: true, fileName, recordCount: clientesList.length };
   },
 
-  // Exporta produtos para Excel
+  // Exporta produtos para Excel (.xlsx)
+  // Estrutura compatível com a importação; inclui todos os campos cadastrados.
+  // Nome do arquivo: produtos_export_YYYYMMDD_HHmmss.xlsx
   exportProdutos: (produtos: any[]) => {
-    const data = produtos.map(produto => ({
-      'Descrição': produto.descricao,
-      'Código SKU': produto.sku || produto.codigoSku,
-      'Código EAN': produto.ean || produto.codigoEAN || '',
-      'Marca': produto.marca || produto.nomeMarca || '',
-      'Tipo Produto': produto.tipo || produto.nomeTipoProduto || '',
-      'NCM': produto.ncm || '',
-      'CEST': produto.cest || '',
-      'Unidade (Sigla)': produto.unidade || produto.siglaUnidade,
-      'Peso Líquido (kg)': produto.pesoLiquido || 0,
-      'Peso Bruto (kg)': produto.pesoBruto || 0,
-      'Situação': produto.situacao,
-      'Disponível para Venda': produto.disponivelVenda ? 'Sim' : 'Não',
-      'Preço Base (R$)': produto.precoBase || 0,
-      'Preço Venda (R$)': produto.precoVenda || 0,
-      'Custo (R$)': produto.custo || 0,
-      'Estoque Atual': produto.estoqueAtual || 0,
-      'Estoque Mínimo': produto.estoqueMinimo || 0,
-      'Observações': produto.observacoes || '',
-    }));
+    const data = (produtos || []).map((p) => {
+      const createdAt = p.createdAt ? format(new Date(p.createdAt), 'dd/MM/yyyy HH:mm') : '';
+      const updatedAt = p.updatedAt ? format(new Date(p.updatedAt), 'dd/MM/yyyy HH:mm') : '';
+      return {
+        'Id': p.id || '',
+        'Descrição': p.descricao ?? '',
+        'Código SKU': p.codigoSku ?? p.sku ?? '',
+        'Código EAN': p.codigoEan ?? p.codigoEAN ?? p.ean ?? '',
+        'Marca': p.nomeMarca ?? p.marca ?? '',
+        'Tipo Produto': p.nomeTipoProduto ?? p.tipo ?? '',
+        'NCM': p.ncm ?? '',
+        'CEST': p.cest ?? '',
+        'Unidade (Sigla)': p.siglaUnidade ?? p.unidade ?? '',
+        'Peso Líquido (kg)': p.pesoLiquido ?? 0,
+        'Peso Bruto (kg)': p.pesoBruto ?? 0,
+        'Situação': p.situacao ?? 'Ativo',
+        'Disponível para Venda': p.disponivel === true || p.disponivelVenda === true ? 'Sim' : 'Não',
+        'Data Cadastro': createdAt,
+        'Data Atualização': updatedAt,
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Produtos');
 
     const colWidths = [
-      { wch: 40 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 20 },
-      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 },
-      { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
-      { wch: 15 }, { wch: 15 }, { wch: 40 },
+      { wch: 38 }, { wch: 40 }, { wch: 18 }, { wch: 15 }, { wch: 22 }, { wch: 22 },
+      { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 18 },
+      { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 18 },
     ];
     ws['!cols'] = colWidths;
 
     const fileName = `produtos_export_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`;
     XLSX.writeFile(wb, fileName);
 
-    return { success: true, fileName, recordCount: produtos.length };
+    return { success: true, fileName, recordCount: data.length };
   },
 
   // Exporta vendedores para Excel

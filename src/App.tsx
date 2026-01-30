@@ -537,23 +537,23 @@ function AppContent() {
   const handleSalvarListaPreco = async (lista: ListaPreco) => {
     try {
       const existingIndex = listas.findIndex((l) => l.id === lista.id);
-      
+
       if (existingIndex >= 0) {
         // Editar lista existente
         console.log('[APP] Atualizando lista de preço:', lista.id);
-        await api.update('listasPreco', lista.id, lista);
+        const atualizada = await api.update('listas-preco', lista.id, lista);
         const newListas = [...listas];
-        newListas[existingIndex] = lista;
+        newListas[existingIndex] = { ...atualizada, id: lista.id };
         setListas(newListas);
         toast.success('Lista de preço atualizada com sucesso!');
       } else {
         // Criar nova lista
         console.log('[APP] Criando nova lista de preço:', lista);
-        const novaLista = await api.create('listasPreco', lista);
+        const novaLista = await api.create('listas-preco', lista);
         setListas([...listas, novaLista]);
         toast.success('Lista de preço criada com sucesso!');
       }
-      
+
       handleVoltarSettings();
     } catch (error) {
       console.error('[APP] Erro ao salvar lista de preço:', error);

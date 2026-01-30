@@ -332,6 +332,47 @@ function saveStoredData<T>(key: string, data: T[]): void {
   }
 }
 
+// Helper: normaliza resposta da API de lista de preço para formato ListaPreco do frontend
+function mapListaPrecoFromApi(item: any): any {
+  if (!item) return item;
+  // Aceitar vários nomes que a edge function pode retornar para a lista de produtos
+  const produtosRaw =
+    item.produtos ??
+    item.produtos_preco ??
+    item.produto_precos ??
+    item.itens ??
+    item.items ??
+    item.product_prices ??
+    [];
+  const produtosNorm = Array.isArray(produtosRaw)
+    ? produtosRaw.map((p: any) => ({
+        produtoId: String(
+          p.produtoId ?? p.produto_id ?? p.productId ?? p.product_id ?? p.id ?? ''
+        ),
+        preco: Number(
+          p.preco ?? p.valor ?? p.price ?? p.preco_unitario ?? p.valor_unitario ?? 0
+        ),
+      }))
+    : [];
+  const faixas = item.faixasDesconto ?? item.faixas_desconto ?? [];
+  const totalProdutos = item.totalProdutos ?? item.total_produtos ?? produtosNorm.length;
+  const totalFaixas = item.totalFaixas ?? item.total_faixas ?? (Array.isArray(faixas) ? faixas.length : 0);
+
+  return {
+    id: String(item.id ?? ''),
+    nome: item.nome ?? '',
+    produtos: produtosNorm,
+    tipoComissao: (item.tipoComissao ?? item.tipo_comissao ?? 'fixa') as 'fixa' | 'conforme_desconto',
+    percentualFixo: item.percentualFixo ?? item.percentual_fixo,
+    faixasDesconto: faixas,
+    totalProdutos: typeof totalProdutos === 'number' ? totalProdutos : produtosNorm.length,
+    totalFaixas: typeof totalFaixas === 'number' ? totalFaixas : (Array.isArray(faixas) ? faixas.length : 0),
+    ativo: item.ativo !== false,
+    createdAt: item.createdAt ? new Date(item.createdAt) : (item.created_at ? new Date(item.created_at) : new Date()),
+    updatedAt: item.updatedAt ? new Date(item.updatedAt) : (item.updated_at ? new Date(item.updated_at) : new Date()),
+  };
+}
+
 // Helper: Converte usuário (tipo=vendedor) para formato Seller
 function usuarioToSeller(user: any): Seller {
   const generateInitials = (nome: string): string => {
@@ -1116,6 +1157,25 @@ export const api = {
       }
     }
 
+    // Caso especial para listas de preço - usar edge function listas-preco-v2
+    if (entity === 'listas-preco') {
+      try {
+        console.log('[API] Listando listas de preço via Edge Function listas-preco-v2...');
+        const response = await callEdgeFunction('listas-preco-v2', 'GET');
+        const raw = Array.isArray(response) ? response : (response?.items ?? response?.data ?? []);
+        const listas = (Array.isArray(raw) ? raw : []).map((item: any) => mapListaPrecoFromApi(item));
+        console.log(`[API] ${listas.length} listas de preço encontradas`);
+        return listas;
+      } catch (error) {
+        console.error('[API] Erro ao listar listas de preço, usando mock:', error);
+        const entityConfig = entityMap[entity];
+        if (entityConfig) {
+          return getStoredData(entityConfig.storageKey, entityConfig.data);
+        }
+        return [];
+      }
+    }
+
     // Caso especial para empresas - usar edge function
     if (entity === 'empresas') {
       try {
@@ -1232,6 +1292,18 @@ export const api = {
         return response?.data ?? response;
       } catch (error) {
         console.error('[API] Erro ao buscar empresa:', error);
+        throw error;
+      }
+    }
+
+    // Caso especial para listas de preço - usar edge function listas-preco-v2
+    if (entity === 'listas-preco') {
+      try {
+        console.log('[API] Buscando lista de preço via Edge Function listas-preco-v2...');
+        const response = await callEdgeFunction('listas-preco-v2', 'GET', undefined, id);
+        return mapListaPrecoFromApi(response?.data ?? response);
+      } catch (error) {
+        console.error('[API] Erro ao buscar lista de preço:', error);
         throw error;
       }
     }
@@ -1361,6 +1433,39 @@ export const api = {
       }
     }
     
+    // Caso especial para listas de preço - usar edge function listas-preco-v2
+    if (entity === 'listas-preco') {
+      try {
+        console.log('[API] Criando lista de preço via Edge Function listas-preco-v2...');
+        const payload = {
+          nome: data.nome,
+          produtos: data.produtos ?? [],
+          tipoComissao: data.tipoComissao ?? 'fixa',
+          percentualFixo: data.percentualFixo,
+          faixasDesconto: data.faixasDesconto ?? [],
+          ativo: data.ativo !== false,
+        };
+        const response = await callEdgeFunction('listas-preco-v2', 'POST', payload);
+        return mapListaPrecoFromApi(response?.data ?? response);
+      } catch (error) {
+        console.error('[API] Erro ao criar lista de preço, usando mock:', error);
+        const entityConfig = entityMap['listas-preco'];
+        if (entityConfig) {
+          const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
+          const novoItem = {
+            ...data,
+            id: data.id || `listas-preco-${Date.now()}`,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          storedData.push(novoItem);
+          saveStoredData(entityConfig.storageKey, storedData);
+          return novoItem;
+        }
+        throw error;
+      }
+    }
+
     // Caso especial para marcas - usar edge function
     if (entity === 'marcas') {
       try {
@@ -1717,6 +1822,26 @@ export const api = {
       }
     }
     
+    // Caso especial para listas de preço - usar edge function listas-preco-v2
+    if (entity === 'listas-preco') {
+      try {
+        console.log('[API] Atualizando lista de preço via Edge Function listas-preco-v2...');
+        const payload = {
+          nome: data.nome,
+          produtos: data.produtos ?? [],
+          tipoComissao: data.tipoComissao ?? 'fixa',
+          percentualFixo: data.percentualFixo,
+          faixasDesconto: data.faixasDesconto ?? [],
+          ativo: data.ativo !== false,
+        };
+        const response = await callEdgeFunction('listas-preco-v2', 'PUT', payload, id);
+        return mapListaPrecoFromApi(response?.data ?? response);
+      } catch (error) {
+        console.error('[API] Erro ao atualizar lista de preço:', error);
+        throw error;
+      }
+    }
+
     // Caso especial para unidades de medida - usar edge function
     if (entity === 'unidadesMedida') {
       try {
@@ -1987,6 +2112,18 @@ export const api = {
         return { success: true };
       } catch (error) {
         console.error('[API] Erro ao excluir marca:', error);
+        throw error;
+      }
+    }
+
+    // Caso especial para listas de preço - usar edge function listas-preco-v2
+    if (entity === 'listas-preco') {
+      try {
+        console.log('[API] Excluindo lista de preço via Edge Function listas-preco-v2...');
+        await callEdgeFunction('listas-preco-v2', 'DELETE', undefined, entityId);
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir lista de preço:', error);
         throw error;
       }
     }
