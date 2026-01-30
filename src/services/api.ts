@@ -947,6 +947,41 @@ export const api = {
       }
     }
     
+    // Caso especial para segmentos-cliente - usar edge function
+    if (entity === 'segmentos-cliente') {
+      try {
+        console.log('[API] Listando segmentos via Edge Function segmento-cliente-v2...');
+        const response = await callEdgeFunction('segmento-cliente-v2', 'GET', undefined, undefined, {
+          search: options?.params?.search,
+          apenas_ativos: options?.params?.apenasAtivos ? 'true' : undefined,
+          page: options?.params?.page?.toString(),
+          limit: options?.params?.limit?.toString(),
+        });
+        
+        // callEdgeFunction já retorna data.data (o objeto com segmentos e pagination)
+        // A resposta vem no formato { segmentos: [...], pagination: {...} }
+        console.log('[API] Resposta bruta da Edge Function:', response);
+        
+        // Verificar se response é um array diretamente ou se tem a propriedade segmentos
+        const segmentos = Array.isArray(response) 
+          ? response 
+          : (response?.segmentos || response?.data?.segmentos || []);
+        
+        console.log(`[API] ${segmentos.length} segmentos encontrados`);
+        console.log('[API] Primeiro segmento:', segmentos[0]);
+        
+        return segmentos;
+      } catch (error) {
+        console.error('[API] Erro ao listar segmentos, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        if (entityConfig) {
+          return getStoredData(entityConfig.storageKey, entityConfig.data);
+        }
+        return [];
+      }
+    }
+    
     // Caso especial para produtos - usar edge function com action
     if (entity === 'produtos') {
       try {
@@ -965,6 +1000,133 @@ export const api = {
         // Fallback para mock em caso de erro
         const entityConfig = entityMap[entity];
         return getStoredData(entityConfig.storageKey, entityConfig.data);
+      }
+    }
+    
+    // Caso especial para marcas - usar edge function
+    if (entity === 'marcas') {
+      try {
+        console.log('[API] Listando marcas via Edge Function marcas-v2...');
+        const response = await callEdgeFunction('marcas-v2', 'GET');
+        
+        // A resposta vem no formato { success: true, data: [...] }
+        const marcas = Array.isArray(response) ? response : [];
+        
+        console.log(`[API] ${marcas.length} marcas encontradas`);
+        
+        return marcas;
+      } catch (error) {
+        console.error('[API] Erro ao listar marcas, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        if (entityConfig) {
+          return getStoredData(entityConfig.storageKey, entityConfig.data);
+        }
+        return [];
+      }
+    }
+    
+    // Caso especial para tipos de produto - usar edge function
+    if (entity === 'tiposProduto') {
+      try {
+        console.log('[API] Listando tipos de produto via Edge Function tipos-produto-v2...');
+        const response = await callEdgeFunction('tipos-produto-v2', 'GET');
+        
+        // A resposta vem no formato { success: true, data: [...] }
+        const tipos = Array.isArray(response) ? response : [];
+        
+        console.log(`[API] ${tipos.length} tipos de produto encontrados`);
+        
+        return tipos;
+      } catch (error) {
+        console.error('[API] Erro ao listar tipos de produto, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        if (entityConfig) {
+          return getStoredData(entityConfig.storageKey, entityConfig.data);
+        }
+        return [];
+      }
+    }
+    
+    // Caso especial para unidades de medida - usar edge function
+    if (entity === 'unidadesMedida') {
+      try {
+        console.log('[API] Listando unidades de medida via Edge Function unidades-medida-v2...');
+        const response = await callEdgeFunction('unidades-medida-v2', 'GET');
+        
+        // A resposta vem no formato { success: true, data: [...] }
+        const unidades = Array.isArray(response) ? response : [];
+        
+        console.log(`[API] ${unidades.length} unidades de medida encontradas`);
+        
+        return unidades;
+      } catch (error) {
+        console.error('[API] Erro ao listar unidades de medida, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        if (entityConfig) {
+          return getStoredData(entityConfig.storageKey, entityConfig.data);
+        }
+        return [];
+      }
+    }
+    
+    // Caso especial para grupos/redes - usar edge function
+    if (entity === 'grupos-redes') {
+      try {
+        console.log('[API] Listando grupos/redes via Edge Function grupos-redes-v2...');
+        const response = await callEdgeFunction('grupos-redes-v2', 'GET');
+        
+        const grupos = Array.isArray(response) ? response : [];
+        console.log(`[API] ${grupos.length} grupos/redes encontrados`);
+        
+        return grupos;
+      } catch (error) {
+        console.error('[API] Erro ao listar grupos/redes:', error);
+        return [];
+      }
+    }
+    
+    // Caso especial para tipos de veículo - usar edge function
+    if (entity === 'tipos-veiculo') {
+      try {
+        console.log('[API] Listando tipos de veículo via Edge Function tipos-veiculo-v2...');
+        const response = await callEdgeFunction('tipos-veiculo-v2', 'GET');
+        const tipos = Array.isArray(response) ? response : [];
+        console.log(`[API] ${tipos.length} tipos de veículo encontrados`);
+        return tipos;
+      } catch (error) {
+        console.error('[API] Erro ao listar tipos de veículo:', error);
+        return [];
+      }
+    }
+
+    // Caso especial para categorias de conta corrente - usar edge function
+    if (entity === 'categorias-conta-corrente') {
+      try {
+        console.log('[API] Listando categorias de conta corrente via Edge Function categorias-conta-corrente-v2...');
+        const response = await callEdgeFunction('categorias-conta-corrente-v2', 'GET');
+        const categorias = Array.isArray(response) ? response : [];
+        console.log(`[API] ${categorias.length} categorias de conta corrente encontradas`);
+        return categorias;
+      } catch (error) {
+        console.error('[API] Erro ao listar categorias de conta corrente:', error);
+        return [];
+      }
+    }
+
+    // Caso especial para empresas - usar edge function
+    if (entity === 'empresas') {
+      try {
+        console.log('[API] Listando empresas via Edge Function empresas-v2...');
+        const response = await callEdgeFunction('empresas-v2', 'GET');
+        const empresas = Array.isArray(response) ? response : [];
+        console.log(`[API] ${empresas.length} empresas encontradas`);
+        return empresas;
+      } catch (error) {
+        console.error('[API] Erro ao listar empresas:', error);
+        return [];
       }
     }
     
@@ -1062,6 +1224,18 @@ export const api = {
       }
     }
     
+    // Caso especial para empresas - usar edge function
+    if (entity === 'empresas') {
+      try {
+        console.log('[API] Buscando empresa via Edge Function empresas-v2...');
+        const response = await callEdgeFunction('empresas-v2', 'GET', undefined, id);
+        return response?.data ?? response;
+      } catch (error) {
+        console.error('[API] Erro ao buscar empresa:', error);
+        throw error;
+      }
+    }
+    
     // Caso especial para vendas
     if (entity === 'vendas') {
       const vendas = carregarVendasDoLocalStorage();
@@ -1127,6 +1301,38 @@ export const api = {
       }
     }
     
+    // Caso especial para segmentos-cliente - usar edge function
+    if (entity === 'segmentos-cliente') {
+      try {
+        console.log('[API] Criando segmento via Edge Function segmento-cliente-v2...');
+        const response = await callEdgeFunction('segmento-cliente-v2', 'POST', {
+          action: 'create',
+          nome: data.nome,
+          descricao: data.descricao,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao criar segmento, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const entityConfig = entityMap[entity];
+        if (entityConfig) {
+          const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
+          const novoItem = {
+            ...data,
+            id: data.id || `${entity}-${Date.now()}`,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          storedData.push(novoItem);
+          saveStoredData(entityConfig.storageKey, storedData);
+          return novoItem;
+        }
+        throw error;
+      }
+    }
+    
     // Caso especial para produtos - usar edge function com action
     if (entity === 'produtos') {
       try {
@@ -1152,6 +1358,125 @@ export const api = {
         storedData.push(novoItem);
         saveStoredData(entityConfig.storageKey, storedData);
         return novoItem;
+      }
+    }
+    
+    // Caso especial para marcas - usar edge function
+    if (entity === 'marcas') {
+      try {
+        console.log('[API] Criando marca via Edge Function marcas-v2...');
+        const response = await callEdgeFunction('marcas-v2', 'POST', {
+          nome: data.nome,
+          ativo: data.ativo !== undefined ? data.ativo : true,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao criar marca:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para tipos de produto - usar edge function
+    if (entity === 'tiposProduto') {
+      try {
+        console.log('[API] Criando tipo de produto via Edge Function tipos-produto-v2...');
+        const response = await callEdgeFunction('tipos-produto-v2', 'POST', {
+          nome: data.nome,
+          descricao: data.descricao,
+          ativo: data.ativo !== undefined ? data.ativo : true,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao criar tipo de produto:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para unidades de medida - usar edge function
+    if (entity === 'unidadesMedida') {
+      try {
+        console.log('[API] Criando unidade de medida via Edge Function unidades-medida-v2...');
+        const response = await callEdgeFunction('unidades-medida-v2', 'POST', {
+          sigla: data.sigla,
+          descricao: data.descricao,
+          ativo: data.ativo !== undefined ? data.ativo : true,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao criar unidade de medida:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para grupos/redes - usar edge function
+    if (entity === 'grupos-redes') {
+      try {
+        console.log('[API] Criando grupo/rede via Edge Function grupos-redes-v2...');
+        const response = await callEdgeFunction('grupos-redes-v2', 'POST', {
+          nome: data.nome,
+          descricao: data.descricao,
+        });
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao criar grupo/rede:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para tipos de veículo - usar edge function
+    if (entity === 'tipos-veiculo') {
+      try {
+        console.log('[API] Criando tipo de veículo via Edge Function tipos-veiculo-v2...');
+        const response = await callEdgeFunction('tipos-veiculo-v2', 'POST', {
+          nome: data.nome,
+          descricao: data.descricao,
+        });
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao criar tipo de veículo:', error);
+        throw error;
+      }
+    }
+
+    // Caso especial para categorias de conta corrente - usar edge function
+    if (entity === 'categorias-conta-corrente') {
+      try {
+        console.log('[API] Criando categoria de conta corrente via Edge Function categorias-conta-corrente-v2...');
+        const response = await callEdgeFunction('categorias-conta-corrente-v2', 'POST', {
+          nome: data.nome,
+          descricao: data.descricao,
+          cor: data.cor,
+        });
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao criar categoria de conta corrente:', error);
+        throw error;
+      }
+    }
+
+    // Caso especial para empresas - usar edge function
+    if (entity === 'empresas') {
+      try {
+        console.log('[API] Criando empresa via Edge Function empresas-v2...');
+        const response = await callEdgeFunction('empresas-v2', 'POST', {
+          cnpj: data.cnpj,
+          razaoSocial: data.razaoSocial,
+          nomeFantasia: data.nomeFantasia,
+          inscricaoEstadual: data.inscricaoEstadual,
+          endereco: data.endereco,
+          contasBancarias: data.contasBancarias,
+          integracoesERP: data.integracoesERP,
+        });
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao criar empresa:', error);
+        throw error;
       }
     }
     
@@ -1357,6 +1682,127 @@ export const api = {
       }
     }
     
+    // Caso especial para marcas - usar edge function
+    if (entity === 'marcas') {
+      try {
+        console.log('[API] Atualizando marca via Edge Function marcas-v2...');
+        const response = await callEdgeFunction('marcas-v2', 'PUT', {
+          nome: data.nome,
+          ativo: data.ativo !== undefined ? data.ativo : true,
+        }, id);
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar marca:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para tipos de produto - usar edge function
+    if (entity === 'tiposProduto') {
+      try {
+        console.log('[API] Atualizando tipo de produto via Edge Function tipos-produto-v2...');
+        const response = await callEdgeFunction('tipos-produto-v2', 'PUT', {
+          nome: data.nome,
+          descricao: data.descricao,
+          ativo: data.ativo !== undefined ? data.ativo : true,
+        }, id);
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar tipo de produto:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para unidades de medida - usar edge function
+    if (entity === 'unidadesMedida') {
+      try {
+        console.log('[API] Atualizando unidade de medida via Edge Function unidades-medida-v2...');
+        const response = await callEdgeFunction('unidades-medida-v2', 'PUT', {
+          sigla: data.sigla,
+          descricao: data.descricao,
+          ativo: data.ativo !== undefined ? data.ativo : true,
+        }, id);
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar unidade de medida:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para grupos/redes - usar edge function
+    if (entity === 'grupos-redes') {
+      try {
+        console.log('[API] Atualizando grupo/rede via Edge Function grupos-redes-v2...');
+        const response = await callEdgeFunction('grupos-redes-v2', 'PUT', {
+          nome: data.nome,
+          descricao: data.descricao,
+        }, id);
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar grupo/rede:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para tipos de veículo - usar edge function
+    if (entity === 'tipos-veiculo') {
+      try {
+        console.log('[API] Atualizando tipo de veículo via Edge Function tipos-veiculo-v2...');
+        const response = await callEdgeFunction('tipos-veiculo-v2', 'PUT', {
+          nome: data.nome,
+          descricao: data.descricao,
+        }, id);
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar tipo de veículo:', error);
+        throw error;
+      }
+    }
+
+    // Caso especial para categorias de conta corrente - usar edge function
+    if (entity === 'categorias-conta-corrente') {
+      try {
+        console.log('[API] Atualizando categoria de conta corrente via Edge Function categorias-conta-corrente-v2...');
+        const response = await callEdgeFunction('categorias-conta-corrente-v2', 'PUT', {
+          nome: data.nome,
+          descricao: data.descricao,
+          cor: data.cor,
+          ativo: data.ativo,
+        }, id);
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar categoria de conta corrente:', error);
+        throw error;
+      }
+    }
+
+    // Caso especial para empresas - usar edge function
+    if (entity === 'empresas') {
+      try {
+        console.log('[API] Atualizando empresa via Edge Function empresas-v2...');
+        const response = await callEdgeFunction('empresas-v2', 'PUT', {
+          cnpj: data.cnpj,
+          razaoSocial: data.razaoSocial,
+          nomeFantasia: data.nomeFantasia,
+          inscricaoEstadual: data.inscricaoEstadual,
+          endereco: data.endereco,
+          contasBancarias: data.contasBancarias,
+          integracoesERP: data.integracoesERP,
+          ativo: data.ativo,
+        }, id);
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar empresa:', error);
+        throw error;
+      }
+    }
+    
     // Caso especial para vendedores - atualizar usuário e dados_vendedor
     if (entity === 'vendedores') {
       try {
@@ -1506,6 +1952,18 @@ export const api = {
       }
     }
     
+    // Caso especial para segmentos-cliente - usar edge function
+    if (entity === 'segmentos-cliente') {
+      try {
+        console.log('[API] Excluindo segmento via Edge Function segmento-cliente-v2...');
+        await callEdgeFunction('segmento-cliente-v2', 'DELETE', undefined, entityId);
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir segmento:', error);
+        throw error;
+      }
+    }
+    
     // Caso especial para formas de pagamento - usar edge function com action
     if (entity === 'formas-pagamento') {
       try {
@@ -1517,6 +1975,90 @@ export const api = {
         return { success: true };
       } catch (error) {
         console.error('[API] Erro ao excluir forma de pagamento:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para marcas - usar edge function
+    if (entity === 'marcas') {
+      try {
+        console.log('[API] Excluindo marca via Edge Function marcas-v2...');
+        await callEdgeFunction('marcas-v2', 'DELETE', undefined, entityId);
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir marca:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para tipos de produto - usar edge function
+    if (entity === 'tiposProduto') {
+      try {
+        console.log('[API] Excluindo tipo de produto via Edge Function tipos-produto-v2...');
+        await callEdgeFunction('tipos-produto-v2', 'DELETE', undefined, entityId);
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir tipo de produto:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para unidades de medida - usar edge function
+    if (entity === 'unidadesMedida') {
+      try {
+        console.log('[API] Excluindo unidade de medida via Edge Function unidades-medida-v2...');
+        await callEdgeFunction('unidades-medida-v2', 'DELETE', undefined, entityId);
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir unidade de medida:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para grupos/redes - usar edge function
+    if (entity === 'grupos-redes') {
+      try {
+        console.log('[API] Excluindo grupo/rede via Edge Function grupos-redes-v2...');
+        await callEdgeFunction('grupos-redes-v2', 'DELETE', undefined, entityId);
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir grupo/rede:', error);
+        throw error;
+      }
+    }
+    
+    // Caso especial para tipos de veículo - usar edge function
+    if (entity === 'tipos-veiculo') {
+      try {
+        console.log('[API] Excluindo tipo de veículo via Edge Function tipos-veiculo-v2...');
+        await callEdgeFunction('tipos-veiculo-v2', 'DELETE', undefined, entityId);
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir tipo de veículo:', error);
+        throw error;
+      }
+    }
+
+    // Caso especial para categorias de conta corrente - usar edge function
+    if (entity === 'categorias-conta-corrente') {
+      try {
+        console.log('[API] Excluindo categoria de conta corrente via Edge Function categorias-conta-corrente-v2...');
+        await callEdgeFunction('categorias-conta-corrente-v2', 'DELETE', undefined, entityId);
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir categoria de conta corrente:', error);
+        throw error;
+      }
+    }
+
+    // Caso especial para empresas - usar edge function
+    if (entity === 'empresas') {
+      try {
+        console.log('[API] Excluindo empresa via Edge Function empresas-v2...');
+        await callEdgeFunction('empresas-v2', 'DELETE', undefined, entityId);
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir empresa:', error);
         throw error;
       }
     }
@@ -1708,29 +2250,98 @@ export const api = {
     },
   },
   
-  // Naturezas de operação
+  // Naturezas de operação - Usa Edge Function natureza-operacao-v2
   naturezasOperacao: {
-    list: async () => {
-      return getStoredData('mockNaturezasOperacao', mockNaturezasOperacao);
+    list: async (filters?: { search?: string; apenasAtivas?: boolean; page?: number; limit?: number }) => {
+      try {
+        console.log('[API] Listando naturezas via Edge Function natureza-operacao-v2...');
+        const params = new URLSearchParams();
+        if (filters?.search) params.append('search', filters.search);
+        if (filters?.apenasAtivas) params.append('apenas_ativas', 'true');
+        if (filters?.page) params.append('page', filters.page.toString());
+        if (filters?.limit) params.append('limit', filters.limit.toString());
+
+        const response = await callEdgeFunction('natureza-operacao-v2', 'GET', undefined, undefined, {
+          search: filters?.search,
+          apenas_ativas: filters?.apenasAtivas ? 'true' : undefined,
+          page: filters?.page?.toString(),
+          limit: filters?.limit?.toString(),
+        });
+        
+        // A resposta vem no formato { success: true, data: { naturezas: [...], pagination: {...} } }
+        const naturezasData = response.data || response;
+        const naturezas = naturezasData.naturezas || naturezasData || [];
+        
+        console.log(`[API] ${naturezas.length} naturezas encontradas`);
+        
+        return naturezas;
+      } catch (error) {
+        console.error('[API] Erro ao listar naturezas, usando mock:', error);
+        // Fallback para mock em caso de erro
+        return getStoredData('mockNaturezasOperacao', mockNaturezasOperacao);
+      }
     },
     
     create: async (data: any) => {
-      const naturezas = getStoredData('mockNaturezasOperacao', mockNaturezasOperacao);
-      const nova = {
-        ...data,
-        id: `natureza-${Date.now()}`,
-      };
-      naturezas.push(nova);
-      saveStoredData('mockNaturezasOperacao', naturezas);
-      return nova;
+      try {
+        console.log('[API] Criando natureza via Edge Function natureza-operacao-v2...');
+        const response = await callEdgeFunction('natureza-operacao-v2', 'POST', {
+          action: 'create',
+          nome: data.nome,
+          codigo: data.codigo,
+          descricao: data.descricao,
+          geraComissao: data.geraComissao,
+          geraReceita: data.geraReceita,
+          tiny_id: data.tiny_id,
+        });
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao criar natureza, usando mock:', error);
+        // Fallback para mock em caso de erro
+        const naturezas = getStoredData('mockNaturezasOperacao', mockNaturezasOperacao);
+        const nova = {
+          ...data,
+          id: `natureza-${Date.now()}`,
+        };
+        naturezas.push(nova);
+        saveStoredData('mockNaturezasOperacao', naturezas);
+        return nova;
+      }
     },
     
     update: async (id: string, data: any) => {
-      return api.update('naturezas-operacao', id, data);
+      try {
+        console.log('[API] Atualizando natureza via Edge Function natureza-operacao-v2...');
+        const response = await callEdgeFunction('natureza-operacao-v2', 'PUT', {
+          nome: data.nome,
+          codigo: data.codigo,
+          descricao: data.descricao,
+          geraComissao: data.geraComissao,
+          geraReceita: data.geraReceita,
+          ativo: data.ativo,
+          tiny_id: data.tiny_id,
+        }, id);
+        
+        // A resposta vem no formato { success: true, data: {...} }
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar natureza, usando mock:', error);
+        // Fallback para mock em caso de erro
+        return api.update('naturezas-operacao', id, data);
+      }
     },
     
     delete: async (id: string) => {
-      return api.delete('naturezas-operacao', id);
+      try {
+        console.log('[API] Excluindo natureza via Edge Function natureza-operacao-v2...');
+        await callEdgeFunction('natureza-operacao-v2', 'DELETE', undefined, id);
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir natureza:', error);
+        throw error;
+      }
     },
   },
   

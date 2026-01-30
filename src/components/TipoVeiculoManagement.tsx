@@ -113,10 +113,10 @@ export function TipoVeiculoManagement() {
 
     try {
       await api.delete('tipos-veiculo', deletingTipo.id);
+      setTiposVeiculo(prev => prev.filter(t => t.id !== deletingTipo.id));
       toast.success('Tipo de veículo removido com sucesso');
       setDeleteDialogOpen(false);
       setDeletingTipo(null);
-      loadTiposVeiculo();
     } catch (error: any) {
       console.error('[TIPOS VEÍCULO] Erro ao deletar:', error);
       toast.error(error.message || 'Erro ao remover tipo de veículo');
@@ -132,22 +132,26 @@ export function TipoVeiculoManagement() {
 
     try {
       if (editingTipo) {
-        // Editar
-        await api.update('tipos-veiculo', editingTipo.id, formData);
+        const atualizado = await api.update('tipos-veiculo', editingTipo.id, formData);
+        setTiposVeiculo(prev => prev.map(t => t.id === editingTipo.id ? (atualizado as TipoVeiculo) : t));
         toast.success('Tipo de veículo atualizado com sucesso');
       } else {
-        // Criar
-        await api.create('tipos-veiculo', formData);
+        const novo = await api.create('tipos-veiculo', formData);
+        setTiposVeiculo(prev => [...prev, novo as TipoVeiculo]);
         toast.success('Tipo de veículo criado com sucesso');
       }
 
       setDialogOpen(false);
       setFormData({ nome: '', descricao: '' });
       setEditingTipo(null);
-      loadTiposVeiculo();
     } catch (error: any) {
       console.error('[TIPOS VEÍCULO] Erro ao salvar:', error);
-      toast.error(error.message || 'Erro ao salvar tipo de veículo');
+      const msg = error?.message || '';
+      if (msg.includes('já existe') || msg.includes('already exists')) {
+        toast.error('Já existe um tipo de veículo com este nome');
+      } else {
+        toast.error(msg || 'Erro ao salvar tipo de veículo');
+      }
     }
   };
 

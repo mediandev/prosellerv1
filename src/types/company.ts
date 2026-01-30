@@ -50,6 +50,8 @@ export interface Company {
   razaoSocial: string;
   nomeFantasia: string;
   inscricaoEstadual: string;
+  /** Chave/token de API (ex.: Tiny ERP) - vem do campo chave_api da tabela ref_empresas_subsidiarias */
+  chaveApi?: string;
   endereco: CompanyAddress;
   contasBancarias: CompanyBankAccount[];
   integracoesERP: CompanyERPConfig[];

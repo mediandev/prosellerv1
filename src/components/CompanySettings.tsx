@@ -749,7 +749,7 @@ export function CompanySettings() {
                     <Building2 className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <CardTitle className="text-base">{company.nomeFantasia}</CardTitle>
+                    <CardTitle className="text-base">{company.nomeFantasia || company.razaoSocial || 'Empresa sem nome'}</CardTitle>
                     <p className="text-sm text-muted-foreground">{company.cnpj}</p>
                   </div>
                 </div>

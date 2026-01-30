@@ -187,7 +187,8 @@ export function SettingsPage({
   onListasChange,
 }: SettingsPageProps) {
   const [naturezas, setNaturezas] = useState<NaturezaOperacao[]>(initialNaturezas);
-  const [segmentos, setSegmentos] = useState<SegmentoCliente[]>(initialSegmentos);
+  const [segmentos, setSegmentos] = useState<SegmentoCliente[]>([]);
+  const [segmentosLoading, setSegmentosLoading] = useState(false);
   const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([]);
   const [condicoesPagamento, setCondicoesPagamento] = useState<CondicaoPagamento[]>([]);
   const [loading, setLoading] = useState(true);
@@ -199,53 +200,72 @@ export function SettingsPage({
   const [expandedSections, setExpandedSections] = useState<string[]>(["cadastros"]);
   const [sidebarOpen, setSidebarOpen] = useState(false); // Para mobile
 
-  // Carregar dados do Supabase
+  // Carregar dados do Supabase (sem segmentos e naturezas - serão carregados sob demanda)
   useEffect(() => {
     carregarDadosConfiguracao();
   }, []);
 
+  // Carregar segmentos apenas quando a aba de segmentos for aberta
+  useEffect(() => {
+    if (currentPage === 'segmentos') {
+      console.log('[SETTINGS] Aba de segmentos aberta, carregando dados...');
+      carregarSegmentos();
+    }
+  }, [currentPage]);
+
   const carregarDadosConfiguracao = async () => {
     try {
       console.log('[SETTINGS] Carregando dados de configuração...');
-      const [formasAPI, condicoesAPI, segmentosAPI, naturezasAPI] = await Promise.all([
+      const [formasAPI, condicoesAPI] = await Promise.all([
         api.get('formas-pagamento').catch(() => formasPagamentoMock),
         api.get('condicoes-pagamento').catch(() => condicoesPagamentoMock),
-        api.get('segmentos-cliente').catch(() => []),
-        api.get('naturezas-operacao').catch(() => []),
       ]);
       
       setFormasPagamento(formasAPI);
       setCondicoesPagamento(condicoesAPI);
       
-      // Carregar segmentos do Supabase ou usar dados iniciais se vazio
-      if (segmentosAPI && segmentosAPI.length > 0) {
-        setSegmentos(segmentosAPI);
-      } else {
-        setSegmentos(initialSegmentos);
-      }
-      
-      // Carregar naturezas do Supabase ou usar dados iniciais se vazio
-      if (naturezasAPI && naturezasAPI.length > 0) {
-        setNaturezas(naturezasAPI);
-      } else {
-        setNaturezas(initialNaturezas);
-      }
-      
       console.log('[SETTINGS] Dados carregados:', {
         formasPagamento: formasAPI.length,
         condicoesPagamento: condicoesAPI.length,
-        segmentos: segmentosAPI?.length || 0,
-        naturezas: naturezasAPI?.length || 0,
       });
     } catch (error) {
       console.error('[SETTINGS] Erro ao carregar dados:', error);
       setFormasPagamento(formasPagamentoMock);
       setCondicoesPagamento(condicoesPagamentoMock);
-      setSegmentos(initialSegmentos);
-      setNaturezas(initialNaturezas);
       toast.error('Erro ao carregar configurações. Usando dados de demonstração.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const carregarSegmentos = async () => {
+    setSegmentosLoading(true);
+    try {
+      console.log('[SETTINGS] Carregando segmentos de cliente...');
+      const segmentosAPI = await api.get('segmentos-cliente').catch(() => []);
+      
+      console.log('[SETTINGS] Resposta da API:', segmentosAPI);
+      console.log('[SETTINGS] Tipo da resposta:', typeof segmentosAPI);
+      console.log('[SETTINGS] É array?', Array.isArray(segmentosAPI));
+      
+      // Carregar segmentos do Supabase ou usar dados iniciais se vazio
+      if (segmentosAPI && Array.isArray(segmentosAPI) && segmentosAPI.length > 0) {
+        console.log('[SETTINGS] Segmentos carregados:', segmentosAPI.length, segmentosAPI);
+        setSegmentos(segmentosAPI);
+      } else if (segmentosAPI && Array.isArray(segmentosAPI)) {
+        // Array vazio - não há segmentos no banco
+        console.log('[SETTINGS] Nenhum segmento encontrado no banco');
+        setSegmentos([]);
+      } else {
+        console.log('[SETTINGS] Resposta inválida, usando segmentos iniciais');
+        setSegmentos(initialSegmentos);
+      }
+    } catch (error) {
+      console.error('[SETTINGS] Erro ao carregar segmentos:', error);
+      setSegmentos(initialSegmentos);
+      toast.error('Erro ao carregar segmentos. Usando dados de demonstração.');
+    } finally {
+      setSegmentosLoading(false);
     }
   };
   
@@ -337,6 +357,9 @@ export function SettingsPage({
       setNewSegmento({ nome: "", descricao: "" });
       setAddSegmentoOpen(false);
       toast.success("Segmento de cliente adicionado com sucesso!");
+      
+      // Recarregar segmentos para garantir sincronização
+      await carregarSegmentos();
     } catch (error) {
       console.error('Erro ao adicionar segmento:', error);
       toast.error("Erro ao adicionar segmento de cliente");
@@ -348,6 +371,9 @@ export function SettingsPage({
       await api.delete(`segmentos-cliente/${id}`);
       setSegmentos(segmentos.filter((s) => s.id !== id));
       toast.success("Segmento de cliente removido com sucesso!");
+      
+      // Recarregar segmentos para garantir sincronização
+      await carregarSegmentos();
     } catch (error) {
       console.error('Erro ao remover segmento:', error);
       toast.error("Erro ao remover segmento de cliente");
@@ -682,30 +708,44 @@ export function SettingsPage({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {segmentos.map((segmento) => (
-                    <TableRow key={segmento.id}>
-                      <TableCell className="font-medium">{segmento.nome}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {segmento.descricao}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setDeleteConfirm({
-                              open: true,
-                              type: "segmento",
-                              id: segmento.id,
-                              name: segmento.nome,
-                            });
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                  {segmentosLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center">
+                        Carregando segmentos...
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : segmentos.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground">
+                        Nenhum segmento de cliente cadastrado
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    segmentos.map((segmento) => (
+                      <TableRow key={segmento.id}>
+                        <TableCell className="font-medium">{segmento.nome}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {segmento.descricao || '-'}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setDeleteConfirm({
+                                open: true,
+                                type: "segmento",
+                                id: segmento.id,
+                                name: segmento.nome,
+                              });
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </CardContent>

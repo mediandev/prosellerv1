@@ -120,21 +120,26 @@ export function ProductTypeManagement() {
 
     try {
       if (editingTipo) {
-        const tipoAtualizado = { 
-          ...editingTipo, 
-          ...formData, 
-          updatedAt: new Date() 
-        };
-        await api.update('tiposProduto', editingTipo.id, tipoAtualizado);
+        // Aguardar resposta da API
+        const tipoAtualizado = await api.update('tiposProduto', editingTipo.id, {
+          nome: formData.nome,
+          descricao: formData.descricao,
+          ativo: formData.ativo,
+        });
+        
+        // Só atualizar estado e mostrar sucesso após resposta bem-sucedida
+        setTipos(tipos.map(t => t.id === editingTipo.id ? tipoAtualizado : t));
         toast.success("Tipo de produto atualizado com sucesso!");
       } else {
-        const newTipo: TipoProduto = {
-          id: crypto.randomUUID(),
-          ...formData,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        await api.create('tiposProduto', newTipo);
+        // Aguardar resposta da API
+        const newTipo = await api.create('tiposProduto', {
+          nome: formData.nome,
+          descricao: formData.descricao,
+          ativo: formData.ativo,
+        });
+        
+        // Só atualizar estado e mostrar sucesso após resposta bem-sucedida
+        setTipos([...tipos, newTipo]);
         toast.success("Tipo de produto cadastrado com sucesso!");
       }
 
@@ -149,11 +154,14 @@ export function ProductTypeManagement() {
   const handleDelete = async () => {
     if (tipoToDelete) {
       try {
+        // Aguardar resposta da API
         await api.delete('tiposProduto', tipoToDelete);
+        
+        // Só atualizar estado e mostrar sucesso após resposta bem-sucedida
+        setTipos(tipos.filter(t => t.id !== tipoToDelete));
         toast.success("Tipo de produto excluído com sucesso!");
         setDeleteDialogOpen(false);
         setTipoToDelete(null);
-        await carregarTipos();
       } catch (error: any) {
         console.error('[TIPOS-PRODUTO] Erro ao excluir tipo:', error);
         toast.error(`Erro ao excluir tipo: ${error.message || 'Erro desconhecido'}`);
@@ -302,7 +310,13 @@ export function ProductTypeManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTipos.length === 0 ? (
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                        Carregando tipos de produto...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredTipos.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
                         Nenhum tipo de produto encontrado

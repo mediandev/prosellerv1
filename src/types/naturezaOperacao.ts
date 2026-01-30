@@ -8,6 +8,7 @@ export interface NaturezaOperacao {
   geraComissao: boolean;
   geraReceita: boolean;
   ativo: boolean;
+  tiny_id?: string;
   createdAt: Date;
   updatedAt: Date;
 }

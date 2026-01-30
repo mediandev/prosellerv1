@@ -99,10 +99,11 @@ export function GrupoRedeManagement() {
       setGrupoRedeEditando(null);
     } catch (error: any) {
       console.error('[GRUPOS-REDES] Erro ao salvar:', error);
-      if (error.message.includes('already exists')) {
+      const msg = error?.message || '';
+      if (msg.includes('already exists') || msg.includes('já existe')) {
         toast.error('Já existe um Grupo/Rede com este nome');
       } else {
-        toast.error('Erro ao salvar Grupo/Rede: ' + error.message);
+        toast.error(msg || 'Erro ao salvar Grupo/Rede');
       }
     }
   };
@@ -118,10 +119,11 @@ export function GrupoRedeManagement() {
       setGrupoRedeExcluindo(null);
     } catch (error: any) {
       console.error('[GRUPOS-REDES] Erro ao excluir:', error);
-      if (error.message.includes('being used by clients')) {
+      const msg = error?.message || '';
+      if (msg.includes('being used by clients') || msg.includes('em uso') || msg.includes('está em uso')) {
         toast.error('Não é possível excluir - este Grupo/Rede está sendo usado por clientes');
       } else {
-        toast.error('Erro ao excluir Grupo/Rede: ' + error.message);
+        toast.error(msg || 'Erro ao excluir Grupo/Rede');
       }
     }
   };
@@ -191,8 +193,8 @@ export function GrupoRedeManagement() {
                       {grupoRede.descricao || '-'}
                     </TableCell>
                     <TableCell>
-                      {grupoRede.dataCriacao
-                        ? new Date(grupoRede.dataCriacao).toLocaleDateString('pt-BR')
+                      {(grupoRede.dataCriacao || (grupoRede as any).createdAt)
+                        ? new Date((grupoRede.dataCriacao || (grupoRede as any).createdAt)).toLocaleDateString('pt-BR')
                         : '-'}
                     </TableCell>
                     <TableCell>{grupoRede.criadoPor || '-'}</TableCell>

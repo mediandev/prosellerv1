@@ -8,7 +8,6 @@ import { Badge } from "./ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "./ui/dialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { CategoriaContaCorrente } from "../types/contaCorrente";
-import { categoriasContaCorrenteMock } from "../data/mockCategoriasContaCorrente";
 import { api } from "../services/api";
 import { toast } from "sonner@2.0.3";
 import { Plus, Trash2, Edit, Tag, CheckCircle2, XCircle } from "lucide-react";
@@ -56,13 +55,13 @@ export function CategoriaContaCorrenteManagement() {
 
   const carregarCategorias = async () => {
     try {
-      console.log('[CATEGORIAS] Carregando categorias da API...');
+      setLoading(true);
       const data = await api.get('categorias-conta-corrente');
-      setCategorias(data);
-      console.log('[CATEGORIAS] Categorias carregadas:', data.length);
+      setCategorias(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('[CATEGORIAS] Erro ao carregar categorias:', error);
       toast.error('Erro ao carregar categorias');
+      setCategorias([]);
     } finally {
       setLoading(false);
     }
@@ -100,48 +99,32 @@ export function CategoriaContaCorrenteManagement() {
 
     try {
       if (modoEdicao && categoriaEditando) {
-        const categoriaAtualizada = categorias.find(c => c.id === categoriaEditando);
-        if (categoriaAtualizada) {
-          const dadosAtualizados = {
-            ...categoriaAtualizada,
-            nome: formulario.nome.trim(),
-            descricao: formulario.descricao.trim(),
-            cor: formulario.cor,
-            ativo: formulario.ativo,
-            dataAtualizacao: new Date().toISOString(),
-            atualizadoPor: "Sistema", // TODO: pegar do contexto de autenticação
-          };
-          
-          await api.update('categorias-conta-corrente', categoriaEditando, dadosAtualizados);
-          setCategorias(categorias.map((c) => c.id === categoriaEditando ? dadosAtualizados : c));
-          toast.success("Categoria atualizada com sucesso!");
-        }
-      } else {
-        const novaCategoria: CategoriaContaCorrente = {
-          id: Date.now().toString(),
+        const dadosAtualizados = {
           nome: formulario.nome.trim(),
           descricao: formulario.descricao.trim(),
           cor: formulario.cor,
           ativo: formulario.ativo,
-          dataCriacao: new Date().toISOString(),
-          criadoPor: "Sistema", // TODO: pegar do contexto de autenticação
         };
-        
-        await api.create('categorias-conta-corrente', novaCategoria);
-        setCategorias([...categorias, novaCategoria]);
+        const response = await api.update('categorias-conta-corrente', categoriaEditando, dadosAtualizados) as CategoriaContaCorrente;
+        setCategorias(categorias.map((c) => c.id === categoriaEditando ? { ...c, ...response } : c));
+        toast.success("Categoria atualizada com sucesso!");
+      } else {
+        const payload = {
+          nome: formulario.nome.trim(),
+          descricao: formulario.descricao.trim(),
+          cor: formulario.cor,
+          ativo: formulario.ativo,
+        };
+        const response = await api.create('categorias-conta-corrente', payload) as CategoriaContaCorrente;
+        setCategorias([...categorias, response]);
         toast.success("Categoria criada com sucesso!");
       }
-      
       setDialogAberto(false);
-      setFormulario({
-        nome: "",
-        descricao: "",
-        cor: cores[0].valor,
-        ativo: true,
-      });
+      setFormulario({ nome: "", descricao: "", cor: cores[0].valor, ativo: true });
     } catch (error: any) {
-      console.error('[CATEGORIAS] Erro ao salvar categoria:', error);
-      toast.error(`Erro ao salvar categoria: ${error.message || 'Erro desconhecido'}`);
+      const msg = error?.message || error?.error || 'Erro desconhecido';
+      const texto = msg.includes('já existe') ? 'Uma categoria com este nome já existe.' : msg;
+      toast.error(`Erro ao salvar categoria: ${texto}`);
     }
   };
 
@@ -163,8 +146,8 @@ export function CategoriaContaCorrenteManagement() {
         setCategorias(categorias.filter((c) => c.id !== deleteConfirm.id));
         toast.success(`Categoria "${deleteConfirm.name}" removida com sucesso`);
       } catch (error: any) {
-        console.error('[CATEGORIAS] Erro ao excluir categoria:', error);
-        toast.error(`Erro ao excluir categoria: ${error.message || 'Erro desconhecido'}`);
+        const msg = error?.message || error?.error || 'Erro desconhecido';
+        toast.error(`Erro ao excluir categoria: ${msg}`);
       } finally {
         setDeleteConfirm({ open: false, id: null, name: null });
       }
@@ -173,22 +156,19 @@ export function CategoriaContaCorrenteManagement() {
 
   const handleToggleAtivo = async (id: string) => {
     const categoria = categorias.find((c) => c.id === id);
-    if (categoria) {
-      try {
-        const dadosAtualizados = {
-          ...categoria,
-          ativo: !categoria.ativo,
-          dataAtualizacao: new Date().toISOString(),
-          atualizadoPor: "Sistema", // TODO: pegar do contexto de autenticação
-        };
-        
-        await api.update('categorias-conta-corrente', id, dadosAtualizados);
-        setCategorias(categorias.map((c) => c.id === id ? dadosAtualizados : c));
-        toast.success(`Categoria ${categoria.ativo ? "desativada" : "ativada"} com sucesso`);
-      } catch (error: any) {
-        console.error('[CATEGORIAS] Erro ao alterar status:', error);
-        toast.error(`Erro ao alterar status: ${error.message || 'Erro desconhecido'}`);
-      }
+    if (!categoria) return;
+    try {
+      const response = await api.update('categorias-conta-corrente', id, {
+        nome: categoria.nome,
+        descricao: categoria.descricao,
+        cor: categoria.cor,
+        ativo: !categoria.ativo,
+      }) as CategoriaContaCorrente;
+      setCategorias(categorias.map((c) => c.id === id ? { ...c, ...response } : c));
+      toast.success(`Categoria ${categoria.ativo ? "desativada" : "ativada"} com sucesso`);
+    } catch (error: any) {
+      const msg = error?.message || error?.error || 'Erro desconhecido';
+      toast.error(`Erro ao alterar status: ${msg}`);
     }
   };
 

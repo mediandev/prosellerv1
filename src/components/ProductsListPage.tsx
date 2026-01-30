@@ -5,7 +5,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,17 +18,21 @@ import { Produto } from "../types/produto";
 import { Search, Plus, MoreVertical, Eye, Edit, Trash2, Package, ImageIcon, Filter, Tag, Layers, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { api } from "../services/api";
+import { ProductFiltersCard } from "./ProductFiltersCard";
 
 interface ProductsListPageProps {
   onNovoProduto: () => void;
   onEditarProduto?: (id: string) => void;
   onVisualizarProduto?: (id: string) => void;
+  /** Quando mudar, a lista recarrega (evita duplicação após editar) */
+  refreshKey?: number;
 }
 
 export function ProductsListPage({
   onNovoProduto,
   onEditarProduto,
   onVisualizarProduto,
+  refreshKey = 0,
 }: ProductsListPageProps) {
   const { ehVendedor } = useAuth();
   const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -37,7 +40,7 @@ export function ProductsListPage({
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMarca, setFilterMarca] = useState<string>("all");
   const [filterTipo, setFilterTipo] = useState<string>("all");
-  const [filterSituacao, setFilterSituacao] = useState<string>("all");
+  const [filterSituacao, setFilterSituacao] = useState<string>("Ativo");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [produtoToDelete, setProdutoToDelete] = useState<string | null>(null);
@@ -63,7 +66,7 @@ export function ProductsListPage({
 
   useEffect(() => {
     carregarProdutos();
-  }, []);
+  }, [refreshKey]);
 
   // Extrair marcas e tipos únicos dos produtos
   const marcasDisponiveis = useMemo(() => {
@@ -77,6 +80,19 @@ export function ProductsListPage({
       .sort();
     return tiposUnicos;
   }, [produtos]);
+
+  // Manter valores dos filtros válidos (evita erro ao abrir Filtros quando opção não está mais na lista)
+  useEffect(() => {
+    if (filterMarca !== "all" && !marcasDisponiveis.includes(filterMarca)) {
+      setFilterMarca("all");
+    }
+    if (filterTipo !== "all" && !tiposDisponiveis.includes(filterTipo)) {
+      setFilterTipo("all");
+    }
+    if (filterSituacao !== "all" && !["Ativo", "Inativo", "Excluído"].includes(filterSituacao)) {
+      setFilterSituacao("Ativo");
+    }
+  }, [marcasDisponiveis, tiposDisponiveis, filterMarca, filterTipo, filterSituacao]);
 
   // Função para ordenar
   const handleSort = (field: keyof Produto) => {
@@ -152,14 +168,14 @@ export function ProductsListPage({
   const activeFiltersCount = 
     (filterMarca !== "all" ? 1 : 0) + 
     (filterTipo !== "all" ? 1 : 0) + 
-    (filterSituacao !== "all" ? 1 : 0);
+    (filterSituacao !== "all" && filterSituacao !== "Ativo" ? 1 : 0);
 
   const hasActiveFilters = activeFiltersCount > 0;
 
   const clearFilters = () => {
     setFilterMarca("all");
     setFilterTipo("all");
-    setFilterSituacao("all");
+    setFilterSituacao("Ativo");
   };
 
   const handleDeleteProduto = (id: string) => {
@@ -226,77 +242,20 @@ export function ProductsListPage({
         </div>
       </div>
 
-      {/* Filtros */}
+      {/* Filtros - componente com select nativo (evita erro do Radix Select com value vazio) */}
       {filtersOpen && (
-        <Card>
-          <CardContent className="space-y-4 pt-6">
-            <div className="grid gap-4 md:grid-cols-3">
-              {/* Filtro Marca */}
-              <div className="space-y-2">
-                <label className="text-sm">Marca</label>
-                <Select value={filterMarca} onValueChange={setFilterMarca}>
-                  <SelectTrigger>
-                    <Tag className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder="Todas as marcas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as marcas</SelectItem>
-                    {marcasDisponiveis.map((marca) => (
-                      <SelectItem key={marca} value={marca}>
-                        {marca}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Filtro Tipo */}
-              <div className="space-y-2">
-                <label className="text-sm">Tipo</label>
-                <Select value={filterTipo} onValueChange={setFilterTipo}>
-                  <SelectTrigger>
-                    <Layers className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder="Todos os tipos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os tipos</SelectItem>
-                    {tiposDisponiveis.map((tipo) => (
-                      <SelectItem key={tipo} value={tipo}>
-                        {tipo}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Filtro Situação */}
-              <div className="space-y-2">
-                <label className="text-sm">Situação</label>
-                <Select value={filterSituacao} onValueChange={setFilterSituacao}>
-                  <SelectTrigger>
-                    <Package className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder="Todas as situações" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as situações</SelectItem>
-                    <SelectItem value="Ativo">Ativo</SelectItem>
-                    <SelectItem value="Inativo">Inativo</SelectItem>
-                    <SelectItem value="Excluído">Excluído</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Botão limpar filtros */}
-            {hasActiveFilters && (
-              <div className="flex justify-end pt-2 border-t">
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
-                  Limpar todos os filtros
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <ProductFiltersCard
+          filterMarca={filterMarca}
+          filterTipo={filterTipo}
+          filterSituacao={filterSituacao}
+          onFilterMarcaChange={setFilterMarca}
+          onFilterTipoChange={setFilterTipo}
+          onFilterSituacaoChange={setFilterSituacao}
+          marcasDisponiveis={marcasDisponiveis}
+          tiposDisponiveis={tiposDisponiveis}
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={clearFilters}
+        />
       )}
 
       <Card>
@@ -468,8 +427,8 @@ export function ProductsListPage({
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredProdutos.map((produto, index) => (
-                      <TableRow key={`${produto.id}-${index}`}>
+                    filteredProdutos.map((produto) => (
+                      <TableRow key={produto.id}>
                         <TableCell>
                           {produto.foto ? (
                             <img

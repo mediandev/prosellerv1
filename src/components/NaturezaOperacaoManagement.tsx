@@ -44,6 +44,7 @@ export function NaturezaOperacaoManagement() {
     descricao: '',
     geraComissao: true,
     geraReceita: true,
+    tiny_id: '',
   });
 
   // Carregar naturezas
@@ -73,6 +74,7 @@ export function NaturezaOperacaoManagement() {
       descricao: '',
       geraComissao: true,
       geraReceita: true,
+      tiny_id: '',
     });
   };
 
@@ -83,19 +85,17 @@ export function NaturezaOperacaoManagement() {
     }
 
     try {
-      const newNatureza: NaturezaOperacao = {
-        id: crypto.randomUUID(),
+      // Aguardar resposta da API antes de atualizar o estado
+      const newNatureza = await api.naturezasOperacao.create({
         nome: formData.nome,
         codigo: formData.codigo,
         descricao: formData.descricao,
         geraComissao: formData.geraComissao,
         geraReceita: formData.geraReceita,
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      await api.naturezasOperacao.create(newNatureza);
+        tiny_id: formData.tiny_id || undefined,
+      });
+      
+      // Só atualizar estado e mostrar sucesso após resposta bem-sucedida
       setNaturezas([...naturezas, newNatureza]);
       toast.success('Natureza de operação cadastrada com sucesso');
       setAddDialogOpen(false);
@@ -114,6 +114,7 @@ export function NaturezaOperacaoManagement() {
       descricao: natureza.descricao || '',
       geraComissao: natureza.geraComissao,
       geraReceita: natureza.geraReceita,
+      tiny_id: natureza.tiny_id || '',
     });
     setEditDialogOpen(true);
   };
@@ -125,17 +126,18 @@ export function NaturezaOperacaoManagement() {
     }
 
     try {
-      const naturezaAtualizada = {
-        ...selectedNatureza,
+      // Aguardar resposta da API antes de atualizar o estado
+      const naturezaAtualizada = await api.naturezasOperacao.update(selectedNatureza.id, {
         nome: formData.nome,
         codigo: formData.codigo,
         descricao: formData.descricao,
         geraComissao: formData.geraComissao,
         geraReceita: formData.geraReceita,
-        updatedAt: new Date(),
-      };
-
-      await api.naturezasOperacao.update(selectedNatureza.id, naturezaAtualizada);
+        ativo: selectedNatureza.ativo,
+        tiny_id: formData.tiny_id || undefined,
+      });
+      
+      // Só atualizar estado e mostrar sucesso após resposta bem-sucedida
       setNaturezas(
         naturezas.map((nat) =>
           nat.id === selectedNatureza.id ? naturezaAtualizada : nat
@@ -216,6 +218,17 @@ export function NaturezaOperacaoManagement() {
                       onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
                     />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Tiny ID</Label>
+                  <Input
+                    placeholder="ID da natureza no Tiny ERP"
+                    value={formData.tiny_id}
+                    onChange={(e) => setFormData({ ...formData, tiny_id: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    ID correspondente no sistema Tiny ERP para integração
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Descrição</Label>
@@ -366,6 +379,17 @@ export function NaturezaOperacaoManagement() {
                   onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Tiny ID</Label>
+              <Input
+                placeholder="ID da natureza no Tiny ERP"
+                value={formData.tiny_id}
+                onChange={(e) => setFormData({ ...formData, tiny_id: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                ID correspondente no sistema Tiny ERP para integração
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Descrição</Label>

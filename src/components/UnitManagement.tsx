@@ -119,21 +119,26 @@ export function UnitManagement() {
 
     try {
       if (editingUnidade) {
-        const unidadeAtualizada = { 
-          ...editingUnidade, 
-          ...formData, 
-          updatedAt: new Date() 
-        };
-        await api.update('unidadesMedida', editingUnidade.id, unidadeAtualizada);
+        // Aguardar resposta da API
+        const unidadeAtualizada = await api.update('unidadesMedida', editingUnidade.id, {
+          sigla: formData.sigla,
+          descricao: formData.descricao,
+          ativo: formData.ativo,
+        });
+        
+        // Só atualizar estado e mostrar sucesso após resposta bem-sucedida
+        setUnidades(unidades.map(u => u.id === editingUnidade.id ? unidadeAtualizada : u));
         toast.success("Unidade de medida atualizada com sucesso!");
       } else {
-        const newUnidade: UnidadeMedida = {
-          id: crypto.randomUUID(),
-          ...formData,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        await api.create('unidadesMedida', newUnidade);
+        // Aguardar resposta da API
+        const newUnidade = await api.create('unidadesMedida', {
+          sigla: formData.sigla,
+          descricao: formData.descricao,
+          ativo: formData.ativo,
+        });
+        
+        // Só atualizar estado e mostrar sucesso após resposta bem-sucedida
+        setUnidades([...unidades, newUnidade]);
         toast.success("Unidade de medida cadastrada com sucesso!");
       }
 
@@ -148,11 +153,14 @@ export function UnitManagement() {
   const handleDelete = async () => {
     if (unidadeToDelete) {
       try {
+        // Aguardar resposta da API
         await api.delete('unidadesMedida', unidadeToDelete);
+        
+        // Só atualizar estado e mostrar sucesso após resposta bem-sucedida
+        setUnidades(unidades.filter(u => u.id !== unidadeToDelete));
         toast.success("Unidade de medida excluída com sucesso!");
         setDeleteDialogOpen(false);
         setUnidadeToDelete(null);
-        await carregarUnidades();
       } catch (error: any) {
         console.error('[UNIDADES] Erro ao excluir unidade:', error);
         toast.error(`Erro ao excluir unidade: ${error.message || 'Erro desconhecido'}`);
@@ -317,7 +325,13 @@ export function UnitManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUnidades.length === 0 ? (
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                        Carregando unidades de medida...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredUnidades.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
                         Nenhuma unidade de medida encontrada

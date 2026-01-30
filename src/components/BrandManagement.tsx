@@ -116,21 +116,24 @@ export function BrandManagement() {
 
     try {
       if (editingMarca) {
-        const marcaAtualizada = { 
-          ...editingMarca, 
-          ...formData, 
-          updatedAt: new Date() 
-        };
-        await api.update('marcas', editingMarca.id, marcaAtualizada);
+        // Aguardar resposta da API
+        const marcaAtualizada = await api.update('marcas', editingMarca.id, {
+          nome: formData.nome,
+          ativo: formData.ativo,
+        });
+        
+        // Só atualizar estado e mostrar sucesso após resposta bem-sucedida
+        setMarcas(marcas.map(m => m.id === editingMarca.id ? marcaAtualizada : m));
         toast.success("Marca atualizada com sucesso!");
       } else {
-        const newMarca: Marca = {
-          id: crypto.randomUUID(),
-          ...formData,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        await api.create('marcas', newMarca);
+        // Aguardar resposta da API
+        const newMarca = await api.create('marcas', {
+          nome: formData.nome,
+          ativo: formData.ativo,
+        });
+        
+        // Só atualizar estado e mostrar sucesso após resposta bem-sucedida
+        setMarcas([...marcas, newMarca]);
         toast.success("Marca cadastrada com sucesso!");
       }
 
@@ -145,11 +148,14 @@ export function BrandManagement() {
   const handleDelete = async () => {
     if (marcaToDelete) {
       try {
+        // Aguardar resposta da API
         await api.delete('marcas', marcaToDelete);
+        
+        // Só atualizar estado e mostrar sucesso após resposta bem-sucedida
+        setMarcas(marcas.filter(m => m.id !== marcaToDelete));
         toast.success("Marca excluída com sucesso!");
         setDeleteDialogOpen(false);
         setMarcaToDelete(null);
-        await carregarMarcas();
       } catch (error: any) {
         console.error('[MARCAS] Erro ao excluir marca:', error);
         toast.error(`Erro ao excluir marca: ${error.message || 'Erro desconhecido'}`);
@@ -285,7 +291,13 @@ export function BrandManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredMarcas.length === 0 ? (
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                        Carregando marcas...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredMarcas.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
                         Nenhuma marca encontrada

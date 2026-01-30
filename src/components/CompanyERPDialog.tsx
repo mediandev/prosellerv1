@@ -41,6 +41,16 @@ export function CompanyERPDialog({ open, onOpenChange, company, onSuccess }: Com
     }
   });
 
+  // Preencher token com chave_api da empresa ao abrir (ref_empresas_subsidiarias.chave_api)
+  useEffect(() => {
+    if (open && company?.chaveApi?.trim()) {
+      setConfig((prev) => ({
+        ...prev,
+        credenciais: { ...prev.credenciais, token: prev.credenciais.token || company.chaveApi!.trim() },
+      }));
+    }
+  }, [open, company?.id, company?.chaveApi]);
+
   // Carregar configuração ao abrir o diálogo
   useEffect(() => {
     if (open && company) {
@@ -54,15 +64,26 @@ export function CompanyERPDialog({ open, onOpenChange, company, onSuccess }: Com
     setLoading(true);
     try {
       const configERP = await api.getERPConfig(company.id);
-      
-      if (configERP && configERP.credenciais?.token) {
-        setConfig({
-          ...config,
-          ...configERP,
-        });
-      }
+      // Token: prioridade getERPConfig, senão chave_api da empresa (ref_empresas_subsidiarias)
+      const token = configERP?.credenciais?.token?.trim() || (company.chaveApi ?? '').trim() || '';
+      setConfig({
+        ...config,
+        ...(configERP || {}),
+        credenciais: {
+          ...config.credenciais,
+          ...(configERP?.credenciais || {}),
+          token: token || config.credenciais.token,
+        },
+      });
     } catch (error) {
       console.error('Erro ao carregar configuração:', error);
+      // Mesmo em erro, preencher token com chave_api da empresa
+      if (company.chaveApi?.trim()) {
+        setConfig((prev) => ({
+          ...prev,
+          credenciais: { ...prev.credenciais, token: company.chaveApi!.trim() },
+        }));
+      }
     } finally {
       setLoading(false);
     }

@@ -14,6 +14,9 @@ import { ArrowLeft, Save, Upload, X, Check, ChevronsUpDown, Plus, Tag, Package, 
 import { toast } from "sonner@2.0.3";
 import { api } from "../services/api";
 
+/** Lock em nível de módulo para evitar criação duplicada (ex.: dois eventos submit no mesmo tick). */
+let productFormSubmitLock = false;
+
 interface ProductFormPageProps {
   productId?: string;
   onBack: () => void;
@@ -22,12 +25,17 @@ interface ProductFormPageProps {
 
 export function ProductFormPage({ productId, onBack, onSave }: ProductFormPageProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const marcaTriggerRef = useRef<HTMLButtonElement>(null);
+  const unidadeTriggerRef = useRef<HTMLButtonElement>(null);
+  const isSubmittingRef = useRef(false);
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [tipos, setTipos] = useState<TipoProduto[]>([]);
   const [unidades, setUnidades] = useState<UnidadeMedida[]>([]);
   
   const [marcaOpen, setMarcaOpen] = useState(false);
   const [unidadeOpen, setUnidadeOpen] = useState(false);
+  const [marcaPopoverWidth, setMarcaPopoverWidth] = useState<number | undefined>(undefined);
+  const [unidadePopoverWidth, setUnidadePopoverWidth] = useState<number | undefined>(undefined);
   
   // Dialogs de adição rápida
   const [quickAddMarcaOpen, setQuickAddMarcaOpen] = useState(false);
@@ -109,6 +117,8 @@ export function ProductFormPage({ productId, onBack, onSave }: ProductFormPagePr
     
     carregarProduto();
   }, [productId]);
+
+  // Largura do popover definida ao abrir (igual ao botão trigger) para evitar um frame com tamanho errado
 
   const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -276,58 +286,65 @@ export function ProductFormPage({ productId, onBack, onSave }: ProductFormPagePr
   };
 
   const salvarProduto = async (produto: Produto) => {
-    setLoading(true);
+    console.log('[PRODUTO-FORM] Salvando produto:', produto);
     try {
-      console.log('[PRODUTO-FORM] Salvando produto:', produto);
-      
       if (productId) {
-        // Atualizar produto existente
         await api.update('produtos', productId, produto);
         toast.success("Produto atualizado com sucesso!");
       } else {
-        // Criar novo produto
         await api.create('produtos', produto);
         toast.success("Produto cadastrado com sucesso!");
       }
-      
       console.log('[PRODUTO-FORM] Produto salvo com sucesso');
       onSave?.(produto);
       onBack();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Erro desconhecido';
       console.error('[PRODUTO-FORM] Erro ao salvar produto:', error);
-      toast.error(`Erro ao salvar produto: ${error.message || 'Erro desconhecido'}`);
-    } finally {
-      setLoading(false);
+      toast.error(`Erro ao salvar produto: ${message}`);
+      throw error;
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
 
+    if (productFormSubmitLock) return;
+    productFormSubmitLock = true;
+
+    if (isSubmittingRef.current || loading) {
+      productFormSubmitLock = false;
+      return;
+    }
     if (!formData.descricao?.trim()) {
       toast.error("A descrição do produto é obrigatória");
+      productFormSubmitLock = false;
       return;
     }
-
     if (!formData.codigoSku?.trim()) {
       toast.error("O código SKU é obrigatório");
+      productFormSubmitLock = false;
       return;
     }
-
     if (!formData.marcaId) {
       toast.error("Selecione uma marca");
+      productFormSubmitLock = false;
       return;
     }
-
     if (!formData.tipoProdutoId) {
       toast.error("Selecione um tipo de produto");
+      productFormSubmitLock = false;
+      return;
+    }
+    if (!formData.unidadeId) {
+      toast.error("Selecione uma unidade de medida");
+      productFormSubmitLock = false;
       return;
     }
 
-    if (!formData.unidadeId) {
-      toast.error("Selecione uma unidade de medida");
-      return;
-    }
+    isSubmittingRef.current = true;
+    setLoading(true);
 
     const produto: Produto = {
       id: productId || crypto.randomUUID(),
@@ -352,8 +369,13 @@ export function ProductFormPage({ productId, onBack, onSave }: ProductFormPagePr
       updatedAt: new Date(),
     };
 
-    salvarProduto(produto);
-    onBack();
+    try {
+      await salvarProduto(produto);
+    } finally {
+      productFormSubmitLock = false;
+      isSubmittingRef.current = false;
+      setLoading(false);
+    }
   };
 
   return (
@@ -485,9 +507,17 @@ export function ProductFormPage({ productId, onBack, onSave }: ProductFormPagePr
                   Adicionar
                 </Button>
               </div>
-              <Popover open={marcaOpen} onOpenChange={setMarcaOpen}>
+              <Popover
+                open={marcaOpen}
+                onOpenChange={(open) => {
+                  setMarcaOpen(open);
+                  if (open && marcaTriggerRef.current) setMarcaPopoverWidth(marcaTriggerRef.current.offsetWidth);
+                  if (!open) setMarcaPopoverWidth(undefined);
+                }}
+              >
                 <PopoverTrigger asChild>
                   <Button
+                    ref={marcaTriggerRef}
                     variant="outline"
                     role="combobox"
                     className="w-full justify-between"
@@ -498,10 +528,13 @@ export function ProductFormPage({ productId, onBack, onSave }: ProductFormPagePr
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-full p-0">
-                  <Command>
+                <PopoverContent
+                  className="flex flex-col overflow-hidden p-0 max-h-[206px]"
+                  style={marcaPopoverWidth != null ? { width: marcaPopoverWidth, minWidth: marcaPopoverWidth } : undefined}
+                >
+                  <Command className="flex flex-1 min-h-0 flex-col">
                     <CommandInput placeholder="Buscar marca..." />
-                    <CommandList>
+                    <CommandList className="flex-1 min-h-0 overflow-auto">
                       <CommandEmpty>Nenhuma marca encontrada.</CommandEmpty>
                       <CommandGroup>
                         {marcas
@@ -603,9 +636,17 @@ export function ProductFormPage({ productId, onBack, onSave }: ProductFormPagePr
                   Adicionar
                 </Button>
               </div>
-              <Popover open={unidadeOpen} onOpenChange={setUnidadeOpen}>
+              <Popover
+                open={unidadeOpen}
+                onOpenChange={(open) => {
+                  setUnidadeOpen(open);
+                  if (open && unidadeTriggerRef.current) setUnidadePopoverWidth(unidadeTriggerRef.current.offsetWidth);
+                  if (!open) setUnidadePopoverWidth(undefined);
+                }}
+              >
                 <PopoverTrigger asChild>
                   <Button
+                    ref={unidadeTriggerRef}
                     variant="outline"
                     role="combobox"
                     className="w-full justify-between"
@@ -618,10 +659,13 @@ export function ProductFormPage({ productId, onBack, onSave }: ProductFormPagePr
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-full p-0">
-                  <Command>
+                <PopoverContent
+                  className="flex flex-col overflow-hidden p-0 max-h-[206px]"
+                  style={unidadePopoverWidth != null ? { width: unidadePopoverWidth, minWidth: unidadePopoverWidth } : undefined}
+                >
+                  <Command className="flex flex-1 min-h-0 flex-col">
                     <CommandInput placeholder="Buscar unidade..." />
-                    <CommandList>
+                    <CommandList className="flex-1 min-h-0 overflow-auto">
                       <CommandEmpty>Nenhuma unidade encontrada.</CommandEmpty>
                       <CommandGroup>
                         {unidades

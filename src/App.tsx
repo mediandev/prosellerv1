@@ -415,6 +415,7 @@ function AppContent() {
   const [productView, setProductView] = useState<ProductView>('list');
   const [selectedProductId, setSelectedProductId] = useState<string | undefined>();
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [produtosListRefreshKey, setProdutosListRefreshKey] = useState(0);
 
   // Estados para navegação de relatórios
   const [reportView, setReportView] = useState<ReportView>('index');
@@ -583,20 +584,21 @@ function AppContent() {
 
   const handleSalvarProduto = async (produto: Produto) => {
     try {
-      const existingIndex = produtos.findIndex((p) => p.id === produto.id);
-      
-      if (existingIndex >= 0) {
-        // Editar produto existente
-        await api.update('produtos', produto.id, produto);
-        const newProdutos = [...produtos];
-        newProdutos[existingIndex] = produto;
-        setProdutos(newProdutos);
+      const isEditing = selectedProductId != null && selectedProductId !== '';
+
+      if (isEditing) {
+        // Editar: usar sempre o id da rota para evitar duplicação (lista pode não estar em sync)
+        const idToUpdate = produto.id || selectedProductId;
+        await api.update('produtos', idToUpdate, produto);
       } else {
         // Criar novo produto
-        await api.create('produtos', produto);
-        setProdutos([...produtos, produto]);
+        const created = await api.create('produtos', produto) as Produto;
+        if (created?.id) {
+          setProdutos((prev) => [...prev, created]);
+        }
       }
-      
+
+      setProdutosListRefreshKey((k) => k + 1);
       handleVoltarListaProdutos();
     } catch (error: any) {
       console.error('[APP] Erro ao salvar produto:', error);
@@ -914,6 +916,7 @@ function AppContent() {
               onNovoProduto={handleNovoProduto}
               onVisualizarProduto={handleVisualizarProduto}
               onEditarProduto={handleEditarProduto}
+              refreshKey={produtosListRefreshKey}
             />
           );
         } else if (productView === 'create') {
