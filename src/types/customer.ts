@@ -99,6 +99,7 @@ export interface Cliente {
   inscricaoEstadual?: string;
   situacao: SituacaoCliente;
   segmentoMercado: string;
+  segmentoId?: string; // FK para segmento_cliente (id da tabela segmento_cliente)
   grupoRede?: string;
   
   // Dados Cadastrais - Endereço

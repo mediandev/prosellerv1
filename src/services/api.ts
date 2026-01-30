@@ -373,6 +373,58 @@ function mapListaPrecoFromApi(item: any): any {
   };
 }
 
+// Helper: normaliza resposta da API de cliente para formato Cliente do frontend
+function mapClienteFromApi(item: any): any {
+  if (!item) return item;
+  const statusAprovacao = item.statusAprovacao ?? item.status_aprovacao ?? 'pendente';
+  let situacao = item.situacao ?? 'Análise';
+  if (statusAprovacao === 'aprovado') situacao = 'Ativo';
+  else if (statusAprovacao === 'rejeitado') situacao = 'Reprovado';
+  else if (statusAprovacao === 'pendente') situacao = 'Análise';
+  return {
+    id: String(item.id ?? item.cliente_id ?? ''),
+    codigo: item.codigo ?? '',
+    tipoPessoa: item.tipoPessoa ?? (item.cpfCnpj?.length === 11 || item.cpf_cnpj?.length === 11 ? 'Pessoa Física' : 'Pessoa Jurídica'),
+    cpfCnpj: item.cpfCnpj ?? item.cpf_cnpj ?? '',
+    razaoSocial: item.razaoSocial ?? item.nome ?? '',
+    nomeFantasia: item.nomeFantasia ?? item.nome_fantasia ?? '',
+    inscricaoEstadual: item.inscricaoEstadual ?? item.inscricao_estadual ?? '',
+    situacao,
+    segmentoMercado: item.segmentoMercado ?? item.segmento_mercado ?? item.tipo_segmento ?? '',
+    segmentoId: item.segmentoId ?? item.segmento_id != null ? String(item.segmentoId ?? item.segmento_id) : undefined,
+    grupoRede: item.grupoRede ?? item.grupo_rede ?? '',
+    cep: item.cep ?? item.endereco?.cep ?? '',
+    logradouro: item.logradouro ?? item.endereco?.logradouro ?? '',
+    numero: item.numero ?? item.endereco?.numero ?? '',
+    bairro: item.bairro ?? item.endereco?.bairro ?? '',
+    uf: item.uf ?? item.endereco?.uf ?? '',
+    municipio: item.municipio ?? item.endereco?.municipio ?? item.endereco?.cidade ?? '',
+    enderecoEntregaDiferente: item.enderecoEntregaDiferente ?? false,
+    observacoesInternas: item.observacoesInternas ?? item.observacao_interna ?? '',
+    site: item.site ?? item.contato?.website ?? '',
+    emailPrincipal: item.emailPrincipal ?? item.contato?.email ?? '',
+    emailNFe: item.emailNFe ?? item.contato?.email_nf ?? '',
+    telefoneFixoPrincipal: item.telefoneFixoPrincipal ?? item.contato?.telefone ?? '',
+    telefoneCelularPrincipal: item.telefoneCelularPrincipal ?? item.contato?.telefone_adicional ?? '',
+    pessoasContato: item.pessoasContato ?? [],
+    dadosBancarios: item.dadosBancarios ?? [],
+    empresaFaturamento: item.empresaFaturamento ?? '',
+    vendedorAtribuido: item.vendedorAtribuido ?? (item.vendedoresAtribuidos?.[0] ? { id: item.vendedoresAtribuidos[0].id, nome: item.vendedoresAtribuidos[0].nome ?? '', email: item.vendedoresAtribuidos[0].email ?? '' } : undefined),
+    vendedoresAtribuidos: item.vendedoresAtribuidos ?? [],
+    listaPrecos: item.listaPrecos ?? '',
+    descontoPadrao: Number(item.descontoPadrao ?? item.desconto ?? 0),
+    descontoFinanceiro: Number(item.descontoFinanceiro ?? item.desconto_financeiro ?? 0),
+    condicoesPagamentoAssociadas: item.condicoesPagamentoAssociadas ?? item.condicoes_cliente ?? [],
+    pedidoMinimo: Number(item.pedidoMinimo ?? item.pedido_minimo ?? 0),
+    statusAprovacao,
+    motivoRejeicao: item.motivoRejeicao ?? item.motivo_rejeicao ?? '',
+    aprovadoPor: item.aprovadoPor ?? item.aprovado_por ?? '',
+    dataAprovacao: item.dataAprovacao ?? item.data_aprovacao ?? '',
+    createdAt: item.createdAt ? new Date(item.createdAt) : (item.created_at ? new Date(item.created_at) : new Date()),
+    updatedAt: item.updatedAt ? new Date(item.updatedAt) : (item.updated_at ? new Date(item.updated_at) : new Date()),
+  };
+}
+
 // Helper: Converte usuário (tipo=vendedor) para formato Seller
 function usuarioToSeller(user: any): Seller {
   const generateInitials = (nome: string): string => {
@@ -1022,6 +1074,39 @@ export const api = {
         return [];
       }
     }
+
+    // Caso especial para clientes - usar edge function clientes-v2
+    if (entity === 'clientes') {
+      try {
+        console.log('[API] Listando clientes via Edge Function clientes-v2...');
+        const response = await callEdgeFunction('clientes-v2', 'GET', undefined, undefined, {
+          page: options?.params?.page?.toString(),
+          limit: options?.params?.limit?.toString(),
+          search: options?.params?.search,
+          status_aprovacao: options?.params?.status_aprovacao,
+          vendedor: options?.params?.vendedor,
+        });
+        const raw = response?.clientes ?? (Array.isArray(response) ? response : []);
+        const listas = (Array.isArray(raw) ? raw : []).map((item: any) => mapClienteFromApi(item));
+        const pagination = response?.pagination ?? null;
+        console.log(`[API] ${listas.length} clientes encontrados`, pagination ? `(página ${pagination.page}/${pagination.total_pages})` : '');
+        // Se foi pedido com paginação, retornar objeto com clientes e pagination
+        if (options?.params?.page != null || options?.params?.limit != null) {
+          return {
+            clientes: listas,
+            pagination: pagination ?? { page: 1, limit: listas.length, total: listas.length, total_pages: 1 },
+          };
+        }
+        return listas;
+      } catch (error) {
+        console.error('[API] Erro ao listar clientes:', error);
+        const entityConfig = entityMap[entity];
+        if (entityConfig) {
+          return getStoredData(entityConfig.storageKey, entityConfig.data);
+        }
+        return [];
+      }
+    }
     
     // Caso especial para produtos - usar edge function com action
     if (entity === 'produtos') {
@@ -1296,6 +1381,18 @@ export const api = {
       }
     }
 
+    // Caso especial para clientes - usar edge function clientes-v2
+    if (entity === 'clientes') {
+      try {
+        console.log('[API] Buscando cliente via Edge Function clientes-v2...');
+        const response = await callEdgeFunction('clientes-v2', 'GET', undefined, id);
+        return mapClienteFromApi(response?.data ?? response);
+      } catch (error) {
+        console.error('[API] Erro ao buscar cliente:', error);
+        throw error;
+      }
+    }
+
     // Caso especial para listas de preço - usar edge function listas-preco-v2
     if (entity === 'listas-preco') {
       try {
@@ -1401,6 +1498,18 @@ export const api = {
           saveStoredData(entityConfig.storageKey, storedData);
           return novoItem;
         }
+        throw error;
+      }
+    }
+
+    // Caso especial para clientes - usar edge function clientes-v2
+    if (entity === 'clientes') {
+      try {
+        console.log('[API] Criando cliente via Edge Function clientes-v2...');
+        const response = await callEdgeFunction('clientes-v2', 'POST', data);
+        return mapClienteFromApi(response?.data ?? response);
+      } catch (error) {
+        console.error('[API] Erro ao criar cliente:', error);
         throw error;
       }
     }
@@ -1803,6 +1912,18 @@ export const api = {
         throw error;
       }
     }
+
+    // Caso especial para clientes - usar edge function clientes-v2
+    if (entity === 'clientes') {
+      try {
+        console.log('[API] Atualizando cliente via Edge Function clientes-v2...');
+        const response = await callEdgeFunction('clientes-v2', 'PUT', data, id);
+        return mapClienteFromApi(response?.data ?? response);
+      } catch (error) {
+        console.error('[API] Erro ao atualizar cliente:', error);
+        throw error;
+      }
+    }
     
     // Caso especial para tipos de produto - usar edge function
     if (entity === 'tiposProduto') {
@@ -2124,6 +2245,18 @@ export const api = {
         return { success: true };
       } catch (error) {
         console.error('[API] Erro ao excluir lista de preço:', error);
+        throw error;
+      }
+    }
+
+    // Caso especial para clientes - usar edge function clientes-v2
+    if (entity === 'clientes') {
+      try {
+        console.log('[API] Excluindo cliente via Edge Function clientes-v2...');
+        await callEdgeFunction('clientes-v2', 'DELETE', undefined, entityId);
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir cliente:', error);
         throw error;
       }
     }

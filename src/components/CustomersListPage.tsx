@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Cliente } from '../types/customer';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -90,30 +90,84 @@ export function CustomersListPage({
   const [clienteParaExcluir, setClienteParaExcluir] = useState<Cliente | null>(null);
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [itensPorPagina, setItensPorPagina] = useState(10);
+  const [totalItens, setTotalItens] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(1);
   const [mostrarImportExport, setMostrarImportExport] = useState(false);
   const [sortField, setSortField] = useState<keyof Cliente | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [segmentos, setSegmentos] = useState<Array<{ id: string | number; nome: string }>>([]);
 
-  // Carregar clientes do Supabase
-  const carregarClientes = async () => {
+  // Carregar lista de segmentos para o filtro (nome do segmento vindo da API)
+  useEffect(() => {
+    api.get<Array<{ id: string | number; nome: string }>>('segmentos-cliente').then((data) => {
+      setSegmentos(Array.isArray(data) ? data : []);
+    }).catch(() => setSegmentos([]));
+  }, []);
+
+  // Busca com debounce (declarado antes de carregarClientes para evitar "before initialization")
+  const [searchDebounced, setSearchDebounced] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(searchTerm), 400);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  // Mapear situação (UI) para status_aprovacao (API)
+  const situacaoToStatusAprovacao = useCallback((situacao: string): string | undefined => {
+    if (!situacao || situacao === 'todos') return undefined;
+    const map: Record<string, string> = {
+      Ativo: 'aprovado',
+      Análise: 'pendente',
+      Reprovado: 'rejeitado',
+    };
+    return map[situacao];
+  }, []);
+
+  // Carregar clientes do Supabase com paginação e filtros no servidor
+  const carregarClientes = useCallback(async () => {
     setLoading(true);
     try {
-      console.log('[CLIENTES-LIST] Carregando clientes...');
-      const data = await api.get<Cliente[]>('clientes');
-      console.log('[CLIENTES-LIST] Clientes carregados:', data?.length || 0);
-      setClientes(Array.isArray(data) ? data : []);
+      const statusAprovacao = situacaoToStatusAprovacao(situacaoFiltro);
+      const params: Record<string, string | number | undefined> = {
+        page: paginaAtual,
+        limit: itensPorPagina,
+        search: searchDebounced.trim() || undefined,
+        status_aprovacao: statusAprovacao,
+      };
+      const data = await api.get<{ clientes: Cliente[]; pagination?: { page: number; limit: number; total: number; total_pages: number } }>('clientes', { params });
+      if (data && typeof data === 'object' && 'clientes' in data && Array.isArray(data.clientes)) {
+        setClientes(data.clientes);
+        const pag = data.pagination;
+        setTotalItens(pag?.total ?? data.clientes.length);
+        setTotalPaginas(pag?.total_pages ?? 1);
+      } else {
+        const arr = Array.isArray(data) ? data : [];
+        setClientes(arr);
+        setTotalItens(arr.length);
+        setTotalPaginas(1);
+      }
     } catch (error: any) {
       console.error('[CLIENTES-LIST] Erro ao carregar clientes:', error);
       setClientes([]);
+      setTotalItens(0);
+      setTotalPaginas(1);
       toast.error('Erro ao carregar clientes da API.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [paginaAtual, itensPorPagina, searchDebounced, situacaoFiltro, situacaoToStatusAprovacao]);
 
   useEffect(() => {
     carregarClientes();
-  }, []);
+  }, [carregarClientes]);
+
+  // Reset para página 1 quando filtros mudam
+  useEffect(() => {
+    setPaginaAtual(1);
+  }, [itensPorPagina, situacaoFiltro, searchDebounced]);
+
+  const goToPage = (page: number) => {
+    setPaginaAtual(Math.max(1, Math.min(page, totalPaginas)));
+  };
 
   // Função para ordenar
   const handleSort = (field: keyof Cliente) => {
@@ -134,22 +188,14 @@ export function CustomersListPage({
     }
   };
 
-  // Filtrar clientes baseado nas permissões do usuário
+  // Filtro client-side apenas por segmento (busca e situação já vêm do servidor)
   const clientesFiltrados = useMemo(() => {
     let resultado = clientes;
 
-    // Se for vendedor, mostrar apenas clientes atribuídos E aprovados
     if (!ehBackoffice() && usuario) {
       resultado = resultado.filter((cliente) => {
-        // Filtrar apenas clientes com statusAprovacao === 'aprovado'
-        if (cliente.statusAprovacao !== 'aprovado') {
-          return false;
-        }
-        
-        // Suporta tanto vendedorAtribuido (novo) quanto vendedoresAtribuidos (legado)
-        if (cliente.vendedorAtribuido) {
-          return cliente.vendedorAtribuido.id === usuario.id;
-        }
+        if (cliente.statusAprovacao !== 'aprovado') return false;
+        if (cliente.vendedorAtribuido) return cliente.vendedorAtribuido.id === usuario.id;
         if (cliente.vendedoresAtribuidos && Array.isArray(cliente.vendedoresAtribuidos)) {
           return cliente.vendedoresAtribuidos.some((v) => v.id === usuario.id);
         }
@@ -157,45 +203,20 @@ export function CustomersListPage({
       });
     }
 
-    // Aplicar filtro de busca
-    if (searchTerm) {
-      const termo = searchTerm.toLowerCase();
-      resultado = resultado.filter(
-        (cliente) =>
-          cliente.razaoSocial.toLowerCase().includes(termo) ||
-          cliente.nomeFantasia?.toLowerCase().includes(termo) ||
-          cliente.cpfCnpj.includes(termo) ||
-          cliente.emailPrincipal?.toLowerCase().includes(termo)
-      );
-    }
-
-    // Aplicar filtro de situação
-    if (situacaoFiltro !== 'todos') {
-      resultado = resultado.filter((cliente) => cliente.situacao === situacaoFiltro);
-    }
-
-    // Aplicar filtro de segmento
-    if (segmentoFiltro !== 'todos') {
+    if (segmentoFiltro && segmentoFiltro !== 'todos') {
       resultado = resultado.filter((cliente) => cliente.segmentoMercado === segmentoFiltro);
     }
 
-    // Aplicar ordenação
     if (sortField) {
       resultado = [...resultado].sort((a, b) => {
         let aValue = a[sortField];
         let bValue = b[sortField];
-
-        // Tratamento para valores undefined/null
         if (aValue === undefined || aValue === null) return 1;
         if (bValue === undefined || bValue === null) return -1;
-
-        // Comparação para strings
         if (typeof aValue === 'string' && typeof bValue === 'string') {
           const comparison = aValue.localeCompare(bValue, 'pt-BR');
           return sortDirection === 'asc' ? comparison : -comparison;
         }
-
-        // Comparação padrão
         if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
         if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
         return 0;
@@ -203,18 +224,10 @@ export function CustomersListPage({
     }
 
     return resultado;
-  }, [clientes, searchTerm, situacaoFiltro, segmentoFiltro, ehBackoffice, usuario, sortField, sortDirection]);
+  }, [clientes, segmentoFiltro, ehBackoffice, usuario, sortField, sortDirection]);
 
-  // Paginação
-  const totalPaginas = Math.ceil(clientesFiltrados.length / itensPorPagina);
-  const indiceInicial = (paginaAtual - 1) * itensPorPagina;
-  const indiceFinal = indiceInicial + itensPorPagina;
-  const clientesPaginados = clientesFiltrados.slice(indiceInicial, indiceFinal);
-
-  // Reset página quando filtros mudam
-  useMemo(() => {
-    setPaginaAtual(1);
-  }, [searchTerm, situacaoFiltro, segmentoFiltro]);
+  const indiceInicial = totalItens === 0 ? 0 : (paginaAtual - 1) * itensPorPagina + 1;
+  const indiceFinal = Math.min(paginaAtual * itensPorPagina, totalItens);
 
   const handleExcluirCliente = async () => {
     if (clienteParaExcluir) {
@@ -260,7 +273,12 @@ export function CustomersListPage({
     );
   };
 
-  const segmentosUnicos = Array.from(new Set(clientes.map((c) => c.segmentoMercado))).sort();
+  // Opções do filtro de segmento: da API (segmentos-cliente) + nomes presentes na página atual
+  const segmentosDaApi = segmentos.map((s) => s.nome).filter((n) => n != null && String(n).trim() !== '');
+  const segmentosNaLista = Array.from(
+    new Set(clientes.map((c) => c.segmentoMercado).filter((s): s is string => s != null && String(s).trim() !== ''))
+  );
+  const segmentosUnicos = Array.from(new Set([...segmentosDaApi, ...segmentosNaLista])).sort();
 
   return (
     <div className="space-y-4">
@@ -302,10 +320,8 @@ export function CustomersListPage({
         <CustomerImportExport
           clientes={clientesFiltrados}
           onImportComplete={async (clientesImportados) => {
-            // Recarregar clientes do Supabase
             try {
-              const data = await api.get<Cliente[]>('clientes');
-              setClientes(Array.isArray(data) ? data : []);
+              await carregarClientes();
               toast.success(`${clientesImportados.length} cliente(s) importado(s) com sucesso!`);
             } catch (error) {
               console.error('[CLIENTES-LIST] Erro ao recarregar clientes:', error);
@@ -327,61 +343,72 @@ export function CustomersListPage({
           ) : (
             <>
               <CardHeader>
-                <div className="flex flex-col md:flex-row gap-4">
-                  <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar por nome, CNPJ/CPF, e-mail..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
-                    />
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-end gap-4">
+                    <div className="flex-1 min-w-[200px] space-y-1.5">
+                      <label className="text-sm font-medium text-muted-foreground">Buscar</label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Nome, CNPJ/CPF, e-mail..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-muted-foreground">Situação</label>
+                      <Select value={situacaoFiltro} onValueChange={setSituacaoFiltro}>
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Situação" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem key="sit-todos" value="todos">Todas</SelectItem>
+                          <SelectItem key="sit-ativo" value="Ativo">Ativo</SelectItem>
+                          <SelectItem key="sit-inativo" value="Inativo">Inativo</SelectItem>
+                          <SelectItem key="sit-analise" value="Análise">Análise</SelectItem>
+                          <SelectItem key="sit-reprovado" value="Reprovado">Reprovado</SelectItem>
+                          <SelectItem key="sit-excluido" value="Excluído">Excluído</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-muted-foreground">Segmento</label>
+                      <Select value={segmentoFiltro || 'todos'} onValueChange={setSegmentoFiltro}>
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue placeholder="Segmento" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem key="seg-todos" value="todos">Todos</SelectItem>
+                          {segmentosUnicos.map((segmento) => (
+                            <SelectItem key={`seg-${segmento}`} value={segmento}>
+                              {segmento}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-muted-foreground">Por página</label>
+                      <Select
+                        value={itensPorPagina.toString()}
+                        onValueChange={(v) => { setItensPorPagina(parseInt(v)); setPaginaAtual(1); }}
+                      >
+                        <SelectTrigger className="w-[120px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem key="pag-10" value="10">10</SelectItem>
+                          <SelectItem key="pag-25" value="25">25</SelectItem>
+                          <SelectItem key="pag-50" value="50">50</SelectItem>
+                          <SelectItem key="pag-100" value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <Select value={situacaoFiltro} onValueChange={setSituacaoFiltro}>
-                <SelectTrigger className="w-full md:w-[180px]">
-                  <SelectValue placeholder="Situação" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem key="sit-todos" value="todos">Todas situações</SelectItem>
-                  <SelectItem key="sit-ativo" value="Ativo">Ativo</SelectItem>
-                  <SelectItem key="sit-inativo" value="Inativo">Inativo</SelectItem>
-                  <SelectItem key="sit-analise" value="Análise">Análise</SelectItem>
-                  <SelectItem key="sit-reprovado" value="Reprovado">Reprovado</SelectItem>
-                  <SelectItem key="sit-excluido" value="Excluído">Excluído</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={segmentoFiltro} onValueChange={setSegmentoFiltro}>
-                <SelectTrigger className="w-full md:w-[200px]">
-                  <SelectValue placeholder="Segmento" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem key="seg-todos" value="todos">Todos segmentos</SelectItem>
-                  {segmentosUnicos.map((segmento) => (
-                    <SelectItem key={`seg-${segmento}`} value={segmento}>
-                      {segmento}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select 
-                value={itensPorPagina.toString()} 
-                onValueChange={(value) => {
-                  setItensPorPagina(parseInt(value));
-                  setPaginaAtual(1);
-                }}
-              >
-                <SelectTrigger className="w-full md:w-[120px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem key="pag-10" value="10">10 / página</SelectItem>
-                  <SelectItem key="pag-25" value="25">25 / página</SelectItem>
-                  <SelectItem key="pag-50" value="50">50 / página</SelectItem>
-                  <SelectItem key="pag-100" value="100">100 / página</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardHeader>
+                </div>
+              </CardHeader>
         <CardContent>
           <div className="rounded-md border">
             <Table>
@@ -477,14 +504,14 @@ export function CustomersListPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {clientesPaginados.length === 0 ? (
+                {clientesFiltrados.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                       Nenhum cliente encontrado
                     </TableCell>
                   </TableRow>
                 ) : (
-                  clientesPaginados.map((cliente) => (
+                  clientesFiltrados.map((cliente) => (
                     <TableRow key={cliente.id}>
                       <TableCell>
                         <div className="flex items-start gap-2">
@@ -513,7 +540,7 @@ export function CustomersListPage({
                       <TableCell className="font-mono text-sm">
                         {cliente.cpfCnpj}
                       </TableCell>
-                      <TableCell>{cliente.segmentoMercado}</TableCell>
+                      <TableCell>{cliente.segmentoMercado || '—'}</TableCell>
                       <TableCell>
                         <div className="space-y-1">
                           {cliente.emailPrincipal && (
@@ -576,33 +603,27 @@ export function CustomersListPage({
             </Table>
           </div>
 
-          {clientesFiltrados.length > 0 && (
-            <div className="mt-4 flex items-center justify-between">
+          {(totalItens > 0 || clientesFiltrados.length > 0) && (
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="text-sm text-muted-foreground">
-                Mostrando {indiceInicial + 1} a {Math.min(indiceFinal, clientesFiltrados.length)} de {clientesFiltrados.length} cliente(s)
+                {totalItens === 0
+                  ? 'Nenhum cliente'
+                  : `Mostrando ${indiceInicial} a ${indiceFinal} de ${totalItens} cliente(s)`}
               </div>
-              
               {totalPaginas > 1 && (
                 <Pagination>
                   <PaginationContent>
                     <PaginationItem>
-                      <PaginationPrevious 
-                        onClick={() => setPaginaAtual(Math.max(1, paginaAtual - 1))}
-                        className={paginaAtual === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                      <PaginationPrevious
+                        onClick={() => goToPage(paginaAtual - 1)}
+                        className={paginaAtual <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        aria-disabled={paginaAtual <= 1}
                       />
                     </PaginationItem>
-                    
                     {Array.from({ length: totalPaginas }, (_, i) => i + 1)
-                      .filter(page => {
-                        // Mostra primeira, última, atual e páginas adjacentes
-                        return page === 1 || 
-                               page === totalPaginas || 
-                               Math.abs(page - paginaAtual) <= 1;
-                      })
+                      .filter((page) => page === 1 || page === totalPaginas || Math.abs(page - paginaAtual) <= 1)
                       .map((page, index, array) => {
-                        // Adiciona ellipsis se houver gap
                         const showEllipsis = index > 0 && page - array[index - 1] > 1;
-                        
                         return (
                           <React.Fragment key={page}>
                             {showEllipsis && (
@@ -612,7 +633,7 @@ export function CustomersListPage({
                             )}
                             <PaginationItem>
                               <PaginationLink
-                                onClick={() => setPaginaAtual(page)}
+                                onClick={() => goToPage(page)}
                                 isActive={paginaAtual === page}
                                 className="cursor-pointer"
                               >
@@ -622,11 +643,11 @@ export function CustomersListPage({
                           </React.Fragment>
                         );
                       })}
-                    
                     <PaginationItem>
-                      <PaginationNext 
-                        onClick={() => setPaginaAtual(Math.min(totalPaginas, paginaAtual + 1))}
-                        className={paginaAtual === totalPaginas ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                      <PaginationNext
+                        onClick={() => goToPage(paginaAtual + 1)}
+                        className={paginaAtual >= totalPaginas ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        aria-disabled={paginaAtual >= totalPaginas}
                       />
                     </PaginationItem>
                   </PaginationContent>
