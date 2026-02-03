@@ -172,6 +172,9 @@ serve(async (req) => {
       }
 
       const grupos = rpcData?.grupos || []
+      const total = rpcData?.total || 0
+      const totalPages = rpcData?.total_pages || 0
+      
       const formattedList = grupos.map((g: any) => ({
         id: String(g.id),
         nome: g.nome,
@@ -183,8 +186,20 @@ serve(async (req) => {
       }))
 
       const duration = Date.now() - startTime
-      console.log(`[GRUPOS-REDES-V2] SUCCESS: Listed ${formattedList.length} grupos/redes (${duration}ms)`)
-      return createHttpSuccessResponse(formattedList, 200, { userId: user.id, duration: `${duration}ms` })
+      console.log(`[GRUPOS-REDES-V2] SUCCESS: Listed ${formattedList.length} grupos/redes (total: ${total}, ${duration}ms)`)
+      
+      // Retornar estrutura com paginação
+      return createHttpSuccessResponse(
+        {
+          grupos: formattedList,
+          total,
+          page: page,
+          limit,
+          total_pages: totalPages,
+        },
+        200,
+        { userId: user.id, duration: `${duration}ms` }
+      )
     }
 
     if (req.method === 'POST') {

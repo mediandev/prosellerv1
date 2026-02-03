@@ -381,6 +381,22 @@ function mapClienteFromApi(item: any): any {
   if (statusAprovacao === 'aprovado') situacao = 'Ativo';
   else if (statusAprovacao === 'rejeitado') situacao = 'Reprovado';
   else if (statusAprovacao === 'pendente') situacao = 'Análise';
+  
+  // Mapear condições_cliente (array de objetos) para condicoesPagamentoAssociadas (array de IDs)
+  let condicoesPagamentoAssociadas: string[] = [];
+  if (Array.isArray(item.condicoesPagamentoAssociadas)) {
+    condicoesPagamentoAssociadas = item.condicoesPagamentoAssociadas;
+  } else if (Array.isArray(item.condicoesCliente)) {
+    // Extrair IDs das condições de pagamento do cliente
+    condicoesPagamentoAssociadas = item.condicoesCliente
+      .map((c: any) => String(c.id_condicao ?? c.condicao_id ?? c.id ?? c))
+      .filter((id: string) => id && id !== 'undefined');
+  } else if (Array.isArray(item.condicoes_cliente)) {
+    condicoesPagamentoAssociadas = item.condicoes_cliente
+      .map((c: any) => String(c.id_condicao ?? c.condicao_id ?? c.id ?? c))
+      .filter((id: string) => id && id !== 'undefined');
+  }
+  
   return {
     id: String(item.id ?? item.cliente_id ?? ''),
     codigo: item.codigo ?? '',
@@ -390,22 +406,24 @@ function mapClienteFromApi(item: any): any {
     nomeFantasia: item.nomeFantasia ?? item.nome_fantasia ?? '',
     inscricaoEstadual: item.inscricaoEstadual ?? item.inscricao_estadual ?? '',
     situacao,
-    segmentoMercado: item.segmentoMercado ?? item.segmento_mercado ?? item.tipo_segmento ?? '',
+    segmentoMercado: item.segmentoMercado ?? item.segmento_mercado ?? item.tipo_segmento ?? item.segmento_nome ?? '',
     segmentoId: item.segmentoId ?? item.segmento_id != null ? String(item.segmentoId ?? item.segmento_id) : undefined,
-    grupoRede: item.grupoRede ?? item.grupo_rede ?? '',
+    grupoRede: item.grupoRede ?? item.grupo_id ?? item.grupo_rede_nome ?? item.grupo_rede ?? '',
+    grupoId: item.grupoId ?? item.grupo_id ?? item.grupoRede ?? undefined,
     cep: item.cep ?? item.endereco?.cep ?? '',
     logradouro: item.logradouro ?? item.endereco?.logradouro ?? '',
     numero: item.numero ?? item.endereco?.numero ?? '',
+    complemento: item.complemento ?? item.endereco?.complemento ?? '',
     bairro: item.bairro ?? item.endereco?.bairro ?? '',
     uf: item.uf ?? item.endereco?.uf ?? '',
     municipio: item.municipio ?? item.endereco?.municipio ?? item.endereco?.cidade ?? '',
     enderecoEntregaDiferente: item.enderecoEntregaDiferente ?? false,
     observacoesInternas: item.observacoesInternas ?? item.observacao_interna ?? '',
-    site: item.site ?? item.contato?.website ?? '',
-    emailPrincipal: item.emailPrincipal ?? item.contato?.email ?? '',
-    emailNFe: item.emailNFe ?? item.contato?.email_nf ?? '',
-    telefoneFixoPrincipal: item.telefoneFixoPrincipal ?? item.contato?.telefone ?? '',
-    telefoneCelularPrincipal: item.telefoneCelularPrincipal ?? item.contato?.telefone_adicional ?? '',
+    site: item.site ?? item.contato?.site ?? item.contato?.website ?? '',
+    emailPrincipal: item.emailPrincipal ?? item.contato?.emailPrincipal ?? item.contato?.email ?? '',
+    emailNFe: item.emailNFe ?? item.contato?.emailNFe ?? item.contato?.email_nf ?? '',
+    telefoneFixoPrincipal: item.telefoneFixoPrincipal ?? item.contato?.telefoneFixoPrincipal ?? item.contato?.telefone ?? '',
+    telefoneCelularPrincipal: item.telefoneCelularPrincipal ?? item.contato?.telefoneCelularPrincipal ?? item.contato?.telefone_adicional ?? '',
     pessoasContato: item.pessoasContato ?? [],
     dadosBancarios: item.dadosBancarios ?? [],
     empresaFaturamento: item.empresaFaturamento ?? '',
@@ -414,7 +432,10 @@ function mapClienteFromApi(item: any): any {
     listaPrecos: item.listaPrecos ?? '',
     descontoPadrao: Number(item.descontoPadrao ?? item.desconto ?? 0),
     descontoFinanceiro: Number(item.descontoFinanceiro ?? item.desconto_financeiro ?? 0),
-    condicoesPagamentoAssociadas: item.condicoesPagamentoAssociadas ?? item.condicoes_cliente ?? [],
+    condicoesPagamentoAssociadas,
+    // Incluir dados completos de condições_cliente e conta_corrente_cliente se disponíveis
+    condicoesCliente: item.condicoesCliente ?? item.condicoes_cliente ?? [],
+    contaCorrenteCliente: item.contaCorrenteCliente ?? item.conta_corrente_cliente ?? [],
     pedidoMinimo: Number(item.pedidoMinimo ?? item.pedido_minimo ?? 0),
     statusAprovacao,
     motivoRejeicao: item.motivoRejeicao ?? item.motivo_rejeicao ?? '',
@@ -1197,17 +1218,57 @@ export const api = {
         return [];
       }
     }
+
+    // Caso especial para ref-situacao - usar edge function
+    if (entity === 'ref-situacao') {
+      try {
+        console.log('[API] Listando situações via Edge Function ref-situacao-v2...');
+        const response = await callEdgeFunction('ref-situacao-v2', 'GET');
+        
+        if (Array.isArray(response)) {
+          console.log(`[API] ${response.length} situações encontradas`);
+          return response;
+        } else if (response && typeof response === 'object' && 'data' in response) {
+          console.log(`[API] ${response.data?.length || 0} situações encontradas`);
+          return response.data || response;
+        } else {
+          console.warn('[API] Formato de resposta inesperado para ref-situacao:', response);
+          return response;
+        }
+      } catch (error) {
+        console.error('[API] Erro ao listar situações:', error);
+        return [];
+      }
+    }
     
     // Caso especial para grupos/redes - usar edge function
     if (entity === 'grupos-redes') {
       try {
-        console.log('[API] Listando grupos/redes via Edge Function grupos-redes-v2...');
-        const response = await callEdgeFunction('grupos-redes-v2', 'GET');
+        console.log('[API] Listando grupos/redes via Edge Function grupos-redes-v2...', options?.params);
         
-        const grupos = Array.isArray(response) ? response : [];
-        console.log(`[API] ${grupos.length} grupos/redes encontrados`);
+        // Preparar query params
+        const queryParams: Record<string, any> = {};
+        if (options?.params) {
+          if (options.params.search) queryParams.search = options.params.search;
+          if (options.params.page) queryParams.page = options.params.page;
+          if (options.params.limit) queryParams.limit = options.params.limit;
+          if (options.params.apenas_ativos !== undefined) queryParams.apenas_ativos = options.params.apenas_ativos;
+        }
         
-        return grupos;
+        const response = await callEdgeFunction('grupos-redes-v2', 'GET', undefined, undefined, queryParams);
+        
+        // A resposta pode vir como array direto ou objeto com paginação
+        if (Array.isArray(response)) {
+          console.log(`[API] ${response.length} grupos/redes encontrados`);
+          return response;
+        } else if (response && typeof response === 'object' && 'grupos' in response) {
+          // Resposta com paginação do backend
+          console.log(`[API] ${response.grupos?.length || 0} grupos/redes encontrados (total: ${response.total || 0})`);
+          return response;
+        } else {
+          console.log('[API] Formato de resposta inesperado, retornando array vazio');
+          return [];
+        }
       } catch (error) {
         console.error('[API] Erro ao listar grupos/redes:', error);
         return [];
@@ -1275,36 +1336,87 @@ export const api = {
       }
     }
     
-    // Caso especial para vendas
+    // Caso especial para vendas - usar Edge Function pedido-venda-v2
     if (entity === 'vendas') {
-      const vendas = carregarVendasDoLocalStorage();
-      
-      // Aplicar filtros se fornecidos
-      if (options?.params) {
-        let filtered = [...vendas];
+      try {
+        console.log('[API] Buscando vendas via Edge Function pedido-venda-v2...');
+        const queryParams: Record<string, string> = {
+          page: '1',
+          limit: '1000', // Buscar todas (limite máximo)
+        };
         
-        if (options.params?.vendedorId) {
-          filtered = filtered.filter(v => v.vendedorId === options.params?.vendedorId);
+        if (options?.params) {
+          if (options.params.search) {
+            queryParams.search = String(options.params.search);
+          }
+          if (options.params.status) {
+            queryParams.status = String(options.params.status);
+          }
+          if (options.params.vendedorId) {
+            queryParams.vendedor = String(options.params.vendedorId);
+          }
+          if (options.params.clienteId) {
+            queryParams.cliente = String(options.params.clienteId);
+          }
+          if (options.params.dataInicio) {
+            const dataInicio = new Date(options.params.dataInicio);
+            queryParams.dataInicio = dataInicio.toISOString().split('T')[0];
+          }
+          if (options.params.dataFim) {
+            const dataFim = new Date(options.params.dataFim);
+            queryParams.dataFim = dataFim.toISOString().split('T')[0];
+          }
         }
         
-        if (options.params?.clienteId) {
-          filtered = filtered.filter(v => v.clienteId === options.params?.clienteId);
-        }
+        const response = await callEdgeFunction('pedido-venda-v2', 'GET', undefined, undefined, queryParams);
         
-        if (options.params?.dataInicio) {
-          const dataInicio = new Date(options.params.dataInicio);
-          filtered = filtered.filter(v => new Date(v.dataPedido) >= dataInicio);
-        }
+        // A resposta vem no formato { pedidos: [...], pagination: {...}, stats: {...} }
+        const pedidos = response?.pedidos || [];
         
-        if (options.params?.dataFim) {
-          const dataFim = new Date(options.params.dataFim);
-          filtered = filtered.filter(v => new Date(v.dataPedido) <= dataFim);
-        }
-        
-        return filtered;
+        // Mapear para formato Venda esperado pelo frontend
+        return pedidos.map((p: any) => ({
+          id: p.id,
+          numero: p.numero,
+          clienteId: p.clienteId,
+          nomeCliente: p.nomeCliente,
+          cnpjCliente: p.cnpjCliente,
+          inscricaoEstadualCliente: p.inscricaoEstadualCliente,
+          vendedorId: p.vendedorId,
+          nomeVendedor: p.nomeVendedor,
+          naturezaOperacaoId: p.naturezaOperacaoId,
+          nomeNaturezaOperacao: p.nomeNaturezaOperacao,
+          empresaFaturamentoId: p.empresaFaturamentoId,
+          nomeEmpresaFaturamento: p.nomeEmpresaFaturamento,
+          listaPrecoId: p.listaPrecoId,
+          nomeListaPreco: p.nomeListaPreco,
+          percentualDescontoPadrao: p.percentualDescontoPadrao,
+          condicaoPagamentoId: p.condicaoPagamentoId,
+          nomeCondicaoPagamento: p.nomeCondicaoPagamento,
+          valorPedido: p.valorPedido,
+          valorTotalProdutos: p.valorTotalProdutos,
+          percentualDescontoExtra: p.percentualDescontoExtra,
+          valorDescontoExtra: p.valorDescontoExtra,
+          totalQuantidades: p.totalQuantidades,
+          totalItens: p.totalItens,
+          pesoBrutoTotal: p.pesoBrutoTotal,
+          pesoLiquidoTotal: p.pesoLiquidoTotal,
+          status: p.status,
+          dataPedido: p.dataPedido ? new Date(p.dataPedido) : new Date(),
+          ordemCompraCliente: p.ordemCompraCliente,
+          observacoesInternas: p.observacoesInternas,
+          observacoesNotaFiscal: p.observacoesNotaFiscal,
+          createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
+          updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
+          createdBy: p.createdBy,
+          itens: [], // Produtos serão carregados separadamente se necessário
+          geraReceita: p.geraReceita,
+        }));
+      } catch (error) {
+        console.error('[API] Erro ao buscar vendas, usando fallback:', error);
+        // Fallback para localStorage em caso de erro
+        const vendas = carregarVendasDoLocalStorage();
+        return vendas;
       }
-      
-      return vendas;
     }
     
     // Outras entidades
@@ -1405,14 +1517,82 @@ export const api = {
       }
     }
     
-    // Caso especial para vendas
+    // Caso especial para vendas - usar Edge Function pedido-venda-v2
     if (entity === 'vendas') {
-      const vendas = carregarVendasDoLocalStorage();
-      const venda = vendas.find(v => v.id === id);
-      if (!venda) {
-        throw new Error(`Venda ${id} não encontrada`);
+      try {
+        console.log('[API] Buscando venda por ID via Edge Function pedido-venda-v2...');
+        const response = await callEdgeFunction('pedido-venda-v2', 'GET', undefined, id);
+        
+        // A resposta vem no formato { pedido: {...}, produtos: [...] }
+        const pedidoData = response?.pedido || response;
+        const produtos = response?.produtos || [];
+        
+        if (!pedidoData) {
+          throw new Error(`Venda ${id} não encontrada`);
+        }
+        
+        // Mapear para formato Venda esperado pelo frontend
+        return {
+          id: pedidoData.id,
+          numero: pedidoData.numero,
+          clienteId: pedidoData.clienteId,
+          nomeCliente: pedidoData.nomeCliente,
+          cnpjCliente: pedidoData.cnpjCliente,
+          inscricaoEstadualCliente: pedidoData.inscricaoEstadualCliente,
+          vendedorId: pedidoData.vendedorId,
+          nomeVendedor: pedidoData.nomeVendedor,
+          naturezaOperacaoId: pedidoData.naturezaOperacaoId,
+          nomeNaturezaOperacao: pedidoData.nomeNaturezaOperacao,
+          empresaFaturamentoId: pedidoData.empresaFaturamentoId,
+          nomeEmpresaFaturamento: pedidoData.nomeEmpresaFaturamento,
+          listaPrecoId: pedidoData.listaPrecoId,
+          nomeListaPreco: pedidoData.nomeListaPreco,
+          percentualDescontoPadrao: pedidoData.percentualDescontoPadrao,
+          condicaoPagamentoId: pedidoData.condicaoPagamentoId,
+          nomeCondicaoPagamento: pedidoData.nomeCondicaoPagamento,
+          valorPedido: pedidoData.valorPedido,
+          valorTotalProdutos: pedidoData.valorTotalProdutos,
+          percentualDescontoExtra: pedidoData.percentualDescontoExtra,
+          valorDescontoExtra: pedidoData.valorDescontoExtra,
+          totalQuantidades: pedidoData.totalQuantidades,
+          totalItens: pedidoData.totalItens,
+          pesoBrutoTotal: pedidoData.pesoBrutoTotal,
+          pesoLiquidoTotal: pedidoData.pesoLiquidoTotal,
+          status: pedidoData.status,
+          dataPedido: pedidoData.dataPedido ? new Date(pedidoData.dataPedido) : new Date(),
+          ordemCompraCliente: pedidoData.ordemCompraCliente,
+          observacoesInternas: pedidoData.observacoesInternas,
+          observacoesNotaFiscal: pedidoData.observacoesNotaFiscal,
+          createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
+          updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
+          createdBy: pedidoData.createdBy,
+          itens: produtos.map((p: any) => ({
+            id: p.id,
+            numero: p.numero,
+            produtoId: p.produtoId,
+            descricaoProduto: p.descricaoProduto,
+            codigoSku: p.codigoSku,
+            codigoEan: p.codigoEan,
+            valorTabela: p.valorTabela,
+            percentualDesconto: p.percentualDesconto,
+            valorUnitario: p.valorUnitario,
+            quantidade: p.quantidade,
+            subtotal: p.subtotal,
+            pesoBruto: p.pesoBruto,
+            pesoLiquido: p.pesoLiquido,
+            unidade: p.unidade,
+          })),
+        };
+      } catch (error) {
+        console.error('[API] Erro ao buscar venda, usando fallback:', error);
+        // Fallback para localStorage em caso de erro
+        const vendas = carregarVendasDoLocalStorage();
+        const venda = vendas.find(v => v.id === id);
+        if (!venda) {
+          throw new Error(`Venda ${id} não encontrada`);
+        }
+        return venda;
       }
-      return venda;
     }
     
     const entityConfig = entityMap[entity];
@@ -1798,16 +1978,80 @@ export const api = {
     
     // Caso especial para vendas
     if (entity === 'vendas') {
-      const vendas = carregarVendasDoLocalStorage();
-      const novaVenda = {
-        ...data,
-        id: data.id || `VD-${Date.now()}`,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      vendas.push(novaVenda);
-      salvarVendasNoLocalStorage(vendas);
-      return novaVenda;
+      try {
+        console.log('[API] Criando venda via Edge Function pedido-venda-v2...');
+        const response = await callEdgeFunction('pedido-venda-v2', 'POST', data);
+        
+        // A resposta vem no formato { pedido: {...}, produtos: [...] }
+        const pedidoData = response?.pedido || response;
+        const produtos = response?.produtos || [];
+        
+        // Mapear para formato Venda esperado pelo frontend
+        return {
+          id: pedidoData.id,
+          numero: pedidoData.numero,
+          clienteId: pedidoData.clienteId,
+          nomeCliente: pedidoData.nomeCliente,
+          cnpjCliente: pedidoData.cnpjCliente,
+          inscricaoEstadualCliente: pedidoData.inscricaoEstadualCliente,
+          vendedorId: pedidoData.vendedorId,
+          nomeVendedor: pedidoData.nomeVendedor,
+          naturezaOperacaoId: pedidoData.naturezaOperacaoId,
+          nomeNaturezaOperacao: pedidoData.nomeNaturezaOperacao,
+          empresaFaturamentoId: pedidoData.empresaFaturamentoId,
+          nomeEmpresaFaturamento: pedidoData.nomeEmpresaFaturamento,
+          listaPrecoId: pedidoData.listaPrecoId,
+          nomeListaPreco: pedidoData.nomeListaPreco,
+          percentualDescontoPadrao: pedidoData.percentualDescontoPadrao,
+          condicaoPagamentoId: pedidoData.condicaoPagamentoId,
+          nomeCondicaoPagamento: pedidoData.nomeCondicaoPagamento,
+          valorPedido: pedidoData.valorPedido,
+          valorTotalProdutos: pedidoData.valorTotalProdutos,
+          percentualDescontoExtra: pedidoData.percentualDescontoExtra,
+          valorDescontoExtra: pedidoData.valorDescontoExtra,
+          totalQuantidades: pedidoData.totalQuantidades,
+          totalItens: pedidoData.totalItens,
+          pesoBrutoTotal: pedidoData.pesoBrutoTotal,
+          pesoLiquidoTotal: pedidoData.pesoLiquidoTotal,
+          status: pedidoData.status,
+          dataPedido: pedidoData.dataPedido ? new Date(pedidoData.dataPedido) : new Date(),
+          ordemCompraCliente: pedidoData.ordemCompraCliente,
+          observacoesInternas: pedidoData.observacoesInternas,
+          observacoesNotaFiscal: pedidoData.observacoesNotaFiscal,
+          createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
+          updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
+          createdBy: pedidoData.createdBy,
+          itens: produtos.map((p: any) => ({
+            id: p.id,
+            numero: p.numero,
+            produtoId: p.produtoId,
+            descricaoProduto: p.descricaoProduto,
+            codigoSku: p.codigoSku,
+            codigoEan: p.codigoEan,
+            valorTabela: p.valorTabela,
+            percentualDesconto: p.percentualDesconto,
+            valorUnitario: p.valorUnitario,
+            quantidade: p.quantidade,
+            subtotal: p.subtotal,
+            pesoBruto: p.pesoBruto,
+            pesoLiquido: p.pesoLiquido,
+            unidade: p.unidade,
+          })),
+        };
+      } catch (error) {
+        console.error('[API] Erro ao criar venda, usando fallback:', error);
+        // Fallback para localStorage em caso de erro
+        const vendas = carregarVendasDoLocalStorage();
+        const novaVenda = {
+          ...data,
+          id: data.id || `VD-${Date.now()}`,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        vendas.push(novaVenda);
+        salvarVendasNoLocalStorage(vendas);
+        return novaVenda;
+      }
     }
     
     const entityConfig = entityMap[entity];
@@ -2108,19 +2352,83 @@ export const api = {
     
     // Caso especial para vendas
     if (entity === 'vendas') {
-      const vendas = carregarVendasDoLocalStorage();
-      const index = vendas.findIndex(v => v.id === id);
-      if (index === -1) {
-        throw new Error(`Venda ${id} não encontrada`);
+      try {
+        console.log('[API] Atualizando venda via Edge Function pedido-venda-v2...');
+        const response = await callEdgeFunction('pedido-venda-v2', 'PUT', data, id);
+        
+        // A resposta vem no formato { pedido: {...}, produtos: [...] }
+        const pedidoData = response?.pedido || response;
+        const produtos = response?.produtos || [];
+        
+        // Mapear para formato Venda esperado pelo frontend
+        return {
+          id: pedidoData.id,
+          numero: pedidoData.numero,
+          clienteId: pedidoData.clienteId,
+          nomeCliente: pedidoData.nomeCliente,
+          cnpjCliente: pedidoData.cnpjCliente,
+          inscricaoEstadualCliente: pedidoData.inscricaoEstadualCliente,
+          vendedorId: pedidoData.vendedorId,
+          nomeVendedor: pedidoData.nomeVendedor,
+          naturezaOperacaoId: pedidoData.naturezaOperacaoId,
+          nomeNaturezaOperacao: pedidoData.nomeNaturezaOperacao,
+          empresaFaturamentoId: pedidoData.empresaFaturamentoId,
+          nomeEmpresaFaturamento: pedidoData.nomeEmpresaFaturamento,
+          listaPrecoId: pedidoData.listaPrecoId,
+          nomeListaPreco: pedidoData.nomeListaPreco,
+          percentualDescontoPadrao: pedidoData.percentualDescontoPadrao,
+          condicaoPagamentoId: pedidoData.condicaoPagamentoId,
+          nomeCondicaoPagamento: pedidoData.nomeCondicaoPagamento,
+          valorPedido: pedidoData.valorPedido,
+          valorTotalProdutos: pedidoData.valorTotalProdutos,
+          percentualDescontoExtra: pedidoData.percentualDescontoExtra,
+          valorDescontoExtra: pedidoData.valorDescontoExtra,
+          totalQuantidades: pedidoData.totalQuantidades,
+          totalItens: pedidoData.totalItens,
+          pesoBrutoTotal: pedidoData.pesoBrutoTotal,
+          pesoLiquidoTotal: pedidoData.pesoLiquidoTotal,
+          status: pedidoData.status,
+          dataPedido: pedidoData.dataPedido ? new Date(pedidoData.dataPedido) : new Date(),
+          ordemCompraCliente: pedidoData.ordemCompraCliente,
+          observacoesInternas: pedidoData.observacoesInternas,
+          observacoesNotaFiscal: pedidoData.observacoesNotaFiscal,
+          createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
+          updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
+          createdBy: pedidoData.createdBy,
+          itens: produtos.map((p: any) => ({
+            id: p.id,
+            numero: p.numero,
+            produtoId: p.produtoId,
+            descricaoProduto: p.descricaoProduto,
+            codigoSku: p.codigoSku,
+            codigoEan: p.codigoEan,
+            valorTabela: p.valorTabela,
+            percentualDesconto: p.percentualDesconto,
+            valorUnitario: p.valorUnitario,
+            quantidade: p.quantidade,
+            subtotal: p.subtotal,
+            pesoBruto: p.pesoBruto,
+            pesoLiquido: p.pesoLiquido,
+            unidade: p.unidade,
+          })),
+        };
+      } catch (error) {
+        console.error('[API] Erro ao atualizar venda, usando fallback:', error);
+        // Fallback para localStorage em caso de erro
+        const vendas = carregarVendasDoLocalStorage();
+        const index = vendas.findIndex(v => v.id === id);
+        if (index === -1) {
+          throw new Error(`Venda ${id} não encontrada`);
+        }
+        vendas[index] = {
+          ...vendas[index],
+          ...data,
+          id,
+          updatedAt: new Date(),
+        };
+        salvarVendasNoLocalStorage(vendas);
+        return vendas[index];
       }
-      vendas[index] = {
-        ...vendas[index],
-        ...data,
-        id,
-        updatedAt: new Date(),
-      };
-      salvarVendasNoLocalStorage(vendas);
-      return vendas[index];
     }
     
     const entityConfig = entityMap[entity];
@@ -2335,14 +2643,22 @@ export const api = {
     
     // Caso especial para vendas
     if (entity === 'vendas') {
-      const vendas = carregarVendasDoLocalStorage();
-      const index = vendas.findIndex(v => v.id === entityId);
-      if (index === -1) {
-        throw new Error(`Venda ${entityId} não encontrada`);
+      try {
+        console.log('[API] Excluindo venda via Edge Function pedido-venda-v2...');
+        await callEdgeFunction('pedido-venda-v2', 'DELETE', undefined, entityId);
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir venda, usando fallback:', error);
+        // Fallback para localStorage em caso de erro
+        const vendas = carregarVendasDoLocalStorage();
+        const index = vendas.findIndex(v => v.id === entityId);
+        if (index === -1) {
+          throw new Error(`Venda ${entityId} não encontrada`);
+        }
+        vendas.splice(index, 1);
+        salvarVendasNoLocalStorage(vendas);
+        return { success: true };
       }
-      vendas.splice(index, 1);
-      salvarVendasNoLocalStorage(vendas);
-      return { success: true };
     }
     
     const entityConfig = entityMap[entity];
@@ -2448,75 +2764,576 @@ export const api = {
     },
   },
   
-  // Metas endpoints
+  // Metas endpoints - Usa Edge Function metas-vendedor-v2
   metas: {
     buscarPorVendedor: async (vendedorId: string, ano: number, mes: number) => {
-      // Buscar metas mockadas (se houver) ou retornar null
-      const metasKey = `mockMetas_${vendedorId}_${ano}_${mes}`;
-      const stored = localStorage.getItem(metasKey);
-      if (stored) {
-        return JSON.parse(stored);
+      try {
+        console.log('[API] Buscando meta por vendedor via Edge Function metas-vendedor-v2...');
+        const response = await callEdgeFunction('metas-vendedor-v2', 'GET', undefined, undefined, {
+          vendedor_id: vendedorId,
+          ano: ano.toString(),
+          mes: mes.toString(),
+        });
+        
+        // A resposta vem no formato { metas: [...], pagination: {...} }
+        const metas = response?.metas || [];
+        const meta = metas.find((m: any) => 
+          m.vendedorId === vendedorId && m.ano === ano && m.mes === mes
+        );
+        
+        return meta || null;
+      } catch (error) {
+        console.error('[API] Erro ao buscar meta por vendedor:', error);
+        return null;
       }
-      return null;
     },
     
     buscarTotal: async (ano: number, mes: number) => {
-      // Calcular total de metas mockadas
-      return {
-        total: 0,
-        vendedores: [],
-      };
+      try {
+        console.log('[API] Buscando total de metas via Edge Function metas-vendedor-v2/total...');
+        const response = await callEdgeFunction('metas-vendedor-v2', 'GET', undefined, 'total', {
+          ano: ano.toString(),
+          mes: mes.toString(),
+        });
+        
+        // callEdgeFunction já extrai o data, então response já é { total: 0, ano: 2026, mes: 2 }
+        let total = 0;
+        if (typeof response === 'number') {
+          total = response;
+        } else if (response && typeof response === 'object') {
+          if ('total' in response) {
+            total = typeof (response as any).total === 'number' ? (response as any).total : parseFloat(String((response as any).total || '0'));
+          } else if ('data' in response && typeof (response as any).data === 'object') {
+            const data = (response as any).data;
+            total = typeof data?.total === 'number' ? data.total : parseFloat(String(data?.total || '0'));
+          }
+        }
+        
+        return {
+          total,
+          ano: (response as any)?.ano || ano,
+          mes: (response as any)?.mes || mes,
+        };
+      } catch (error) {
+        console.error('[API] Erro ao buscar total de metas:', error);
+        return {
+          total: 0,
+          ano,
+          mes,
+        };
+      }
     },
     
-    buscarTodas: async () => {
-      // Buscar todas as metas do localStorage
-      const metas: any[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key?.startsWith('mockMetas_')) {
-          metas.push(JSON.parse(localStorage.getItem(key) || '{}'));
+    buscarTodas: async (ano?: number, mes?: number) => {
+      try {
+        console.log('[API] Buscando todas as metas via Edge Function metas-vendedor-v2...', { ano, mes });
+        const queryParams: Record<string, string> = {
+          page: '1',
+          limit: '1000', // Buscar todas (limite máximo)
+        };
+        
+        if (ano !== undefined) {
+          queryParams.ano = ano.toString();
         }
+        if (mes !== undefined) {
+          queryParams.mes = mes.toString();
+        }
+        
+        const response = await callEdgeFunction('metas-vendedor-v2', 'GET', undefined, undefined, queryParams);
+        
+        console.log('[API] Resposta bruta do callEdgeFunction:', response);
+        console.log('[API] Tipo da resposta:', typeof response);
+        console.log('[API] É array?', Array.isArray(response));
+        console.log('[API] Chaves do objeto (se for objeto):', response && typeof response === 'object' ? Object.keys(response) : 'N/A');
+        
+        // callEdgeFunction já extrai o data, então response já é { metas: [...], pagination: {...} }
+        // ou pode ser diretamente o array se a Edge Function retornar de forma diferente
+        let metas: any[] = [];
+        
+        if (Array.isArray(response)) {
+          // Se já é um array, usar diretamente
+          metas = response;
+          console.log('[API] Resposta já é um array, usando diretamente');
+        } else if (response && typeof response === 'object') {
+          // Verificar se tem a propriedade 'metas'
+          if ('metas' in response) {
+            const metasValue = (response as any).metas;
+            console.log('[API] Propriedade metas encontrada:', { tipo: typeof metasValue, éArray: Array.isArray(metasValue), length: Array.isArray(metasValue) ? metasValue.length : 'N/A' });
+            if (Array.isArray(metasValue)) {
+              metas = metasValue;
+            } else {
+              console.warn('[API] Propriedade metas não é um array:', metasValue);
+            }
+          } 
+          // Fallback: verificar se tem 'data' (caso callEdgeFunction não tenha extraído)
+          else if ('data' in response) {
+            const data = (response as any).data;
+            console.log('[API] Propriedade data encontrada:', { tipo: typeof data, éArray: Array.isArray(data) });
+            if (Array.isArray(data)) {
+              metas = data;
+            } else if (data && typeof data === 'object' && 'metas' in data) {
+              const dataMetas = data.metas;
+              if (Array.isArray(dataMetas)) {
+                metas = dataMetas;
+              }
+            }
+          }
+          // Se response é um objeto mas não tem 'metas', pode ser que seja o array diretamente
+          // ou pode ser que seja um objeto vazio
+          else {
+            console.warn('[API] Resposta não contém propriedade metas ou data:', response);
+            console.warn('[API] Chaves disponíveis:', Object.keys(response));
+          }
+        } else {
+          console.warn('[API] Resposta não é array nem objeto:', response);
+        }
+        
+        console.log(`[API] ${metas.length} metas extraídas da resposta`);
+        if (metas.length > 0) {
+          console.log('[API] Primeira meta:', metas[0]);
+        }
+        return metas;
+      } catch (error) {
+        console.error('[API] Erro ao buscar todas as metas:', error);
+        return [];
       }
-      return metas;
     },
     
     salvar: async (data: any) => {
-      const { vendedorId, ano, mes } = data;
-      const metasKey = `mockMetas_${vendedorId}_${ano}_${mes}`;
-      localStorage.setItem(metasKey, JSON.stringify(data));
-      return data;
+      try {
+        console.log('[API] Salvando meta via Edge Function metas-vendedor-v2...');
+        const response = await callEdgeFunction('metas-vendedor-v2', 'POST', {
+          vendedorId: data.vendedorId,
+          ano: data.ano,
+          mes: data.mes,
+          metaMensal: data.metaMensal,
+          metaPercentualCrescimento: data.metaPercentualCrescimento,
+          periodoReferencia: data.periodoReferencia,
+        });
+        
+        // A resposta já vem no formato esperado pelo frontend
+        return response;
+      } catch (error: any) {
+        console.error('[API] Erro ao salvar meta:', error);
+        throw error;
+      }
     },
     
     atualizar: async (vendedorId: string, ano: number, mes: number, data: any) => {
-      const metasKey = `mockMetas_${vendedorId}_${ano}_${mes}`;
-      localStorage.setItem(metasKey, JSON.stringify({ ...data, vendedorId, ano, mes }));
-      return { ...data, vendedorId, ano, mes };
+      try {
+        console.log('[API] Atualizando meta via Edge Function metas-vendedor-v2...');
+        
+        // Primeiro buscar a meta para obter o ID
+        const todasMetas = await callEdgeFunction('metas-vendedor-v2', 'GET', undefined, undefined, {
+          vendedor_id: vendedorId,
+          ano: ano.toString(),
+          mes: mes.toString(),
+        });
+        
+        const metaExistente = todasMetas?.metas?.find((m: any) => 
+          m.vendedorId === vendedorId && m.ano === ano && m.mes === mes
+        );
+        
+        if (!metaExistente || !metaExistente.id) {
+          throw new Error('Meta não encontrada para atualização');
+        }
+        
+        const response = await callEdgeFunction('metas-vendedor-v2', 'PUT', {
+          vendedorId: data.vendedorId || vendedorId,
+          ano: data.ano !== undefined ? data.ano : ano,
+          mes: data.mes !== undefined ? data.mes : mes,
+          metaMensal: data.metaMensal,
+          metaPercentualCrescimento: data.metaPercentualCrescimento,
+          periodoReferencia: data.periodoReferencia,
+        }, metaExistente.id);
+        
+        return response;
+      } catch (error: any) {
+        console.error('[API] Erro ao atualizar meta:', error);
+        throw error;
+      }
     },
     
     deletar: async (vendedorId: string, ano: number, mes: number) => {
-      const metasKey = `mockMetas_${vendedorId}_${ano}_${mes}`;
-      localStorage.removeItem(metasKey);
-      return { success: true };
+      try {
+        console.log('[API] Deletando meta via Edge Function metas-vendedor-v2...');
+        
+        // Primeiro buscar a meta para obter o ID
+        const todasMetas = await callEdgeFunction('metas-vendedor-v2', 'GET', undefined, undefined, {
+          vendedor_id: vendedorId,
+          ano: ano.toString(),
+          mes: mes.toString(),
+        });
+        
+        const metaExistente = todasMetas?.metas?.find((m: any) => 
+          m.vendedorId === vendedorId && m.ano === ano && m.mes === mes
+        );
+        
+        if (!metaExistente || !metaExistente.id) {
+          throw new Error('Meta não encontrada para exclusão');
+        }
+        
+        await callEdgeFunction('metas-vendedor-v2', 'DELETE', undefined, metaExistente.id);
+        
+        return { success: true };
+      } catch (error: any) {
+        console.error('[API] Erro ao deletar meta:', error);
+        throw error;
+      }
     },
     
     copiar: async (data: any) => {
-      // Copiar metas de um período para outro
-      const { origem, destino } = data;
-      const origemKey = `mockMetas_${origem.vendedorId}_${origem.ano}_${origem.mes}`;
-      const destinoKey = `mockMetas_${destino.vendedorId}_${destino.ano}_${destino.mes}`;
-      
-      const origemData = localStorage.getItem(origemKey);
-      if (origemData) {
-        const meta = JSON.parse(origemData);
-        localStorage.setItem(destinoKey, JSON.stringify({
-          ...meta,
-          vendedorId: destino.vendedorId,
-          ano: destino.ano,
-          mes: destino.mes,
-        }));
+      try {
+        console.log('[API] Copiando metas via Edge Function metas-vendedor-v2/copiar...');
+        
+        // O frontend envia: { deAno, deMes, paraAno, paraMes }
+        // Usar path 'copiar' e body com os parâmetros
+        const response = await callEdgeFunction('metas-vendedor-v2', 'POST', {
+          deAno: data.deAno || data.de_ano,
+          deMes: data.deMes || data.de_mes,
+          paraAno: data.paraAno || data.para_ano,
+          paraMes: data.paraMes || data.para_mes,
+        }, 'copiar');
+        
+        // A resposta vem no formato { success: true, copiedCount: 0, message: "..." }
+        return {
+          success: response?.success || true,
+          copiedCount: response?.copiedCount || response?.data?.copiedCount || 0,
+        };
+      } catch (error: any) {
+        console.error('[API] Erro ao copiar metas:', error);
+        throw error;
       }
-      
-      return { success: true };
+    },
+  },
+  
+  // Vendas/Pedidos - Usa Edge Function pedido-venda-v2
+  vendas: {
+    list: async (filters?: { 
+      search?: string
+      status?: string
+      vendedor?: string
+      cliente?: string
+      dataInicio?: string
+      dataFim?: string
+      page?: number
+      limit?: number 
+    }) => {
+      try {
+        console.log('[API] Listando vendas via Edge Function pedido-venda-v2...');
+        const queryParams: Record<string, string> = {
+          page: (filters?.page || 1).toString(),
+          limit: (filters?.limit || 100).toString(),
+        };
+        
+        if (filters?.search) queryParams.search = filters.search;
+        if (filters?.status) queryParams.status = filters.status;
+        if (filters?.vendedor) queryParams.vendedor = filters.vendedor;
+        if (filters?.cliente) queryParams.cliente = filters.cliente;
+        if (filters?.dataInicio) queryParams.dataInicio = filters.dataInicio;
+        if (filters?.dataFim) queryParams.dataFim = filters.dataFim;
+        
+        const response = await callEdgeFunction('pedido-venda-v2', 'GET', undefined, undefined, queryParams);
+        
+        console.log('[API] Resposta completa do callEdgeFunction:', response);
+        console.log('[API] Tipo da resposta:', typeof response);
+        console.log('[API] response.pedidos:', response?.pedidos);
+        console.log('[API] response.pagination:', response?.pagination);
+        console.log('[API] response.stats:', response?.stats);
+        
+        // A resposta vem no formato { pedidos: [...], pagination: {...}, stats: {...} }
+        const pedidos = response?.pedidos || [];
+        const pagination = response?.pagination || {};
+        const stats = response?.stats || {};
+        
+        console.log('[API] Pedidos extraídos:', pedidos.length);
+        console.log('[API] Primeiro pedido:', pedidos[0]);
+        
+        // Mapear pedidos para formato Venda esperado pelo frontend
+        const vendas = pedidos.map((p: any) => ({
+          id: p.id,
+          numero: p.numero,
+          clienteId: p.clienteId,
+          nomeCliente: p.nomeCliente,
+          cnpjCliente: p.cnpjCliente,
+          inscricaoEstadualCliente: p.inscricaoEstadualCliente,
+          clienteCodigo: p.clienteCodigo,
+          clienteRazaoSocial: p.nomeCliente,
+          clienteNomeFantasia: p.clienteNomeFantasia,
+          clienteGrupoRede: p.clienteGrupoRede,
+          vendedorId: p.vendedorId,
+          nomeVendedor: p.nomeVendedor,
+          naturezaOperacaoId: p.naturezaOperacaoId,
+          nomeNaturezaOperacao: p.nomeNaturezaOperacao,
+          empresaFaturamentoId: p.empresaFaturamentoId,
+          nomeEmpresaFaturamento: p.nomeEmpresaFaturamento,
+          listaPrecoId: p.listaPrecoId,
+          nomeListaPreco: p.nomeListaPreco,
+          percentualDescontoPadrao: p.percentualDescontoPadrao,
+          condicaoPagamentoId: p.condicaoPagamentoId,
+          nomeCondicaoPagamento: p.nomeCondicaoPagamento,
+          valorPedido: p.valorPedido,
+          valorTotalProdutos: p.valorTotalProdutos,
+          percentualDescontoExtra: p.percentualDescontoExtra,
+          valorDescontoExtra: p.valorDescontoExtra,
+          totalQuantidades: p.totalQuantidades,
+          totalItens: p.totalItens,
+          pesoBrutoTotal: p.pesoBrutoTotal,
+          pesoLiquidoTotal: p.pesoLiquidoTotal,
+          status: p.status,
+          dataPedido: p.dataPedido ? new Date(p.dataPedido) : new Date(),
+          ordemCompraCliente: p.ordemCompraCliente,
+          observacoesInternas: p.observacoesInternas,
+          observacoesNotaFiscal: p.observacoesNotaFiscal,
+          createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
+          updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
+          createdBy: p.createdBy,
+          itens: [], // Produtos serão carregados separadamente se necessário
+          geraReceita: p.geraReceita,
+        }));
+        
+        return {
+          vendas,
+          pagination,
+          stats,
+        };
+      } catch (error) {
+        console.error('[API] Erro ao listar vendas, usando fallback:', error);
+        // Fallback para localStorage em caso de erro
+        const vendas = carregarVendasDoLocalStorage();
+        return {
+          vendas,
+          pagination: { page: 1, limit: 100, total: vendas.length, total_pages: 1 },
+          stats: {
+            total: 0,
+            totalVendas: 0,
+            concluidas: 0,
+            totalConcluidas: 0,
+            emAndamento: 0,
+            totalEmAndamento: 0,
+            ticketMedio: 0,
+            outrosPedidosTotal: 0,
+            outrosPedidosConcluidos: 0,
+            outrosPedidosEmAndamento: 0,
+          },
+        };
+      }
+    },
+    
+    get: async (id: string) => {
+      try {
+        console.log('[API] Buscando venda por ID via Edge Function pedido-venda-v2...');
+        const response = await callEdgeFunction('pedido-venda-v2', 'GET', undefined, id);
+        
+        // A resposta vem no formato { pedido: {...}, produtos: [...] }
+        const pedidoData = response?.pedido || response;
+        const produtos = response?.produtos || [];
+        
+        if (!pedidoData) {
+          throw new Error(`Venda ${id} não encontrada`);
+        }
+        
+        // Mapear para formato Venda esperado pelo frontend
+        return {
+          id: pedidoData.id,
+          numero: pedidoData.numero,
+          clienteId: pedidoData.clienteId,
+          nomeCliente: pedidoData.nomeCliente,
+          cnpjCliente: pedidoData.cnpjCliente,
+          inscricaoEstadualCliente: pedidoData.inscricaoEstadualCliente,
+          vendedorId: pedidoData.vendedorId,
+          nomeVendedor: pedidoData.nomeVendedor,
+          naturezaOperacaoId: pedidoData.naturezaOperacaoId,
+          nomeNaturezaOperacao: pedidoData.nomeNaturezaOperacao,
+          empresaFaturamentoId: pedidoData.empresaFaturamentoId,
+          nomeEmpresaFaturamento: pedidoData.nomeEmpresaFaturamento,
+          listaPrecoId: pedidoData.listaPrecoId,
+          nomeListaPreco: pedidoData.nomeListaPreco,
+          percentualDescontoPadrao: pedidoData.percentualDescontoPadrao,
+          condicaoPagamentoId: pedidoData.condicaoPagamentoId,
+          nomeCondicaoPagamento: pedidoData.nomeCondicaoPagamento,
+          valorPedido: pedidoData.valorPedido,
+          valorTotalProdutos: pedidoData.valorTotalProdutos,
+          percentualDescontoExtra: pedidoData.percentualDescontoExtra,
+          valorDescontoExtra: pedidoData.valorDescontoExtra,
+          totalQuantidades: pedidoData.totalQuantidades,
+          totalItens: pedidoData.totalItens,
+          pesoBrutoTotal: pedidoData.pesoBrutoTotal,
+          pesoLiquidoTotal: pedidoData.pesoLiquidoTotal,
+          status: pedidoData.status,
+          dataPedido: pedidoData.dataPedido ? new Date(pedidoData.dataPedido) : new Date(),
+          ordemCompraCliente: pedidoData.ordemCompraCliente,
+          observacoesInternas: pedidoData.observacoesInternas,
+          observacoesNotaFiscal: pedidoData.observacoesNotaFiscal,
+          createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
+          updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
+          createdBy: pedidoData.createdBy,
+          itens: produtos.map((p: any) => ({
+            id: p.id,
+            numero: p.numero,
+            produtoId: p.produtoId,
+            descricaoProduto: p.descricaoProduto,
+            codigoSku: p.codigoSku,
+            codigoEan: p.codigoEan,
+            valorTabela: p.valorTabela,
+            percentualDesconto: p.percentualDesconto,
+            valorUnitario: p.valorUnitario,
+            quantidade: p.quantidade,
+            subtotal: p.subtotal,
+            pesoBruto: p.pesoBruto,
+            pesoLiquido: p.pesoLiquido,
+            unidade: p.unidade,
+          })),
+        };
+      } catch (error) {
+        console.error('[API] Erro ao buscar venda:', error);
+        throw error;
+      }
+    },
+    
+    create: async (data: any) => {
+      try {
+        console.log('[API] Criando venda via Edge Function pedido-venda-v2...');
+        const response = await callEdgeFunction('pedido-venda-v2', 'POST', data);
+        
+        // A resposta vem no formato { pedido: {...}, produtos: [...] }
+        const pedidoData = response?.pedido || response;
+        const produtos = response?.produtos || [];
+        
+        // Mapear para formato Venda esperado pelo frontend
+        return {
+          id: pedidoData.id,
+          numero: pedidoData.numero,
+          clienteId: pedidoData.clienteId,
+          nomeCliente: pedidoData.nomeCliente,
+          cnpjCliente: pedidoData.cnpjCliente,
+          inscricaoEstadualCliente: pedidoData.inscricaoEstadualCliente,
+          vendedorId: pedidoData.vendedorId,
+          nomeVendedor: pedidoData.nomeVendedor,
+          naturezaOperacaoId: pedidoData.naturezaOperacaoId,
+          nomeNaturezaOperacao: pedidoData.nomeNaturezaOperacao,
+          empresaFaturamentoId: pedidoData.empresaFaturamentoId,
+          nomeEmpresaFaturamento: pedidoData.nomeEmpresaFaturamento,
+          listaPrecoId: pedidoData.listaPrecoId,
+          nomeListaPreco: pedidoData.nomeListaPreco,
+          percentualDescontoPadrao: pedidoData.percentualDescontoPadrao,
+          condicaoPagamentoId: pedidoData.condicaoPagamentoId,
+          nomeCondicaoPagamento: pedidoData.nomeCondicaoPagamento,
+          valorPedido: pedidoData.valorPedido,
+          valorTotalProdutos: pedidoData.valorTotalProdutos,
+          percentualDescontoExtra: pedidoData.percentualDescontoExtra,
+          valorDescontoExtra: pedidoData.valorDescontoExtra,
+          totalQuantidades: pedidoData.totalQuantidades,
+          totalItens: pedidoData.totalItens,
+          pesoBrutoTotal: pedidoData.pesoBrutoTotal,
+          pesoLiquidoTotal: pedidoData.pesoLiquidoTotal,
+          status: pedidoData.status,
+          dataPedido: pedidoData.dataPedido ? new Date(pedidoData.dataPedido) : new Date(),
+          ordemCompraCliente: pedidoData.ordemCompraCliente,
+          observacoesInternas: pedidoData.observacoesInternas,
+          observacoesNotaFiscal: pedidoData.observacoesNotaFiscal,
+          createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
+          updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
+          createdBy: pedidoData.createdBy,
+          itens: produtos.map((p: any) => ({
+            id: p.id,
+            numero: p.numero,
+            produtoId: p.produtoId,
+            descricaoProduto: p.descricaoProduto,
+            codigoSku: p.codigoSku,
+            codigoEan: p.codigoEan,
+            valorTabela: p.valorTabela,
+            percentualDesconto: p.percentualDesconto,
+            valorUnitario: p.valorUnitario,
+            quantidade: p.quantidade,
+            subtotal: p.subtotal,
+            pesoBruto: p.pesoBruto,
+            pesoLiquido: p.pesoLiquido,
+            unidade: p.unidade,
+          })),
+        };
+      } catch (error) {
+        console.error('[API] Erro ao criar venda:', error);
+        throw error;
+      }
+    },
+    
+    update: async (id: string, data: any) => {
+      try {
+        console.log('[API] Atualizando venda via Edge Function pedido-venda-v2...');
+        const response = await callEdgeFunction('pedido-venda-v2', 'PUT', data, id);
+        
+        // A resposta vem no formato { pedido: {...}, produtos: [...] }
+        const pedidoData = response?.pedido || response;
+        const produtos = response?.produtos || [];
+        
+        // Mapear para formato Venda esperado pelo frontend
+        return {
+          id: pedidoData.id,
+          numero: pedidoData.numero,
+          clienteId: pedidoData.clienteId,
+          nomeCliente: pedidoData.nomeCliente,
+          cnpjCliente: pedidoData.cnpjCliente,
+          inscricaoEstadualCliente: pedidoData.inscricaoEstadualCliente,
+          vendedorId: pedidoData.vendedorId,
+          nomeVendedor: pedidoData.nomeVendedor,
+          naturezaOperacaoId: pedidoData.naturezaOperacaoId,
+          nomeNaturezaOperacao: pedidoData.nomeNaturezaOperacao,
+          empresaFaturamentoId: pedidoData.empresaFaturamentoId,
+          nomeEmpresaFaturamento: pedidoData.nomeEmpresaFaturamento,
+          listaPrecoId: pedidoData.listaPrecoId,
+          nomeListaPreco: pedidoData.nomeListaPreco,
+          percentualDescontoPadrao: pedidoData.percentualDescontoPadrao,
+          condicaoPagamentoId: pedidoData.condicaoPagamentoId,
+          nomeCondicaoPagamento: pedidoData.nomeCondicaoPagamento,
+          valorPedido: pedidoData.valorPedido,
+          valorTotalProdutos: pedidoData.valorTotalProdutos,
+          percentualDescontoExtra: pedidoData.percentualDescontoExtra,
+          valorDescontoExtra: pedidoData.valorDescontoExtra,
+          totalQuantidades: pedidoData.totalQuantidades,
+          totalItens: pedidoData.totalItens,
+          pesoBrutoTotal: pedidoData.pesoBrutoTotal,
+          pesoLiquidoTotal: pedidoData.pesoLiquidoTotal,
+          status: pedidoData.status,
+          dataPedido: pedidoData.dataPedido ? new Date(pedidoData.dataPedido) : new Date(),
+          ordemCompraCliente: pedidoData.ordemCompraCliente,
+          observacoesInternas: pedidoData.observacoesInternas,
+          observacoesNotaFiscal: pedidoData.observacoesNotaFiscal,
+          createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
+          updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
+          createdBy: pedidoData.createdBy,
+          itens: produtos.map((p: any) => ({
+            id: p.id,
+            numero: p.numero,
+            produtoId: p.produtoId,
+            descricaoProduto: p.descricaoProduto,
+            codigoSku: p.codigoSku,
+            codigoEan: p.codigoEan,
+            valorTabela: p.valorTabela,
+            percentualDesconto: p.percentualDesconto,
+            valorUnitario: p.valorUnitario,
+            quantidade: p.quantidade,
+            subtotal: p.subtotal,
+            pesoBruto: p.pesoBruto,
+            pesoLiquido: p.pesoLiquido,
+            unidade: p.unidade,
+          })),
+        };
+      } catch (error) {
+        console.error('[API] Erro ao atualizar venda:', error);
+        throw error;
+      }
+    },
+    
+    delete: async (id: string) => {
+      try {
+        console.log('[API] Excluindo venda via Edge Function pedido-venda-v2...');
+        await callEdgeFunction('pedido-venda-v2', 'DELETE', undefined, id);
+        return { success: true };
+      } catch (error) {
+        console.error('[API] Erro ao excluir venda:', error);
+        throw error;
+      }
     },
   },
   

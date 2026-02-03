@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Venda, StatusVenda } from "../types/venda";
@@ -135,37 +135,67 @@ interface Sale {
 }
 
 // ✅ CORRIGIDO: Função para converter Venda para Sale SEM mapeamento de status
-const convertVendaToSale = (venda: Venda): Sale => {
-  // Extrair iniciais do vendedor
-  const iniciais = venda.nomeVendedor
+const convertVendaToSale = (venda: Venda | any): Sale => {
+  // Extrair iniciais do vendedor (lidar com null/undefined)
+  const nomeVendedor = venda.nomeVendedor || venda.vendedorNome || 'Sem Vendedor';
+  const iniciais = nomeVendedor
     .split(' ')
+    .filter(n => n && n.length > 0)
     .map(n => n[0])
     .join('')
     .toUpperCase()
-    .substring(0, 2);
+    .substring(0, 2) || 'SV';
+
+  // Normalizar status (se vazio ou inválido, usar 'Rascunho')
+  let status: StatusVenda = venda.status || 'Rascunho';
+  if (status === '' || !['Rascunho', 'Em Análise', 'Aprovado', 'Faturado', 'Concluído', 'Cancelado', 'Em Separação', 'Enviado'].includes(status)) {
+    status = 'Rascunho';
+  }
+
+  // Garantir que itens seja um array
+  const itens = Array.isArray(venda.itens) ? venda.itens : [];
+  const produtos = itens.length > 0 
+    ? itens.map((item: any) => item.descricaoProduto || item.descricao || 'Produto sem descrição')
+    : ['Sem produtos cadastrados'];
+
+  // Normalizar data
+  let dataPedido: Date;
+  if (venda.dataPedido) {
+    if (venda.dataPedido instanceof Date) {
+      dataPedido = venda.dataPedido;
+    } else if (typeof venda.dataPedido === 'string') {
+      dataPedido = new Date(venda.dataPedido);
+    } else {
+      dataPedido = new Date();
+    }
+  } else {
+    dataPedido = venda.createdAt ? (venda.createdAt instanceof Date ? venda.createdAt : new Date(venda.createdAt)) : new Date();
+  }
 
   return {
-    id: venda.id,
-    numero: venda.numero,
-    cliente: venda.nomeCliente,
+    id: venda.id || '',
+    numero: venda.numero || venda.id || '',
+    cliente: venda.nomeCliente || venda.clienteNome || 'Cliente não informado',
     clienteCodigo: venda.clienteCodigo,
-    clienteCnpj: venda.clienteCnpj,
-    clienteRazaoSocial: venda.clienteRazaoSocial,
+    clienteCnpj: venda.cnpjCliente || venda.clienteCnpj,
+    clienteRazaoSocial: venda.clienteRazaoSocial || venda.nomeCliente,
     clienteNomeFantasia: venda.clienteNomeFantasia,
     clienteGrupoRede: venda.clienteGrupoRede,
     ordemCompraCliente: venda.ordemCompraCliente,
-    empresa: venda.nomeEmpresaFaturamento,
-    vendedor: venda.nomeVendedor,
-    vendedorId: venda.vendedorId,
+    empresa: venda.nomeEmpresaFaturamento || venda.empresaFaturamentoNome || 'Empresa não informada',
+    vendedor: nomeVendedor,
+    vendedorId: venda.vendedorId || venda.vendedor_uuid || '',
     vendedorIniciais: iniciais,
-    valor: venda.valorPedido,
-    produtos: venda.itens.map(item => item.descricaoProduto),
-    naturezaOperacao: venda.nomeNaturezaOperacao,
-    naturezaOperacaoId: venda.naturezaOperacaoId,
-    status: venda.status, // ✅ USA STATUS DIRETO DO BANCO - SEM CONVERSÃO
-    data: format(new Date(venda.dataPedido), "dd/MM/yyyy", { locale: ptBR }),
-    dataFechamento: venda.status === 'Faturado' ? format(new Date(venda.updatedAt), "dd/MM/yyyy", { locale: ptBR }) : undefined,
-    observacoes: venda.observacoesInternas,
+    valor: venda.valorPedido || venda.valor_total || 0,
+    produtos: produtos,
+    naturezaOperacao: venda.nomeNaturezaOperacao || venda.naturezaOperacaoNome || 'Natureza não informada',
+    naturezaOperacaoId: venda.naturezaOperacaoId || venda.natureza_operacao_id || '',
+    status: status,
+    data: format(dataPedido, "dd/MM/yyyy", { locale: ptBR }),
+    dataFechamento: (status === 'Faturado' || status === 'Concluído') && venda.updatedAt 
+      ? format(venda.updatedAt instanceof Date ? venda.updatedAt : new Date(venda.updatedAt), "dd/MM/yyyy", { locale: ptBR }) 
+      : undefined,
+    observacoes: venda.observacoesInternas || venda.observacoes || '',
     integracaoERP: venda.integracaoERP,
   };
 };
@@ -230,7 +260,7 @@ export function SalesPage({
   onVisualizarVenda, 
   onEditarVenda,
   onIntegracaoERP,
-  period = "current_month",
+  period = "all",
   onPeriodChange,
   customDateRange = { from: undefined, to: undefined },
   onCustomDateRangeChange
@@ -238,40 +268,139 @@ export function SalesPage({
   const { usuario } = useAuth();
   const ehVendedor = usuario?.tipo === 'vendedor';
   
+  // Declarações de estado - TODAS ANTES DOS useEffect
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [enviandoParaERP, setEnviandoParaERP] = useState<string | null>(null);
   const [naturezasOperacao, setNaturezasOperacao] = useState<NaturezaOperacao[]>([]);
+  const [statsFromAPI, setStatsFromAPI] = useState<any>(null);
+  const [paginationFromAPI, setPaginationFromAPI] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>(customDateRange);
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [itensPorPagina, setItensPorPagina] = useState(10);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    id: string | null;
+    cliente: string | null;
+  }>({
+    open: false,
+    id: null,
+    cliente: null,
+  });
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [naturezaPopoverOpen, setNaturezaPopoverOpen] = useState(false);
+  const [selectedNatureza, setSelectedNatureza] = useState<string>("");
+  const [sortField, setSortField] = useState<keyof Sale | null>("data");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [sincronizandoVenda, setSincronizandoVenda] = useState<string | null>(null);
+  const [corrigindoIntegracao, setCorrigindoIntegracao] = useState(false);
+  const [dialogCorrigirOpen, setDialogCorrigirOpen] = useState(false);
   
-  // Carregar vendas e naturezas de operação do Supabase
-  useEffect(() => {
-    carregarDados();
-  }, []);
-
-  const carregarDados = async () => {
+  // Função carregarDados usando useCallback para poder ser usada nos useEffect
+  const carregarDados = useCallback(async () => {
     try {
-      console.log('[SALES-PAGE] Carregando dados da API...');
-      const [vendasAPI, naturezasAPI] = await Promise.all([
-        api.get('vendas'),
+      setLoading(true);
+      console.log('[SALES-PAGE] Carregando dados da API...', { page: paginaAtual, limit: itensPorPagina });
+      
+      // Preparar filtros de data se necessário
+      // NOTA: Se period for "all", não aplicar filtro de data
+      let dataInicio: string | undefined;
+      let dataFim: string | undefined;
+      
+      if (period && period !== "custom" && period !== "all") {
+        const now = new Date();
+        if (period.includes('-')) {
+          const [year, month] = period.split('-').map(Number);
+          dataInicio = `${year}-${String(month).padStart(2, '0')}-01`;
+          const lastDay = new Date(year, month, 0).getDate();
+          dataFim = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+        } else {
+          switch (period) {
+            case "current_month":
+              const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+              const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+              dataInicio = format(startOfMonth, 'yyyy-MM-dd');
+              dataFim = format(endOfMonth, 'yyyy-MM-dd');
+              break;
+            case "7":
+              const sevenDaysAgo = new Date(now);
+              sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+              dataInicio = format(sevenDaysAgo, 'yyyy-MM-dd');
+              dataFim = format(now, 'yyyy-MM-dd');
+              break;
+            case "30":
+              const thirtyDaysAgo = new Date(now);
+              thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+              dataInicio = format(thirtyDaysAgo, 'yyyy-MM-dd');
+              dataFim = format(now, 'yyyy-MM-dd');
+              break;
+          }
+        }
+      } else if (period === "custom" && dateRange.from && dateRange.to) {
+        dataInicio = format(dateRange.from, 'yyyy-MM-dd');
+        dataFim = format(dateRange.to, 'yyyy-MM-dd');
+      }
+      
+      const [vendasResponse, naturezasAPI] = await Promise.all([
+        api.vendas.list({ 
+          page: paginaAtual, 
+          limit: itensPorPagina,
+          status: statusFilter || undefined,
+          search: searchTerm || undefined,
+          dataInicio,
+          dataFim,
+        }),
         api.get('naturezas-operacao')
       ]);
-      console.log('[SALES-PAGE] Vendas recebidas da API:', vendasAPI.length);
-      console.log('[SALES-PAGE] Naturezas recebidas da API:', naturezasAPI.length);
+      
+      console.log('[SALES-PAGE] Resposta completa da API:', vendasResponse);
+      console.log('[SALES-PAGE] Vendas recebidas:', vendasResponse.vendas?.length || 0);
+      console.log('[SALES-PAGE] Pagination recebida:', vendasResponse.pagination);
+      console.log('[SALES-PAGE] Stats recebidas:', vendasResponse.stats);
+      console.log('[SALES-PAGE] Naturezas recebidas:', naturezasAPI.length);
+      
+      const vendasAPI = vendasResponse.vendas || [];
+      console.log('[SALES-PAGE] Vendas recebidas da API (antes da conversão):', vendasAPI.length);
+      console.log('[SALES-PAGE] Primeira venda (antes da conversão):', vendasAPI[0]);
       
       const vendasConvertidas = vendasAPI.map(convertVendaToSale);
+      console.log('[SALES-PAGE] Vendas convertidas:', vendasConvertidas.length);
+      console.log('[SALES-PAGE] Primeira venda (depois da conversão):', vendasConvertidas[0]);
+      
       setSales(vendasConvertidas);
       setNaturezasOperacao(naturezasAPI || []);
-      console.log('[SALES-PAGE] Vendas convertidas e carregadas:', vendasConvertidas.length);
+      
+      // Armazenar stats e pagination do backend
+      if (vendasResponse.stats) {
+        setStatsFromAPI(vendasResponse.stats);
+      }
+      if (vendasResponse.pagination) {
+        setPaginationFromAPI(vendasResponse.pagination);
+      }
+      
+      console.log('[SALES-PAGE] Estado atualizado - sales.length:', vendasConvertidas.length);
     } catch (error) {
       console.error('[SALES-PAGE] Erro ao carregar dados:', error);
       setSales([]);
       setNaturezasOperacao([]);
+      setStatsFromAPI(null);
+      setPaginationFromAPI(null);
       toast.error('Erro ao conectar com o banco de dados. Usando dados de demonstração.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [paginaAtual, itensPorPagina, statusFilter, searchTerm, period, dateRange]);
+  
+  // Carregar vendas e naturezas de operação do Supabase
+  useEffect(() => {
+    carregarDados();
+  }, [carregarDados]);
 
   // Forçar sincronização com Tiny ERP
   const handleSincronizarTinyERP = async () => {
@@ -341,31 +470,6 @@ export function SalesPage({
       setSyncing(false);
     }
   };
-  const [searchTerm, setSearchTerm] = useState("");
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    open: boolean;
-    id: string | null;
-    cliente: string | null;
-  }>({
-    open: false,
-    id: null,
-    cliente: null,
-  });
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
-  const [viewDialogOpen, setViewDialogOpen] = useState(false);
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [naturezaPopoverOpen, setNaturezaPopoverOpen] = useState(false);
-  const [selectedNatureza, setSelectedNatureza] = useState<string>("");
-  const [sortField, setSortField] = useState<keyof Sale | null>("data");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>(customDateRange);
-  const [paginaAtual, setPaginaAtual] = useState(1);
-  const [itensPorPagina, setItensPorPagina] = useState(10);
-  const [sincronizandoVenda, setSincronizandoVenda] = useState<string | null>(null);
-  const [corrigindoIntegracao, setCorrigindoIntegracao] = useState(false);
-  const [dialogCorrigirOpen, setDialogCorrigirOpen] = useState(false);
 
   // Handlers para período
   const handleDateSelect = (range: { from: Date | undefined; to: Date | undefined } | undefined) => {
@@ -404,7 +508,9 @@ export function SalesPage({
   };
 
   // Filtrar vendas com busca aprimorada
-  let filteredSales = sales.filter(sale => {
+  // Se usando paginação do backend, os filtros já vêm aplicados, então não precisa filtrar novamente
+  // Apenas aplicar filtros no frontend se não houver paginação do backend
+  let filteredSales = paginationFromAPI ? sales : sales.filter(sale => {
     // 🔒 Filtro automático para vendedores: mostrar apenas suas próprias vendas
     if (ehVendedor && usuario) {
       if (sale.vendedorId !== usuario.id) {
@@ -576,11 +682,13 @@ export function SalesPage({
     }
   }, [period, sales.length, salesForCounters.length]);
 
-  // Aplicar filtro de status SOMENTE para a tabela
-  filteredSales = filteredSales.filter(sale => {
-    const matchesStatus = statusFilter === "all" || sale.status === statusFilter;
-    return matchesStatus;
-  });
+  // Aplicar filtro de status SOMENTE para a tabela (se não estiver usando paginação do backend)
+  if (!paginationFromAPI) {
+    filteredSales = filteredSales.filter(sale => {
+      const matchesStatus = statusFilter === "all" || sale.status === statusFilter;
+      return matchesStatus;
+    });
+  }
 
   // Ordenar vendas
   if (sortField) {
@@ -616,43 +724,53 @@ export function SalesPage({
     });
   }
 
-  // Calcular estatísticas baseadas nas vendas FILTRADAS
+  // Calcular estatísticas - usar stats do backend se disponível, senão calcular no frontend
   const stats = useMemo(() => {
-    // Criar Set com IDs de naturezas que geram receita
+    // Se temos stats do backend, usar elas (mais preciso)
+    if (statsFromAPI) {
+      return {
+        total: Number(statsFromAPI.total || 0),
+        totalVendas: Number(statsFromAPI.totalVendas || 0),
+        concluidas: Number(statsFromAPI.concluidas || 0),
+        totalConcluidas: Number(statsFromAPI.totalConcluidas || 0),
+        emAndamento: Number(statsFromAPI.emAndamento || 0),
+        totalEmAndamento: Number(statsFromAPI.totalEmAndamento || 0),
+        ticketMedio: Number(statsFromAPI.ticketMedio || 0),
+        outrosPedidosTotal: Number(statsFromAPI.outrosPedidosTotal || 0),
+        outrosPedidosConcluidos: Number(statsFromAPI.outrosPedidosConcluidos || 0),
+        outrosPedidosEmAndamento: Number(statsFromAPI.outrosPedidosEmAndamento || 0),
+      };
+    }
+    
+    // Fallback: calcular no frontend (para compatibilidade)
     const naturezasGeramReceita = new Set(
       naturezasOperacao
         .filter(n => n.geraReceita)
         .map(n => n.id)
     );
     
-    // Filtrar vendas que geram receita e não estão canceladas (para Vendas Totais e Ticket Médio)
     const vendasGeramReceitaNaoCanceladas = salesForCounters.filter(s => 
       naturezasGeramReceita.has(s.naturezaOperacaoId) && s.status !== 'Cancelado'
     );
     
-    // Filtrar vendas concluídas que geram receita
     const vendasConcluidas = salesForCounters.filter(s => 
       naturezasGeramReceita.has(s.naturezaOperacaoId) && s.status === 'Concluído'
     );
     
-    // Filtrar vendas em andamento que geram receita (não canceladas e não concluídas)
     const vendasEmAndamento = salesForCounters.filter(s => 
       naturezasGeramReceita.has(s.naturezaOperacaoId) && 
       s.status !== 'Cancelado' && 
       s.status !== 'Concluído'
     );
     
-    // 🆕 Filtrar vendas que NÃO geram receita e não estão canceladas (para "Outros Pedidos")
     const vendasOutrosPedidosNaoCanceladas = salesForCounters.filter(s => 
       !naturezasGeramReceita.has(s.naturezaOperacaoId) && s.status !== 'Cancelado'
     );
     
-    // 🆕 Filtrar "Outros Pedidos" concluídos
     const outrosPedidosConcluidos = salesForCounters.filter(s => 
       !naturezasGeramReceita.has(s.naturezaOperacaoId) && s.status === 'Concluído'
     );
     
-    // 🆕 Filtrar "Outros Pedidos" em andamento (não cancelados e não concluídos)
     const outrosPedidosEmAndamento = salesForCounters.filter(s => 
       !naturezasGeramReceita.has(s.naturezaOperacaoId) && 
       s.status !== 'Cancelado' && 
@@ -669,21 +787,32 @@ export function SalesPage({
       ticketMedio: vendasGeramReceitaNaoCanceladas.length > 0 
         ? vendasGeramReceitaNaoCanceladas.reduce((sum, sale) => sum + sale.valor, 0) / vendasGeramReceitaNaoCanceladas.length 
         : 0,
-      // 🆕 Estatísticas de "Outros Pedidos"
       outrosPedidosTotal: vendasOutrosPedidosNaoCanceladas.reduce((sum, sale) => sum + sale.valor, 0),
       outrosPedidosConcluidos: outrosPedidosConcluidos.length,
       outrosPedidosEmAndamento: outrosPedidosEmAndamento.length,
     };
-  }, [salesForCounters, naturezasOperacao]);
+  }, [statsFromAPI, salesForCounters, naturezasOperacao]);
 
-  // Paginação
-  const totalPaginas = Math.ceil(filteredSales.length / itensPorPagina);
-  const indiceInicial = (paginaAtual - 1) * itensPorPagina;
-  const indiceFinal = indiceInicial + itensPorPagina;
-  const salesPaginadas = filteredSales.slice(indiceInicial, indiceFinal);
+  // Paginação - usar dados do backend se disponível, senão calcular no frontend
+  const totalPaginas = paginationFromAPI?.total_pages || Math.ceil(filteredSales.length / itensPorPagina);
+  const totalRegistros = paginationFromAPI?.total || filteredSales.length;
+  
+  // Se usando paginação do backend, não precisa fazer slice (já vem paginado)
+  // Se não, fazer paginação no frontend
+  const salesPaginadas = paginationFromAPI ? sales : filteredSales.slice(
+    (paginaAtual - 1) * itensPorPagina,
+    paginaAtual * itensPorPagina
+  );
+
+  // Recarregar dados quando página ou itens por página mudarem
+  useEffect(() => {
+    if (!loading) {
+      carregarDados();
+    }
+  }, [paginaAtual, itensPorPagina, carregarDados]);
 
   // Reset página quando filtros mudam
-  useMemo(() => {
+  useEffect(() => {
     setPaginaAtual(1);
   }, [searchTerm, statusFilter, period, dateRange]);
 
@@ -1496,10 +1625,14 @@ export function SalesPage({
           </div>
 
           {/* Paginação */}
-          {filteredSales.length > 0 && (
+          {(paginationFromAPI ? sales.length > 0 : filteredSales.length > 0) && (
             <div className="mt-4 flex items-center justify-between">
               <div className="text-sm text-muted-foreground">
-                Mostrando {indiceInicial + 1} a {Math.min(indiceFinal, filteredSales.length)} de {filteredSales.length} venda(s)
+                {paginationFromAPI ? (
+                  <>Mostrando {((paginaAtual - 1) * itensPorPagina) + 1} a {Math.min(paginaAtual * itensPorPagina, totalRegistros)} de {totalRegistros} venda(s)</>
+                ) : (
+                  <>Mostrando {((paginaAtual - 1) * itensPorPagina) + 1} a {Math.min(paginaAtual * itensPorPagina, filteredSales.length)} de {filteredSales.length} venda(s)</>
+                )}
               </div>
               
               {totalPaginas > 1 && (

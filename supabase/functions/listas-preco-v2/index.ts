@@ -91,7 +91,20 @@ function formatListaPreco(row: {
   total_faixas?: number
   tipo_comissao?: 'fixa' | 'conforme_desconto'
   percentual_fixo?: number
-}, produtos: Array<{ produto_id: number; preco: number | null }> = [], faixas: Array<{ id: number; desconto_minimo: number; desconto_maximo: number; comissao: number }> = []) {
+}, produtos: Array<{ 
+  produto_id: number
+  preco: number | null
+  descricao?: string | null
+  codigo_sku?: string | null
+  gtin?: string | null
+  ncm?: string | null
+  cest?: string | null
+  peso_liquido?: number | null
+  peso_bruto?: number | null
+  situacao?: string | null
+  ativo?: boolean | null
+  disponivel?: boolean | null
+}> = [], faixas: Array<{ id: number; desconto_minimo: number; desconto_maximo: number; comissao: number }> = []) {
   const tipoComissao = row.tipo_comissao ?? (faixas.length > 0 ? 'conforme_desconto' as const : 'fixa' as const)
   const percentualFixo = row.percentual_fixo ?? (row.desconto != null ? Number(row.desconto) : 10)
   const faixasFormatted = faixas.map((f) => ({
@@ -103,6 +116,17 @@ function formatListaPreco(row: {
   const produtosFormatted = produtos.map((p) => ({
     produtoId: String(p.produto_id),
     preco: Number(p.preco ?? 0),
+    // Incluir informações completas do produto se disponíveis
+    ...(p.descricao ? { descricao: p.descricao } : {}),
+    ...(p.codigo_sku ? { codigoSku: p.codigo_sku } : {}),
+    ...(p.gtin ? { codigoEan: p.gtin } : {}),
+    ...(p.ncm ? { ncm: p.ncm } : {}),
+    ...(p.cest ? { cest: p.cest } : {}),
+    ...(p.peso_liquido != null ? { pesoLiquido: Number(p.peso_liquido) } : {}),
+    ...(p.peso_bruto != null ? { pesoBruto: Number(p.peso_bruto) } : {}),
+    ...(p.situacao ? { situacao: p.situacao } : {}),
+    ...(p.ativo != null ? { ativo: p.ativo } : {}),
+    ...(p.disponivel != null ? { disponivel: p.disponivel } : {}),
   }))
   return {
     id: String(row.id),
@@ -162,10 +186,23 @@ serve(async (req) => {
           throw new Error('Lista de preço não encontrada')
         }
 
-        const { data: produtos } = await supabase
-          .from('produtos_listas_precos')
-          .select('produto_id, preco')
-          .eq('lista_preco_id', idNum)
+        // Buscar produtos com informações completas usando RPC
+        let produtos: any[] = []
+        const { data: produtosCompletos, error: produtosError } = await supabase
+          .rpc('get_lista_preco_produtos_completos', { p_lista_preco_id: idNum })
+
+        if (produtosError || !produtosCompletos) {
+          console.error('[LISTAS-PRECO-V2] Erro ao buscar produtos completos:', produtosError)
+          // Fallback: buscar apenas produto_id e preco
+          const { data: produtosSimples } = await supabase
+            .from('produtos_listas_precos')
+            .select('produto_id, preco')
+            .eq('lista_preco_id', idNum)
+          
+          produtos = produtosSimples || []
+        } else {
+          produtos = produtosCompletos
+        }
 
         const { data: faixas } = await supabase
           .from('listas_preco_comissionamento')

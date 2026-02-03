@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -7,7 +8,16 @@ import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
-import { Plus, Edit, Trash2, Store } from 'lucide-react';
+import { 
+  Pagination, 
+  PaginationContent, 
+  PaginationEllipsis, 
+  PaginationItem, 
+  PaginationLink, 
+  PaginationNext, 
+  PaginationPrevious 
+} from './ui/pagination';
+import { Plus, Edit, Trash2, Store, Search } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { api } from '../services/api';
 
@@ -30,6 +40,13 @@ export function GrupoRedeManagement() {
   const [grupoRedeEditando, setGrupoRedeEditando] = useState<GrupoRede | null>(null);
   const [grupoRedeExcluindo, setGrupoRedeExcluindo] = useState<GrupoRede | null>(null);
   
+  // Estados de busca e paginação
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchDebounced, setSearchDebounced] = useState('');
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [itensPorPagina, setItensPorPagina] = useState(10);
+  const [totalRegistros, setTotalRegistros] = useState(0);
+  
   const [formData, setFormData] = useState({
     nome: '',
     descricao: '',
@@ -37,19 +54,54 @@ export function GrupoRedeManagement() {
 
   const podeGerenciar = ehBackoffice();
 
+  // Debounce para busca
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchDebounced(searchTerm);
+      setPaginaAtual(1); // Reset para primeira página ao buscar
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   useEffect(() => {
     carregarGruposRedes();
-  }, []);
+  }, [paginaAtual, itensPorPagina, searchDebounced]);
 
   const carregarGruposRedes = async () => {
     try {
       setLoading(true);
-      const data = await api.get('grupos-redes');
-      setGruposRedes(data);
-      console.log('[GRUPOS-REDES] Grupos/Redes carregados:', data.length);
+      const params: Record<string, any> = {
+        page: paginaAtual,
+        limit: itensPorPagina,
+      };
+      
+      if (searchDebounced.trim()) {
+        params.search = searchDebounced.trim();
+      }
+      
+      const data = await api.get('grupos-redes', { params });
+      
+      // A API pode retornar um array direto ou um objeto com paginação
+      if (Array.isArray(data)) {
+        // Se retornar array, fazer paginação no frontend (fallback)
+        setGruposRedes(data);
+        setTotalRegistros(data.length);
+      } else if (data && typeof data === 'object' && 'grupos' in data) {
+        // Resposta com paginação do backend
+        setGruposRedes(data.grupos || []);
+        setTotalRegistros(data.total || 0);
+      } else {
+        setGruposRedes([]);
+        setTotalRegistros(0);
+      }
+      
+      const gruposCarregados = Array.isArray(data) ? data.length : (data?.grupos?.length || 0);
+      console.log('[GRUPOS-REDES] Grupos/Redes carregados:', gruposCarregados, 'Total:', totalRegistros);
     } catch (error: any) {
       console.error('[GRUPOS-REDES] Erro ao carregar:', error);
       toast.error('Erro ao carregar grupos/redes');
+      setGruposRedes([]);
+      setTotalRegistros(0);
     } finally {
       setLoading(false);
     }
@@ -113,7 +165,8 @@ export function GrupoRedeManagement() {
 
     try {
       await api.delete('grupos-redes', grupoRedeExcluindo.id);
-      setGruposRedes(prev => prev.filter(g => g.id !== grupoRedeExcluindo.id));
+      // Recarregar dados após exclusão
+      await carregarGruposRedes();
       toast.success('Grupo/Rede excluído com sucesso!');
       setDialogExcluir(false);
       setGrupoRedeExcluindo(null);
@@ -126,6 +179,15 @@ export function GrupoRedeManagement() {
         toast.error(msg || 'Erro ao excluir Grupo/Rede');
       }
     }
+  };
+
+  // Cálculos de paginação
+  const totalPaginas = Math.ceil(totalRegistros / itensPorPagina);
+  const indiceInicial = totalRegistros > 0 ? (paginaAtual - 1) * itensPorPagina + 1 : 0;
+  const indiceFinal = Math.min(paginaAtual * itensPorPagina, totalRegistros);
+
+  const goToPage = (page: number) => {
+    setPaginaAtual(Math.max(1, Math.min(page, totalPaginas)));
   };
 
   if (!podeGerenciar) {
@@ -162,64 +224,158 @@ export function GrupoRedeManagement() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Campo de busca */}
+          <div className="mb-6">
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome ou descrição..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">
               Carregando...
             </div>
           ) : gruposRedes.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              Nenhum Grupo/Rede cadastrado.
+              {searchDebounced.trim() 
+                ? 'Nenhum Grupo/Rede encontrado com os filtros aplicados.'
+                : 'Nenhum Grupo/Rede cadastrado.'}
               <br />
-              <Button onClick={abrirDialogNovo} variant="link" className="mt-2">
-                Clique aqui para criar o primeiro
-              </Button>
+              {!searchDebounced.trim() && (
+                <Button onClick={abrirDialogNovo} variant="link" className="mt-2">
+                  Clique aqui para criar o primeiro
+                </Button>
+              )}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Criado em</TableHead>
-                  <TableHead>Criado por</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {gruposRedes.map((grupoRede) => (
-                  <TableRow key={grupoRede.id}>
-                    <TableCell>{grupoRede.nome}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {grupoRede.descricao || '-'}
-                    </TableCell>
-                    <TableCell>
-                      {(grupoRede.dataCriacao || (grupoRede as any).createdAt)
-                        ? new Date((grupoRede.dataCriacao || (grupoRede as any).createdAt)).toLocaleDateString('pt-BR')
-                        : '-'}
-                    </TableCell>
-                    <TableCell>{grupoRede.criadoPor || '-'}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => abrirDialogEditar(grupoRede)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => abrirDialogExcluir(grupoRede)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead>Criado em</TableHead>
+                    <TableHead>Criado por</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {gruposRedes.map((grupoRede) => (
+                    <TableRow key={grupoRede.id}>
+                      <TableCell>{grupoRede.nome}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {grupoRede.descricao || '-'}
+                      </TableCell>
+                      <TableCell>
+                        {(grupoRede.dataCriacao || (grupoRede as any).createdAt)
+                          ? new Date((grupoRede.dataCriacao || (grupoRede as any).createdAt)).toLocaleDateString('pt-BR')
+                          : '-'}
+                      </TableCell>
+                      <TableCell>{grupoRede.criadoPor || '-'}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => abrirDialogEditar(grupoRede)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => abrirDialogExcluir(grupoRede)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {/* Controles de paginação */}
+              {totalRegistros > 0 && (
+                <div className="mt-6 space-y-4">
+                  {/* Informação de registros */}
+                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                    <div>
+                      Mostrando {indiceInicial} a {indiceFinal} de {totalRegistros} grupo{totalRegistros !== 1 ? 's' : ''}/rede{totalRegistros !== 1 ? 's' : ''}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="itensPorPagina" className="text-sm">Itens por página:</Label>
+                      <select
+                        id="itensPorPagina"
+                        value={itensPorPagina}
+                        onChange={(e) => {
+                          setItensPorPagina(Number(e.target.value));
+                          setPaginaAtual(1);
+                        }}
+                        className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                      >
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Paginação */}
+                  {totalPaginas > 1 && (
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            onClick={() => goToPage(paginaAtual - 1)}
+                            className={paginaAtual === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                            aria-disabled={paginaAtual === 1}
+                          />
+                        </PaginationItem>
+                        
+                        {Array.from({ length: totalPaginas }, (_, i) => i + 1)
+                          .filter((page) => page === 1 || page === totalPaginas || Math.abs(page - paginaAtual) <= 1)
+                          .map((page, index, array) => {
+                            const showEllipsis = index > 0 && page - array[index - 1] > 1;
+                            return (
+                              <React.Fragment key={page}>
+                                {showEllipsis && (
+                                  <PaginationItem>
+                                    <PaginationEllipsis />
+                                  </PaginationItem>
+                                )}
+                                <PaginationItem>
+                                  <PaginationLink
+                                    onClick={() => goToPage(page)}
+                                    isActive={paginaAtual === page}
+                                    className="cursor-pointer"
+                                  >
+                                    {page}
+                                  </PaginationLink>
+                                </PaginationItem>
+                              </React.Fragment>
+                            );
+                          })}
+                        
+                        <PaginationItem>
+                          <PaginationNext
+                            onClick={() => goToPage(paginaAtual + 1)}
+                            className={paginaAtual >= totalPaginas ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                            aria-disabled={paginaAtual >= totalPaginas}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

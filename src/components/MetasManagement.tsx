@@ -101,52 +101,125 @@ export function MetasManagement() {
   const carregarDados = async () => {
     setLoading(true);
     try {
-      // Carregar vendedores
-      const usuariosData = await api.get('usuarios');
-      const vendedores = usuariosData.filter((u: Usuario) => u.tipo === 'vendedor' && u.ativo);
-      setUsuarios(vendedores);
-
-      // Carregar metas
-      const metasData = await buscarTodasMetas();
-      
-      console.log('[METAS] Dados brutos recebidos:', metasData);
-      console.log('[METAS] Primeira meta (se existir):', metasData[0]);
-      console.log('[METAS] Tipo da primeira meta:', typeof metasData[0]);
-      console.log('[METAS] Propriedades da primeira meta:', metasData[0] ? Object.keys(metasData[0]) : 'nenhuma');
-      
-      // Filtrar valores null e verificar se tem as propriedades necessárias
-      const metasValidas = metasData.filter((m): m is VendedorMeta => {
-        const isValid = m != null && 
-          typeof m === 'object' && 
-          'ano' in m && 
-          'mes' in m &&
-          typeof m.ano === 'number' &&
-          typeof m.mes === 'number';
+      // Carregar vendedores via Edge Function list-users-v2 usando api.usuarios.list()
+      console.log('[METAS MANAGEMENT] Carregando vendedores via api.usuarios.list()...');
+      try {
+        const usuariosData = await api.usuarios.list({ 
+          tipo: 'vendedor', 
+          ativo: true 
+        });
         
-        if (!isValid) {
-          console.log('[METAS] Meta inválida detectada:', m);
+        console.log('[METAS MANAGEMENT] Vendedores recebidos da Edge Function:', usuariosData);
+        console.log('[METAS MANAGEMENT] Tipo:', typeof usuariosData);
+        console.log('[METAS MANAGEMENT] É array?', Array.isArray(usuariosData));
+        console.log('[METAS MANAGEMENT] Total de vendedores:', Array.isArray(usuariosData) ? usuariosData.length : 0);
+        
+        // api.usuarios.list() já retorna no formato correto: { id, nome, email, tipo, ativo, ... }
+        const vendedores: Usuario[] = (Array.isArray(usuariosData) ? usuariosData : [])
+          .filter((u: any) => {
+            const isVendedor = (u.tipo || '').toLowerCase() === 'vendedor';
+            const isAtivo = u.ativo === true;
+            const hasId = !!(u.id || u.user_id);
+            
+            if (!isVendedor || !isAtivo || !hasId) {
+              console.log('[METAS MANAGEMENT] Vendedor filtrado:', { 
+                id: u.id || u.user_id, 
+                nome: u.nome, 
+                tipo: u.tipo, 
+                ativo: u.ativo,
+                motivo: !isVendedor ? 'não é vendedor' : !isAtivo ? 'não está ativo' : 'sem ID'
+              });
+            }
+            
+            return isVendedor && isAtivo && hasId;
+          })
+          .map((u: any) => ({
+            id: String(u.id || u.user_id || ''),
+            nome: String(u.nome || ''),
+            email: String(u.email || ''),
+            tipo: 'vendedor' as const,
+            ativo: true,
+          }));
+        
+        console.log('[METAS MANAGEMENT] Vendedores filtrados e mapeados:', vendedores);
+        console.log('[METAS MANAGEMENT] IDs dos vendedores:', vendedores.map(v => ({ id: v.id, nome: v.nome })));
+        
+        if (vendedores.length === 0) {
+          console.warn('[METAS MANAGEMENT] Nenhum vendedor ativo encontrado!');
+          toast.warning('Nenhum vendedor ativo encontrado');
         }
         
-        return isValid;
-      });
+        setUsuarios(vendedores);
+      } catch (error) {
+        console.error('[METAS MANAGEMENT] Erro ao carregar vendedores:', error);
+        toast.error('Erro ao carregar lista de vendedores');
+        setUsuarios([]);
+      }
+
+      // Carregar metas filtradas por período
+      console.log('[METAS MANAGEMENT] Carregando metas para período:', { selectedYear, selectedMonth });
+      const metasData = await buscarTodasMetas(selectedYear, selectedMonth);
       
-      // Filtrar por período selecionado
-      const metasPeriodo = metasValidas.filter(
-        m => m.ano === selectedYear && m.mes === selectedMonth
-      );
-      setMetas(metasPeriodo);
+      console.log('[METAS MANAGEMENT] Dados recebidos do buscarTodasMetas:', metasData);
+      console.log('[METAS MANAGEMENT] Tipo:', typeof metasData);
+      console.log('[METAS MANAGEMENT] É array?', Array.isArray(metasData));
+      console.log('[METAS MANAGEMENT] Total de metas encontradas:', metasData.length);
+      
+      if (metasData.length > 0) {
+        console.log('[METAS MANAGEMENT] Primeira meta:', metasData[0]);
+        console.log('[METAS MANAGEMENT] IDs das metas (vendedorId):', metasData.map(m => ({ 
+          metaId: m.id, 
+          vendedorId: m.vendedorId, 
+          vendedorNome: m.vendedorNome, 
+          ano: m.ano, 
+          mes: m.mes,
+          metaMensal: m.metaMensal
+        })));
+      } else {
+        console.warn('[METAS MANAGEMENT] Nenhuma meta encontrada para o período:', { selectedYear, selectedMonth });
+        console.warn('[METAS MANAGEMENT] Verifique se há metas cadastradas para este período');
+      }
+      
+      // O metasService já faz o mapeamento, então podemos usar diretamente
+      setMetas(metasData);
+      
+      // Log de comparação de IDs (após setUsuarios)
+      if (usuarios.length > 0 && metasData.length > 0) {
+        console.log('[METAS MANAGEMENT] Comparando IDs:');
+        console.log('[METAS MANAGEMENT] IDs dos vendedores:', usuarios.map(v => v.id));
+        console.log('[METAS MANAGEMENT] IDs das metas (vendedorId):', metasData.map(m => m.vendedorId));
+        
+        // Verificar correspondências
+        const correspondencias = usuarios.map(v => {
+          const meta = metasData.find(m => String(m.vendedorId) === String(v.id));
+          return {
+            vendedorId: v.id,
+            vendedorNome: v.nome,
+            temMeta: !!meta,
+            metaVendedorId: meta?.vendedorId,
+            metaVendedorNome: meta?.vendedorNome,
+            metaMensal: meta?.metaMensal
+          };
+        });
+        console.log('[METAS MANAGEMENT] Correspondências vendedor-meta:', correspondencias);
+      }
 
       // Calcular meta total
       const total = await buscarMetaTotal(selectedYear, selectedMonth);
       console.log('[METAS] buscarMetaTotal retornou:', { total, tipo: typeof total });
-      setMetaTotal(total);
+      
+      // Se o total não foi retornado, calcular localmente
+      const totalCalculado = typeof total === 'number' && total > 0 
+        ? total 
+        : metasData.reduce((sum, m) => sum + (m.metaMensal || 0), 0);
+      
+      setMetaTotal(totalCalculado);
 
       console.log('[METAS] Dados carregados:', {
-        vendedores: vendedores.length,
-        metasTotal: metasData.length,
-        metasValidas: metasValidas.length,
-        metasPeriodo: metasPeriodo.length,
-        total,
+        vendedores: usuarios.length,
+        metasEncontradas: metasData.length,
+        totalCalculado,
+        periodo: { ano: selectedYear, mes: selectedMonth }
       });
     } catch (error) {
       console.error('[METAS] Erro ao carregar dados:', error);
@@ -280,7 +353,15 @@ export function MetasManagement() {
   };
 
   const getMetaVendedor = (vendedorId: string): VendedorMeta | undefined => {
-    return metas.find(m => m.vendedorId === vendedorId);
+    // Normalizar IDs para comparação (remover espaços, converter para string)
+    const normalizedVendedorId = String(vendedorId || '').trim().toLowerCase();
+    
+    const meta = metas.find(m => {
+      const normalizedMetaVendedorId = String(m.vendedorId || '').trim().toLowerCase();
+      return normalizedMetaVendedorId === normalizedVendedorId;
+    });
+    
+    return meta;
   };
 
   const calcularPercentualAtingido = (vendidoMes: number, metaMensal: number): number => {

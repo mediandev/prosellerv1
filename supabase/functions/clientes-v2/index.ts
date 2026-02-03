@@ -97,8 +97,9 @@ function mapClienteListItem(row: Record<string, unknown>): Record<string, unknow
     statusAprovacao,
     situacao,
     segmentoId: row.segmento_id != null ? String(row.segmento_id) : undefined,
-    segmentoMercado: row.segmento_nome ?? row.tipo_segmento ?? row.segmentoMercado ?? row.grupo_rede ?? '',
-    grupoRede: row.grupo_rede ?? row.grupoRede ?? '',
+    segmentoMercado: row.segmento_nome ?? row.tipo_segmento ?? row.segmentoMercado ?? '',
+    grupoRede: row.grupo_id ?? row.grupo_rede_nome ?? row.grupo_rede ?? row.grupoRede ?? '',
+    grupoId: row.grupo_id ?? row.grupoRede ?? undefined,
     createdAt: row.created_at ?? row.createdAt,
     updatedAt: row.updated_at ?? row.updatedAt,
   }
@@ -114,10 +115,13 @@ function mapClienteCompleto(rpc: {
 }): Record<string, unknown> {
   const c = rpc.cliente ?? {}
   const statusAprovacao = (c as any).status_aprovacao ?? (c as any).statusAprovacao ?? 'pendente'
-  let situacao = (c as any).situacao ?? 'Análise'
-  if (statusAprovacao === 'aprovado') situacao = 'Ativo'
-  else if (statusAprovacao === 'rejeitado') situacao = 'Reprovado'
-  else if (statusAprovacao === 'pendente') situacao = 'Análise'
+  // Priorizar situacao_nome do RPC, depois situacao, depois inferir de statusAprovacao
+  let situacao = (c as any).situacao_nome ?? (c as any).situacao ?? 'Análise'
+  if (!situacao || situacao === 'Análise') {
+    if (statusAprovacao === 'aprovado') situacao = 'Ativo'
+    else if (statusAprovacao === 'rejeitado') situacao = 'Reprovado'
+    else if (statusAprovacao === 'pendente') situacao = 'Análise'
+  }
 
   const contato = rpc.contato ?? {}
   const endereco = rpc.endereco ?? {}
@@ -135,7 +139,8 @@ function mapClienteCompleto(rpc: {
     situacao,
     segmentoId: (c as any).segmento_id != null ? String((c as any).segmento_id) : undefined,
     segmentoMercado: (c as any).segmento_nome ?? (c as any).tipo_segmento ?? (c as any).segmentoMercado ?? '',
-    grupoRede: (c as any).grupo_rede ?? (c as any).grupoRede ?? '',
+    grupoRede: (c as any).grupo_id ?? (c as any).grupo_rede_nome ?? (c as any).grupo_rede ?? (c as any).grupoRede ?? '',
+    grupoId: (c as any).grupo_id ?? (c as any).grupoRede ?? undefined,
     observacoesInternas: (c as any).observacao_interna ?? (c as any).observacoesInternas ?? '',
     listaPrecos: (c as any).lista_de_preco != null ? String((c as any).lista_de_preco) : (c as any).listaPrecos ?? '',
     descontoPadrao: Number((c as any).desconto ?? (c as any).descontoPadrao ?? 0),
@@ -151,6 +156,12 @@ function mapClienteCompleto(rpc: {
       telefoneCelularPrincipal: (contato as any).telefone_adicional ?? '',
       site: (contato as any).website ?? '',
     },
+    // Também mapear campos de contato no nível raiz para compatibilidade
+    emailPrincipal: (contato as any).email ?? '',
+    emailNFe: (contato as any).email_nf ?? '',
+    telefoneFixoPrincipal: (contato as any).telefone ?? '',
+    telefoneCelularPrincipal: (contato as any).telefone_adicional ?? '',
+    site: (contato as any).website ?? '',
     endereco: {
       cep: (endereco as any).cep ?? '',
       logradouro: (endereco as any).rua ?? (endereco as any).logradouro ?? '',
@@ -160,6 +171,14 @@ function mapClienteCompleto(rpc: {
       uf: (endereco as any).uf ?? '',
       municipio: (endereco as any).cidade ?? (endereco as any).municipio ?? '',
     },
+    // Também mapear campos de endereço no nível raiz para compatibilidade
+    cep: (endereco as any).cep ?? '',
+    logradouro: (endereco as any).rua ?? (endereco as any).logradouro ?? '',
+    numero: (endereco as any).numero ?? '',
+    complemento: (endereco as any).complemento ?? '',
+    bairro: (endereco as any).bairro ?? '',
+    uf: (endereco as any).uf ?? '',
+    municipio: (endereco as any).cidade ?? (endereco as any).municipio ?? '',
     condicoesCliente: rpc.condicoes_cliente ?? [],
     contaCorrenteCliente: rpc.conta_corrente_cliente ?? [],
     createdAt: (c as any).created_at ?? (c as any).createdAt,
@@ -245,13 +264,35 @@ serve(async (req) => {
       const body = await req.json().catch(() => ({}))
       const nome = body.nome ?? body.razaoSocial ?? ''
       if (!nome || String(nome).trim().length < 2) throw new Error('Nome deve ter pelo menos 2 caracteres')
+      
+      // Extrair grupo_id (UUID) do grupoRede
+      let grupoId: string | null = null
+      if (body.grupoRede || body.grupo_rede || body.grupoId || body.grupo_id) {
+        const grupoValue = body.grupoId ?? body.grupo_id ?? body.grupoRede ?? body.grupo_rede
+        // Verificar se é UUID (ID)
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(grupoValue))
+        if (isUUID) {
+          grupoId = String(grupoValue)
+        } else {
+          // Se for nome, buscar ID
+          const { data: grupoData, error: grupoError } = await supabase
+            .from('grupos_redes')
+            .select('id')
+            .ilike('nome', String(grupoValue).trim())
+            .single()
+          if (!grupoError && grupoData) {
+            grupoId = grupoData.id
+          }
+        }
+      }
+      
       const p = {
         p_nome: String(nome).trim(),
         p_nome_fantasia: body.nomeFantasia ?? body.nome_fantasia ?? null,
         p_cpf_cnpj: body.cpfCnpj ?? body.cpf_cnpj ? String(body.cpfCnpj ?? body.cpf_cnpj).replace(/\D/g, '') : null,
         p_inscricao_estadual: body.inscricaoEstadual ?? body.inscricao_estadual ?? null,
         p_codigo: body.codigo ?? null,
-        p_grupo_rede: body.grupoRede ?? body.grupo_rede ?? null,
+        p_grupo_id: grupoId,
         p_lista_de_preco: body.listaPrecos ?? body.lista_de_preco != null ? Number(body.listaPrecos ?? body.lista_de_preco) : null,
         p_desconto_financeiro: body.descontoFinanceiro ?? body.desconto_financeiro ?? 0,
         p_pedido_minimo: body.pedidoMinimo ?? body.pedido_minimo ?? 0,
@@ -284,6 +325,41 @@ serve(async (req) => {
       if (isNaN(idNum) || idNum <= 0) throw new Error('ID inválido')
       const nome = body.nome ?? body.razaoSocial ?? ''
       if (!nome || String(nome).trim().length < 2) throw new Error('Nome deve ter pelo menos 2 caracteres')
+      
+      // Extrair grupo_id (UUID) do grupoRede
+      let grupoId: string | null = null
+      if (body.grupoRede || body.grupo_rede || body.grupoId || body.grupo_id) {
+        const grupoValue = body.grupoId ?? body.grupo_id ?? body.grupoRede ?? body.grupo_rede
+        // Verificar se é UUID (ID)
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(grupoValue))
+        if (isUUID) {
+          grupoId = String(grupoValue)
+        } else {
+          // Se for nome, buscar ID
+          const { data: grupoData, error: grupoError } = await supabase
+            .from('grupos_redes')
+            .select('id')
+            .ilike('nome', String(grupoValue).trim())
+            .single()
+          if (!grupoError && grupoData) {
+            grupoId = grupoData.id
+          }
+        }
+      }
+      
+      // Converter situacao para ref_situacao_id se necessário
+      let refSituacaoId: number | null = null
+      if (body.situacao) {
+        const { data: situacaoData, error: situacaoError } = await supabase
+          .from('ref_situacao')
+          .select('ref_situacao_id')
+          .ilike('nome', String(body.situacao).trim())
+          .single()
+        if (!situacaoError && situacaoData) {
+          refSituacaoId = situacaoData.ref_situacao_id
+        }
+      }
+      
       const { data: rpcData, error: rpcError } = await supabase.rpc('update_cliente_v2', {
         p_cliente_id: idNum,
         p_nome: String(nome).trim(),
@@ -291,13 +367,14 @@ serve(async (req) => {
         p_cpf_cnpj: body.cpfCnpj ?? body.cpf_cnpj ? String(body.cpfCnpj ?? body.cpf_cnpj).replace(/\D/g, '') : null,
         p_inscricao_estadual: body.inscricaoEstadual ?? body.inscricao_estadual ?? null,
         p_codigo: body.codigo ?? null,
-        p_grupo_rede: body.grupoRede ?? body.grupo_rede ?? null,
+        p_grupo_id: grupoId,
         p_lista_de_preco: body.listaPrecos ?? body.lista_de_preco != null ? Number(body.listaPrecos ?? body.lista_de_preco) : null,
         p_desconto_financeiro: body.descontoFinanceiro ?? body.desconto_financeiro ?? null,
         p_pedido_minimo: body.pedidoMinimo ?? body.pedido_minimo ?? null,
         p_vendedoresatribuidos: body.vendedoresAtribuidos ?? body.vendedoresatribuidos ?? null,
         p_observacao_interna: body.observacoesInternas ?? body.observacao_interna ?? null,
         p_segmento_id: body.segmentoId ?? body.segmento_id != null ? Number(body.segmentoId ?? body.segmento_id) : null,
+        p_ref_situacao_id: refSituacaoId,
         p_atualizado_por: user.id,
       })
       if (rpcError) throw new Error(rpcError.message)

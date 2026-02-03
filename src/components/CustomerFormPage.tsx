@@ -81,32 +81,81 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
     if (!clienteId) return;
     
     try {
-      console.log('[CUSTOMER-FORM] Carregando cliente:', clienteId);
-      const clientes = await api.get('clientes');
-      const cliente = clientes.find((c: Cliente) => c.id === clienteId);
+      console.log('[CUSTOMER-FORM] Carregando cliente completo via Edge Function clientes-v2:', clienteId);
       
-      if (cliente) {
-        console.log('[CUSTOMER-FORM] Cliente encontrado:', {
-          id: cliente.id,
-          razaoSocial: cliente.razaoSocial,
-          pessoasContato: cliente.pessoasContato?.length || 0,
-          dadosBancarios: cliente.dadosBancarios?.length || 0,
-          condicoesPagamento: cliente.condicoesPagamentoAssociadas?.length || 0,
-          empresaFaturamento: cliente.empresaFaturamento,
-          listaPrecos: cliente.listaPrecos,
-          segmentoMercado: cliente.segmentoMercado,
-          grupoRede: cliente.grupoRede,
-          campos: Object.keys(cliente),
-        });
-        setFormData(cliente);
-        setFormDataOriginal(cliente);
-      } else {
-        console.error('[CUSTOMER-FORM] Cliente não encontrado no Supabase:', clienteId);
+      // Buscar cliente completo usando api.getById que chama a Edge Function clientes-v2
+      const clienteData = await api.getById('clientes', clienteId);
+      
+      if (!clienteData) {
+        console.error('[CUSTOMER-FORM] Cliente não encontrado:', clienteId);
         toast.error('Cliente não encontrado no banco de dados');
+        return;
       }
+
+      // Mapear dados completos retornados pela Edge Function
+      // Extrair dados de contato e endereço se vierem em formato aninhado
+      const contato = clienteData.contato || {};
+      const endereco = clienteData.endereco || {};
+      
+      console.log('[CUSTOMER-FORM] Dados recebidos da API:', {
+        contato: contato,
+        endereco: endereco,
+        emailPrincipal_direto: clienteData.emailPrincipal,
+        emailPrincipal_contato: contato.emailPrincipal,
+      });
+      
+      const clienteCompleto: Partial<Cliente> = {
+        ...clienteData,
+        // Garantir que arrays estejam inicializados
+        pessoasContato: clienteData.pessoasContato || [],
+        dadosBancarios: clienteData.dadosBancarios || [],
+        condicoesPagamentoAssociadas: clienteData.condicoesPagamentoAssociadas || [],
+        // Mapear dados de contato - priorizar campos no nível raiz, depois objeto contato
+        emailPrincipal: clienteData.emailPrincipal || contato.emailPrincipal || '',
+        emailNFe: clienteData.emailNFe || contato.emailNFe || '',
+        telefoneFixoPrincipal: clienteData.telefoneFixoPrincipal || contato.telefoneFixoPrincipal || '',
+        telefoneCelularPrincipal: clienteData.telefoneCelularPrincipal || contato.telefoneCelularPrincipal || '',
+        site: clienteData.site || contato.site || '',
+        // Mapear dados de endereço - priorizar campos no nível raiz, depois objeto endereco
+        cep: clienteData.cep || endereco.cep || '',
+        logradouro: clienteData.logradouro || endereco.logradouro || '',
+        numero: clienteData.numero || endereco.numero || '',
+        complemento: clienteData.complemento || endereco.complemento || '',
+        bairro: clienteData.bairro || endereco.bairro || '',
+        uf: clienteData.uf || endereco.uf || '',
+        municipio: clienteData.municipio || endereco.municipio || '',
+        // Mapear condições_cliente se vierem da RPC
+        condicoesPagamentoAssociadas: clienteData.condicoesPagamentoAssociadas || 
+          (Array.isArray(clienteData.condicoesCliente) 
+            ? clienteData.condicoesCliente.map((c: any) => String(c.id_condicao || c.ID_condições || c.id || c))
+            : []),
+      };
+
+      console.log('[CUSTOMER-FORM] Cliente completo mapeado:', {
+        id: clienteCompleto.id,
+        razaoSocial: clienteCompleto.razaoSocial,
+        emailPrincipal: clienteCompleto.emailPrincipal,
+        emailNFe: clienteCompleto.emailNFe,
+        telefoneFixoPrincipal: clienteCompleto.telefoneFixoPrincipal,
+        telefoneCelularPrincipal: clienteCompleto.telefoneCelularPrincipal,
+        site: clienteCompleto.site,
+        pessoasContato: clienteCompleto.pessoasContato?.length || 0,
+        dadosBancarios: clienteCompleto.dadosBancarios?.length || 0,
+        condicoesPagamento: clienteCompleto.condicoesPagamentoAssociadas?.length || 0,
+        contaCorrente: clienteData.contaCorrenteCliente?.length || 0,
+        empresaFaturamento: clienteCompleto.empresaFaturamento,
+        listaPrecos: clienteCompleto.listaPrecos,
+        segmentoMercado: clienteCompleto.segmentoMercado,
+        segmentoId: clienteCompleto.segmentoId,
+        grupoRede: clienteCompleto.grupoId || clienteCompleto.grupoRede,
+        vendedorAtribuido: clienteCompleto.vendedorAtribuido,
+      });
+
+      setFormData(clienteCompleto);
+      setFormDataOriginal(clienteCompleto);
     } catch (error: any) {
-      console.error('[CUSTOMER-FORM] Erro ao carregar cliente do Supabase:', error);
-      toast.error('Erro ao carregar dados do cliente: ' + error.message);
+      console.error('[CUSTOMER-FORM] Erro ao carregar cliente completo:', error);
+      toast.error('Erro ao carregar dados do cliente: ' + (error.message || 'Erro desconhecido'));
     }
   };
 
@@ -203,6 +252,9 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
             vendedorAtribuido: usuario.tipo === 'vendedor' 
               ? { id: usuario.id, nome: usuario.nome, email: usuario.email || '' }
               : formData.vendedorAtribuido,
+            // Garantir que segmentoId e grupoRede (ID) sejam enviados
+            segmentoId: formData.segmentoId,
+            grupoRede: formData.grupoRede,
           };
           
           console.log('[CLIENTE] Criando cliente no Supabase:', {
@@ -274,6 +326,9 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
             dataCadastro: formData.dataCadastro || clienteAnterior.dataCadastro,
             criadoPor: formData.criadoPor || clienteAnterior.criadoPor,
             codigo: formData.codigo || clienteAnterior.codigo,
+            // Garantir que segmentoId e grupoRede (ID) sejam enviados
+            segmentoId: formData.segmentoId || clienteAnterior.segmentoId,
+            grupoRede: formData.grupoRede || clienteAnterior.grupoRede,
           };
           
           console.log('[CLIENTE] Atualizando cliente no Supabase:', {

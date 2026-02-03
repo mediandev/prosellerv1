@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
-import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, Eye, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Badge } from './ui/badge';
+import { ScrollArea } from './ui/scroll-area';
+import { api } from '../services/api';
+import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
 interface ImportResult {
@@ -10,9 +15,17 @@ interface ImportResult {
   errors: Array<{ row: number; message: string }>;
 }
 
+interface PreviewData {
+  data: any[];
+  fileName: string;
+  validationErrors: Array<{ row: number; message: string }>;
+}
+
 export function ImportProductsData() {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   const generateTemplate = () => {
     const template = [
@@ -55,12 +68,75 @@ export function ImportProductsData() {
     XLSX.writeFile(wb, 'modelo_importacao_produtos.xlsx');
   };
 
+  const validateRow = (row: any, rowNumber: number): string | null => {
+    if (!row['Descrição']) return 'Descrição é obrigatória';
+    if (!row['Código SKU']) return 'Código SKU é obrigatório';
+    if (!row['Marca']) return 'Marca é obrigatória';
+    if (!row['Tipo Produto']) return 'Tipo de Produto é obrigatório';
+    if (!row['Unidade (Sigla)']) return 'Unidade é obrigatória';
+    
+    if (row['Peso Líquido (kg)'] === undefined || row['Peso Líquido (kg)'] === null || row['Peso Líquido (kg)'] === '') {
+      return 'Peso Líquido é obrigatório';
+    }
+    
+    if (row['Peso Bruto (kg)'] === undefined || row['Peso Bruto (kg)'] === null || row['Peso Bruto (kg)'] === '') {
+      return 'Peso Bruto é obrigatório';
+    }
+
+    // Validar peso
+    const pesoLiquido = Number(row['Peso Líquido (kg)']);
+    const pesoBruto = Number(row['Peso Bruto (kg)']);
+    
+    if (pesoLiquido < 0 || pesoBruto < 0) {
+      return 'Pesos não podem ser negativos';
+    }
+
+    if (pesoBruto < pesoLiquido) {
+      return 'Peso Bruto deve ser maior ou igual ao Peso Líquido';
+    }
+
+    // Validar situação
+    const situacoesValidas = ['Ativo', 'Inativo', 'Excluído'];
+    if (row['Situação'] && !situacoesValidas.includes(row['Situação'])) {
+      return 'Situação deve ser: Ativo, Inativo ou Excluído';
+    }
+
+    // Validar disponível
+    const disponibilidadeValida = ['Sim', 'Não', 'sim', 'não', 'S', 'N', 's', 'n'];
+    if (row['Disponível para Venda'] && !disponibilidadeValida.includes(row['Disponível para Venda'])) {
+      return 'Disponível para Venda deve ser: Sim ou Não';
+    }
+
+    // Validar EAN (se informado)
+    if (row['Código EAN']) {
+      const ean = String(row['Código EAN']).replace(/\D/g, '');
+      if (ean.length !== 13 && ean.length !== 8) {
+        return 'Código EAN deve ter 8 ou 13 dígitos';
+      }
+    }
+
+    // Validar NCM (se informado)
+    if (row['NCM']) {
+      const ncm = String(row['NCM']).replace(/\D/g, '');
+      if (ncm.length !== 8) {
+        return 'NCM deve ter 8 dígitos';
+      }
+    }
+
+    // Validar CEST (se informado)
+    if (row['CEST']) {
+      const cest = String(row['CEST']).replace(/\D/g, '');
+      if (cest.length !== 7) {
+        return 'CEST deve ter 7 dígitos';
+      }
+    }
+
+    return null;
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
-    setImporting(true);
-    setResult(null);
 
     try {
       const data = await file.arrayBuffer();
@@ -69,109 +145,22 @@ export function ImportProductsData() {
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
       const errors: Array<{ row: number; message: string }> = [];
-      let successCount = 0;
 
       jsonData.forEach((row: any, index: number) => {
         const rowNumber = index + 2;
-
-        try {
-          // Validações básicas
-          if (!row['Descrição']) {
-            errors.push({ row: rowNumber, message: 'Descrição é obrigatória' });
-            return;
-          }
-
-          if (!row['Código SKU']) {
-            errors.push({ row: rowNumber, message: 'Código SKU é obrigatório' });
-            return;
-          }
-
-          if (!row['Marca']) {
-            errors.push({ row: rowNumber, message: 'Marca é obrigatória' });
-            return;
-          }
-
-          if (!row['Tipo Produto']) {
-            errors.push({ row: rowNumber, message: 'Tipo de Produto é obrigatório' });
-            return;
-          }
-
-          if (!row['Unidade (Sigla)']) {
-            errors.push({ row: rowNumber, message: 'Unidade é obrigatória' });
-            return;
-          }
-
-          if (!row['Peso Líquido (kg)'] && row['Peso Líquido (kg)'] !== 0) {
-            errors.push({ row: rowNumber, message: 'Peso Líquido é obrigatório' });
-            return;
-          }
-
-          if (!row['Peso Bruto (kg)'] && row['Peso Bruto (kg)'] !== 0) {
-            errors.push({ row: rowNumber, message: 'Peso Bruto é obrigatório' });
-            return;
-          }
-
-          // Validar peso
-          if (row['Peso Líquido (kg)'] < 0 || row['Peso Bruto (kg)'] < 0) {
-            errors.push({ row: rowNumber, message: 'Pesos não podem ser negativos' });
-            return;
-          }
-
-          if (row['Peso Bruto (kg)'] < row['Peso Líquido (kg)']) {
-            errors.push({ row: rowNumber, message: 'Peso Bruto deve ser maior ou igual ao Peso Líquido' });
-            return;
-          }
-
-          // Validar situação
-          const situacoesValidas = ['Ativo', 'Inativo', 'Excluído'];
-          if (row['Situação'] && !situacoesValidas.includes(row['Situação'])) {
-            errors.push({ row: rowNumber, message: 'Situação deve ser: Ativo, Inativo ou Excluído' });
-            return;
-          }
-
-          // Validar disponível
-          const disponibilidadeValida = ['Sim', 'Não', 'sim', 'não', 'S', 'N', 's', 'n'];
-          if (row['Disponível para Venda'] && !disponibilidadeValida.includes(row['Disponível para Venda'])) {
-            errors.push({ row: rowNumber, message: 'Disponível para Venda deve ser: Sim ou Não' });
-            return;
-          }
-
-          // Validar EAN (se informado)
-          if (row['Código EAN']) {
-            const ean = String(row['Código EAN']).replace(/\D/g, '');
-            if (ean.length !== 13 && ean.length !== 8) {
-              errors.push({ row: rowNumber, message: 'Código EAN deve ter 8 ou 13 dígitos' });
-              return;
-            }
-          }
-
-          // Validar NCM (se informado)
-          if (row['NCM']) {
-            const ncm = String(row['NCM']).replace(/\D/g, '');
-            if (ncm.length !== 8) {
-              errors.push({ row: rowNumber, message: 'NCM deve ter 8 dígitos' });
-              return;
-            }
-          }
-
-          // Validar CEST (se informado)
-          if (row['CEST']) {
-            const cest = String(row['CEST']).replace(/\D/g, '');
-            if (cest.length !== 7) {
-              errors.push({ row: rowNumber, message: 'CEST deve ter 7 dígitos' });
-              return;
-            }
-          }
-
-          // Aqui você salvaria o produto no sistema
-          successCount++;
-
-        } catch (error) {
-          errors.push({ row: rowNumber, message: 'Erro ao processar linha: ' + (error as Error).message });
+        const error = validateRow(row, rowNumber);
+        if (error) {
+          errors.push({ row: rowNumber, message: error });
         }
       });
 
-      setResult({ success: successCount, errors });
+      setPreview({
+        data: jsonData,
+        fileName: file.name,
+        validationErrors: errors,
+      });
+      setShowPreview(true);
+      setResult(null);
 
     } catch (error) {
       setResult({ 
@@ -179,10 +168,358 @@ export function ImportProductsData() {
         errors: [{ row: 0, message: 'Erro ao ler arquivo: ' + (error as Error).message }] 
       });
     } finally {
-      setImporting(false);
       event.target.value = '';
     }
   };
+
+  const handleConfirmImport = async () => {
+    if (!preview) return;
+
+    setImporting(true);
+
+    try {
+      // Buscar dados de referência
+      const [marcasAPI, tiposAPI, unidadesAPI] = await Promise.all([
+        api.get('marcas'),
+        api.get('tiposProduto'),
+        api.get('unidadesMedida'),
+      ]);
+
+      const marcas = Array.isArray(marcasAPI) ? marcasAPI : [];
+      const tipos = Array.isArray(tiposAPI) ? tiposAPI : [];
+      const unidades = Array.isArray(unidadesAPI) ? unidadesAPI : [];
+
+      // Função helper para buscar ou criar marca
+      const getOrCreateMarca = async (nomeMarca: string): Promise<string> => {
+        const marcaExistente = marcas.find((m: any) => 
+          (m.nome || m.descricao)?.toLowerCase().trim() === nomeMarca.toLowerCase().trim()
+        );
+        
+        if (marcaExistente) {
+          return String(marcaExistente.id);
+        }
+
+        // Criar nova marca
+        try {
+          const response = await api.create('marcas', {
+            nome: nomeMarca.trim(),
+            ativo: true,
+          });
+          const novaMarca = response?.data || response;
+          if (novaMarca) {
+            marcas.push(novaMarca);
+            return String(novaMarca.id);
+          }
+          throw new Error('Resposta inválida ao criar marca');
+        } catch (error: any) {
+          throw new Error(`Erro ao criar marca "${nomeMarca}": ${error.message}`);
+        }
+      };
+
+      // Função helper para buscar ou criar tipo de produto
+      const getOrCreateTipo = async (nomeTipo: string): Promise<string> => {
+        const tipoExistente = tipos.find((t: any) => 
+          t.nome?.toLowerCase().trim() === nomeTipo.toLowerCase().trim()
+        );
+        
+        if (tipoExistente) {
+          return String(tipoExistente.id);
+        }
+
+        // Criar novo tipo
+        try {
+          const response = await api.create('tiposProduto', {
+            nome: nomeTipo.trim(),
+            ativo: true,
+          });
+          const novoTipo = response?.data || response;
+          if (novoTipo) {
+            tipos.push(novoTipo);
+            return String(novoTipo.id);
+          }
+          throw new Error('Resposta inválida ao criar tipo de produto');
+        } catch (error: any) {
+          throw new Error(`Erro ao criar tipo de produto "${nomeTipo}": ${error.message}`);
+        }
+      };
+
+      // Função helper para buscar ou criar unidade
+      const getOrCreateUnidade = async (siglaUnidade: string): Promise<string> => {
+        const unidadeExistente = unidades.find((u: any) => 
+          u.sigla?.toUpperCase().trim() === siglaUnidade.toUpperCase().trim()
+        );
+        
+        if (unidadeExistente) {
+          return String(unidadeExistente.id);
+        }
+
+        // Criar nova unidade
+        try {
+          const response = await api.create('unidadesMedida', {
+            sigla: siglaUnidade.toUpperCase().trim(),
+            descricao: siglaUnidade.toUpperCase().trim(),
+            ativo: true,
+          });
+          const novaUnidade = response?.data || response;
+          if (novaUnidade) {
+            unidades.push(novaUnidade);
+            return String(novaUnidade.id);
+          }
+          throw new Error('Resposta inválida ao criar unidade');
+        } catch (error: any) {
+          throw new Error(`Erro ao criar unidade "${siglaUnidade}": ${error.message}`);
+        }
+      };
+
+      // Filtrar apenas produtos válidos (sem erros de validação)
+      const produtosValidos = preview.data.filter((row: any, index: number) => {
+        const rowNumber = index + 2;
+        return !preview.validationErrors.some(e => e.row === rowNumber);
+      });
+
+      if (produtosValidos.length === 0) {
+        toast.error('Nenhum produto válido para importar');
+        setImporting(false);
+        return;
+      }
+
+      // Importar produtos
+      const errors: Array<{ row: number; message: string }> = [...preview.validationErrors];
+      let successCount = 0;
+
+      for (let index = 0; index < preview.data.length; index++) {
+        const row = preview.data[index];
+        const rowNumber = index + 2;
+
+        // Pular produtos com erro de validação
+        if (preview.validationErrors.some(e => e.row === rowNumber)) {
+          continue;
+        }
+
+        try {
+          // Buscar ou criar marca
+          const marcaId = await getOrCreateMarca(row['Marca']);
+
+          // Buscar ou criar tipo de produto
+          const tipoId = await getOrCreateTipo(row['Tipo Produto']);
+
+          // Buscar ou criar unidade
+          const unidadeId = await getOrCreateUnidade(row['Unidade (Sigla)']);
+
+          // Mapear dados da planilha para o formato da API
+          const produtoData = {
+            descricao: String(row['Descrição']).trim(),
+            codigoSku: String(row['Código SKU']).trim(),
+            codigoEan: row['Código EAN'] ? String(row['Código EAN']).replace(/\D/g, '') : undefined,
+            marcaId: marcaId,
+            tipoProdutoId: tipoId,
+            unidadeId: unidadeId,
+            ncm: row['NCM'] ? String(row['NCM']).replace(/\D/g, '') : undefined,
+            cest: row['CEST'] ? String(row['CEST']).replace(/\D/g, '') : undefined,
+            pesoLiquido: Number(row['Peso Líquido (kg)']) || 0,
+            pesoBruto: Number(row['Peso Bruto (kg)']) || 0,
+            situacao: row['Situação'] || 'Ativo',
+            disponivel: row['Disponível para Venda'] && 
+              ['Sim', 'sim', 'S', 's'].includes(String(row['Disponível para Venda'])),
+          };
+
+          // Criar produto
+          await api.create('produtos', produtoData);
+          successCount++;
+
+        } catch (error: any) {
+          errors.push({
+            row: rowNumber,
+            message: `Erro ao importar: ${error.message || 'Erro desconhecido'}`,
+          });
+          console.error(`[IMPORT-PRODUTOS] Erro na linha ${rowNumber}:`, error);
+        }
+      }
+
+      // Mostrar resultado
+      if (successCount > 0) {
+        toast.success(`${successCount} ${successCount === 1 ? 'produto importado' : 'produtos importados'} com sucesso!`);
+      }
+
+      if (errors.length > preview.validationErrors.length) {
+        toast.warning(`${errors.length - preview.validationErrors.length} ${errors.length - preview.validationErrors.length === 1 ? 'erro' : 'erros'} durante a importação`);
+      }
+
+      setResult({ 
+        success: successCount, 
+        errors: errors 
+      });
+      setShowPreview(false);
+      setPreview(null);
+
+    } catch (error: any) {
+      console.error('[IMPORT-PRODUTOS] Erro geral:', error);
+      toast.error(`Erro ao importar produtos: ${error.message || 'Erro desconhecido'}`);
+      setResult({ 
+        success: 0, 
+        errors: [{ row: 0, message: 'Erro ao importar: ' + (error.message || 'Erro desconhecido') }] 
+      });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleCancelPreview = () => {
+    setShowPreview(false);
+    setPreview(null);
+  };
+
+  if (showPreview && preview) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Eye className="h-5 w-5" />
+            Preview da Importação - Produtos
+          </CardTitle>
+          <CardDescription>
+            Arquivo: <span className="font-mono">{preview.fileName}</span> • {preview.data.length} {preview.data.length === 1 ? 'produto' : 'produtos'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Alertas de Validação */}
+          {preview.validationErrors.length > 0 && (
+            <Alert className="border-amber-200 bg-amber-50">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-800">
+                <p className="font-medium mb-2">
+                  {preview.validationErrors.length} {preview.validationErrors.length === 1 ? 'erro encontrado' : 'erros encontrados'}
+                </p>
+                <p className="text-sm">
+                  Os produtos com erro não serão importados. Corrija o arquivo e tente novamente, ou prossiga com a importação dos produtos válidos.
+                </p>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Estatísticas */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="border rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold">{preview.data.length}</p>
+              <p className="text-sm text-muted-foreground">Total</p>
+            </div>
+            <div className="border rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-green-600">{preview.data.length - preview.validationErrors.length}</p>
+              <p className="text-sm text-muted-foreground">Válidos</p>
+            </div>
+            <div className="border rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-red-600">{preview.validationErrors.length}</p>
+              <p className="text-sm text-muted-foreground">Com Erro</p>
+            </div>
+          </div>
+
+          {/* Preview dos Dados */}
+          <div>
+            <h4 className="font-medium mb-2">Preview dos Dados (primeiras 10 linhas)</h4>
+            <ScrollArea className="h-[400px] border rounded-lg">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16">Linha</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead>Marca</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Unidade</TableHead>
+                    <TableHead>Peso Líq.</TableHead>
+                    <TableHead>Peso Bruto</TableHead>
+                    <TableHead className="w-24">Validação</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {preview.data.slice(0, 10).map((row: any, idx: number) => {
+                    const rowNumber = idx + 2;
+                    const hasError = preview.validationErrors.some(e => e.row === rowNumber);
+                    const error = preview.validationErrors.find(e => e.row === rowNumber);
+                    
+                    return (
+                      <TableRow key={idx} className={hasError ? 'bg-red-50' : ''}>
+                        <TableCell className="font-mono text-sm">{rowNumber}</TableCell>
+                        <TableCell className="font-mono text-sm">{row['Código SKU']}</TableCell>
+                        <TableCell className="max-w-[200px] truncate" title={row['Descrição']}>
+                          {row['Descrição']}
+                        </TableCell>
+                        <TableCell>{row['Marca']}</TableCell>
+                        <TableCell>{row['Tipo Produto']}</TableCell>
+                        <TableCell>{row['Unidade (Sigla)']}</TableCell>
+                        <TableCell>{row['Peso Líquido (kg)']}</TableCell>
+                        <TableCell>{row['Peso Bruto (kg)']}</TableCell>
+                        <TableCell>
+                          {hasError ? (
+                            <Badge variant="destructive" className="text-xs">
+                              Erro
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                              OK
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+            {preview.data.length > 10 && (
+              <p className="text-sm text-muted-foreground mt-2 text-center">
+                ... e mais {preview.data.length - 10} {preview.data.length - 10 === 1 ? 'produto' : 'produtos'}
+              </p>
+            )}
+          </div>
+
+          {/* Erros Detalhados */}
+          {preview.validationErrors.length > 0 && (
+            <div>
+              <h4 className="font-medium mb-2">Erros Encontrados</h4>
+              <ScrollArea className="h-[200px] border rounded-lg p-4">
+                <div className="space-y-2">
+                  {preview.validationErrors.map((error, idx) => (
+                    <div key={idx} className="flex gap-2 text-sm">
+                      <span className="font-mono text-red-600 font-medium">Linha {error.row}:</span>
+                      <span>{error.message}</span>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          )}
+
+          {/* Ações */}
+          <div className="flex gap-3 justify-end pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={handleCancelPreview}
+              disabled={importing}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmImport}
+              disabled={importing || preview.data.length === preview.validationErrors.length}
+              className="flex items-center gap-2"
+            >
+              {importing ? (
+                'Importando...'
+              ) : (
+                <>
+                  <ArrowRight className="h-4 w-4" />
+                  Confirmar Importação
+                  {preview.validationErrors.length === 0 && ` (${preview.data.length})`}
+                  {preview.validationErrors.length > 0 && ` (${preview.data.length - preview.validationErrors.length} de ${preview.data.length})`}
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -219,7 +556,7 @@ export function ImportProductsData() {
               className="flex items-center gap-2"
             >
               <Upload className="h-4 w-4" />
-              {importing ? 'Importando...' : 'Importar Planilha'}
+              Selecionar Arquivo para Preview
             </Button>
           </div>
         </div>
@@ -267,6 +604,8 @@ export function ImportProductsData() {
           <ol className="list-decimal list-inside space-y-1 text-sm">
             <li>Baixe a planilha modelo</li>
             <li>Preencha os dados dos produtos conforme o exemplo</li>
+            <li>Selecione o arquivo para visualizar um preview dos dados</li>
+            <li>Revise os dados e confirme a importação</li>
             <li>Situação: "Ativo", "Inativo" ou "Excluído"</li>
             <li>Disponível para Venda: "Sim" ou "Não"</li>
             <li>Código EAN: 8 ou 13 dígitos (opcional)</li>
@@ -274,7 +613,6 @@ export function ImportProductsData() {
             <li>CEST: 7 dígitos (opcional)</li>
             <li>Campos obrigatórios: Descrição, Código SKU, Marca, Tipo Produto, Unidade, Peso Líquido e Peso Bruto</li>
             <li>Se a Marca ou Tipo de Produto não existirem, serão criados automaticamente</li>
-            <li>Salve o arquivo e importe usando o botão acima</li>
           </ol>
         </div>
       </CardContent>

@@ -187,7 +187,16 @@ export function ContaCorrenteOverview() {
       setCompromissos(compromissosAPI || []);
       setPagamentos(pagamentosAPI || []);
       setClientes(clientesAPI || []);
-      setGruposRedes(gruposAPI || []);
+      
+      // A API pode retornar um array direto ou um objeto com paginação
+      let gruposArray = [];
+      if (Array.isArray(gruposAPI)) {
+        gruposArray = gruposAPI;
+      } else if (gruposAPI && typeof gruposAPI === 'object' && 'grupos' in gruposAPI) {
+        gruposArray = gruposAPI.grupos || [];
+      }
+      setGruposRedes(gruposArray);
+      
       setCategorias(categsAPI || []);
       setFormasPagamento(formasAPI || []);
 
@@ -254,6 +263,10 @@ export function ContaCorrenteOverview() {
   }, [clientes]);
 
   const gruposRedesOptions = useMemo(() => {
+    // Garantir que gruposRedes seja um array
+    if (!Array.isArray(gruposRedes)) {
+      return [];
+    }
     return gruposRedes.map(grupo => ({
       label: grupo.nome,
       value: grupo.nome,

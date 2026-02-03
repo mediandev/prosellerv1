@@ -79,6 +79,7 @@ export function CustomerFormDadosCadastrais({
   const [loadingGrupos, setLoadingGrupos] = useState(false);
   const [mockBanks, setMockBanks] = useState<any[]>([]);
   const [segmentosMercado, setSegmentosMercado] = useState<string[]>([]);
+  const [situacoes, setSituacoes] = useState<Array<{ id: string; nome: string; descricao?: string }>>([]);
   const [formBancario, setFormBancario] = useState<Partial<DadosBancariosCliente>>({
     banco: '',
     agencia: '',
@@ -99,8 +100,19 @@ export function CustomerFormDadosCadastrais({
       try {
         setLoadingGrupos(true);
         const data = await api.get('grupos-redes');
-        setGruposRedes(data);
-        console.log('[GRUPOS-REDES] Carregados:', data.length);
+        
+        // A API pode retornar um array direto ou um objeto com paginação
+        let gruposArray: Array<{ id: string; nome: string; descricao?: string }> = [];
+        
+        if (Array.isArray(data)) {
+          gruposArray = data;
+        } else if (data && typeof data === 'object' && 'grupos' in data) {
+          // Resposta com paginação do backend
+          gruposArray = data.grupos || [];
+        }
+        
+        setGruposRedes(gruposArray);
+        console.log('[GRUPOS-REDES] Carregados:', gruposArray.length);
       } catch (error: any) {
         console.error('[GRUPOS-REDES] Erro ao carregar:', error);
         // Não mostrar toast de erro para não poluir a UI
@@ -113,20 +125,73 @@ export function CustomerFormDadosCadastrais({
     carregarGruposRedes();
   }, []);
 
-  // Carregar segmentos de mercado
+  // Converter grupoRede de nome para ID quando gruposRedes estiverem carregados
+  useEffect(() => {
+    if (gruposRedes.length > 0 && formData.grupoRede) {
+      // Se grupoRede é um nome (string que não é UUID), buscar o ID correspondente
+      const grupoRedeValue = formData.grupoRede;
+      
+      // Verificar se é UUID (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(grupoRedeValue);
+      
+      if (!isUUID) {
+        // É um nome, buscar o ID correspondente
+        const grupoEncontrado = gruposRedes.find(g => 
+          g.nome.toLowerCase() === grupoRedeValue.toLowerCase()
+        );
+        
+        if (grupoEncontrado) {
+          console.log('[GRUPOS-REDES] Convertendo nome para ID:', grupoRedeValue, '->', grupoEncontrado.id);
+          updateFormData({ grupoRede: grupoEncontrado.id });
+        } else {
+          console.warn('[GRUPOS-REDES] Grupo não encontrado:', grupoRedeValue);
+        }
+      }
+    }
+  }, [gruposRedes, formData.grupoRede]);
+
+  // Carregar segmentos de mercado (com IDs)
+  const [segmentosCompletos, setSegmentosCompletos] = useState<Array<{ id: string; nome: string; descricao?: string }>>([]);
+  
   useEffect(() => {
     const carregarSegmentos = async () => {
       try {
         const data = await api.get('segmentos-cliente');
-        setSegmentosMercado(data.map((s: any) => s.nome));
-        console.log('[SEGMENTOS] Carregados:', data.length);
+        const segmentosArray = Array.isArray(data) ? data : (data?.segmentos || data?.data || []);
+        // Armazenar segmentos completos com ID e nome
+        setSegmentosCompletos(segmentosArray.map((s: any) => ({
+          id: String(s.id || s.segmento_id || ''),
+          nome: s.nome || '',
+          descricao: s.descricao
+        })));
+        // Manter compatibilidade com código antigo
+        setSegmentosMercado(segmentosArray.map((s: any) => s.nome));
+        console.log('[SEGMENTOS] Carregados:', segmentosArray.length);
       } catch (error: any) {
         console.error('[SEGMENTOS] Erro ao carregar:', error);
+        setSegmentosCompletos([]);
         setSegmentosMercado([]);
       }
     };
 
     carregarSegmentos();
+  }, []);
+
+  // Carregar situações da tabela ref_situacao
+  useEffect(() => {
+    const carregarSituacoes = async () => {
+      try {
+        const data = await api.get('ref-situacao');
+        const situacoesArray = Array.isArray(data) ? data : (data?.data || []);
+        setSituacoes(situacoesArray);
+        console.log('[SITUACOES] Carregadas:', situacoesArray.length);
+      } catch (error: any) {
+        console.error('[SITUACOES] Erro ao carregar:', error);
+        setSituacoes([]);
+      }
+    };
+
+    carregarSituacoes();
   }, []);
 
   // Carregar bancos da API BrasilAPI
@@ -173,7 +238,49 @@ export function CustomerFormDadosCadastrais({
     []
   );
 
+  // Converter grupoRede de nome para ID quando gruposRedes estiverem carregados
+  useEffect(() => {
+    if (gruposRedes.length > 0 && formData.grupoRede) {
+      const grupoRedeValue = String(formData.grupoRede).trim();
+      
+      // Verificar se é UUID (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(grupoRedeValue);
+      
+      if (!isUUID) {
+        // É um nome, buscar o ID correspondente (busca case-insensitive e com trim)
+        const grupoEncontrado = gruposRedes.find(g => {
+          const nomeGrupo = String(g.nome || '').toLowerCase().trim();
+          const valorBuscado = grupoRedeValue.toLowerCase().trim();
+          return nomeGrupo === valorBuscado;
+        });
+        
+        if (grupoEncontrado) {
+          console.log('[GRUPOS-REDES] Convertendo nome para ID:', grupoRedeValue, '->', grupoEncontrado.id, grupoEncontrado.nome);
+          // Atualizar apenas se o ID for diferente do valor atual
+          if (formData.grupoRede !== grupoEncontrado.id) {
+            updateFormData({ grupoRede: grupoEncontrado.id });
+          }
+        } else {
+          console.warn('[GRUPOS-REDES] Grupo não encontrado na lista:', grupoRedeValue);
+          console.log('[GRUPOS-REDES] Grupos disponíveis:', gruposRedes.map(g => ({ id: g.id, nome: g.nome })));
+        }
+      } else {
+        // Já é um UUID, verificar se existe na lista
+        const grupoExiste = gruposRedes.find(g => g.id === grupoRedeValue);
+        if (!grupoExiste) {
+          console.warn('[GRUPOS-REDES] Grupo com ID não encontrado na lista:', grupoRedeValue);
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gruposRedes]); // Só executar quando gruposRedes mudar para evitar loops
+
   const gruposOptions = useMemo(() => {
+    // Garantir que gruposRedes seja um array
+    if (!Array.isArray(gruposRedes)) {
+      return [];
+    }
+    
     // Deduplicate by ID to avoid duplicate keys
     const uniqueGrupos = gruposRedes.reduce((acc, g) => {
       if (!acc.find(item => item.id === g.id)) {
@@ -186,10 +293,38 @@ export function CustomerFormDadosCadastrais({
   }, [gruposRedes]);
 
   const segmentosOptions = useMemo(() => {
-    // Deduplicate segments to avoid duplicate keys
-    const uniqueSegmentos = Array.from(new Set(segmentosMercado));
-    return uniqueSegmentos.map((s) => ({ value: s, label: s }));
-  }, [segmentosMercado]);
+    // Usar segmentos completos com ID e nome
+    return segmentosCompletos.map((s) => ({ value: s.id, label: s.nome }));
+  }, [segmentosCompletos]);
+
+  // Converter segmentoMercado (nome) para segmentoId (ID) quando necessário
+  useEffect(() => {
+    if (segmentosCompletos.length > 0 && formData.segmentoMercado && !formData.segmentoId) {
+      // Se segmentoMercado é um nome, buscar o ID correspondente
+      const segmentoEncontrado = segmentosCompletos.find(
+        (s) => s.nome.toLowerCase() === String(formData.segmentoMercado).toLowerCase()
+      );
+      if (segmentoEncontrado) {
+        console.log('[SEGMENTOS] Convertendo nome para ID:', formData.segmentoMercado, '->', segmentoEncontrado.id);
+        updateFormData({ segmentoId: segmentoEncontrado.id });
+      }
+    }
+  }, [segmentosCompletos, formData.segmentoMercado, formData.segmentoId]);
+
+  const situacoesOptions = useMemo(() => {
+    return situacoes.map((s) => ({ value: s.nome, label: s.nome }));
+  }, [situacoes]);
+
+  // Normalizar situacao do formData para corresponder às opções (case-insensitive)
+  const situacaoNormalizada = useMemo(() => {
+    if (!formData.situacao) return undefined;
+    const situacaoValue = String(formData.situacao).trim();
+    // Buscar correspondência case-insensitive nas opções
+    const opcaoEncontrada = situacoesOptions.find(
+      (opt) => opt.value.toLowerCase() === situacaoValue.toLowerCase()
+    );
+    return opcaoEncontrada?.value || situacaoValue;
+  }, [formData.situacao, situacoesOptions]);
 
   const municipiosOptions = useMemo(() => {
     if (!formData.uf) return [];
@@ -582,17 +717,28 @@ export function CustomerFormDadosCadastrais({
           <div className="space-y-2">
             <Label htmlFor="situacao">Situação *</Label>
             <Select
-              value={formData.situacao}
+              value={situacaoNormalizada}
               onValueChange={(value: SituacaoCliente) => updateFormData({ situacao: value })}
               disabled={readOnly}
             >
               <SelectTrigger id="situacao">
-                <SelectValue />
+                <SelectValue placeholder="Selecione a situação" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Ativo">Ativo</SelectItem>
-                <SelectItem value="Inativo">Inativo</SelectItem>
-                <SelectItem value="Excluído">Excluído</SelectItem>
+                {situacoesOptions.length > 0 ? (
+                  situacoesOptions.map((situacao) => (
+                    <SelectItem key={situacao.value} value={situacao.value}>
+                      {situacao.label}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <>
+                    <SelectItem value="ATIVO">ATIVO</SelectItem>
+                    <SelectItem value="INATIVO">INATIVO</SelectItem>
+                    <SelectItem value="EXCLUÍDO">EXCLUÍDO</SelectItem>
+                    <SelectItem value="PROSPECÇÃO">PROSPECÇÃO</SelectItem>
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -601,8 +747,15 @@ export function CustomerFormDadosCadastrais({
             <Label htmlFor="segmentoMercado">Segmento *</Label>
             <Combobox
               options={segmentosOptions}
-              value={formData.segmentoMercado}
-              onValueChange={(value) => updateFormData({ segmentoMercado: value })}
+              value={formData.segmentoId || formData.segmentoMercado}
+              onValueChange={(value) => {
+                // value é o ID do segmento
+                const segmentoEncontrado = segmentosCompletos.find(s => s.id === value);
+                updateFormData({ 
+                  segmentoId: value,
+                  segmentoMercado: segmentoEncontrado?.nome || value
+                });
+              }}
               placeholder="Selecione o segmento"
               searchPlaceholder="Pesquisar segmento..."
               emptyText="Nenhum segmento encontrado."

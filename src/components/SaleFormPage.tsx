@@ -132,6 +132,8 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   // Estado para controlar o combobox de clientes
   const [clienteComboOpen, setClienteComboOpen] = useState(false);
   const [clienteSearchTerm, setClienteSearchTerm] = useState('');
+  const [clienteSearchDebounced, setClienteSearchDebounced] = useState('');
+  const [loadingClientes, setLoadingClientes] = useState(false);
   
   // Estados para controlar exibição por etapas (apenas no modo criar)
   const [mostrarCamposCliente, setMostrarCamposCliente] = useState(modo !== 'criar');
@@ -139,6 +141,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
   // Dados de apoio
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [clientesIniciais, setClientesIniciais] = useState<Cliente[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   
   // Estados para itens faturados
@@ -202,7 +205,13 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
   // Clientes filtrados por permissão
   const clientesDisponiveis = useMemo(() => {
-    return clientes.filter(cliente => {
+    console.log('[VENDAS] Filtrando clientes disponíveis:', {
+      totalClientes: clientes.length,
+      isBackoffice,
+      usuarioId: usuario?.id
+    });
+    
+    const filtrados = clientes.filter(cliente => {
       // Excluir clientes com situação excluído, em análise ou reprovado
       if (cliente.situacao === 'Excluído' || cliente.situacao === 'Análise' || cliente.situacao === 'Reprovado') {
         return false;
@@ -226,55 +235,84 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       }
       return false;
     });
-  }, [clientes, isBackoffice, usuario]);
-
-  // Clientes filtrados pela busca
-  const clientesFiltrados = useMemo(() => {
-    if (!clienteSearchTerm.trim()) return clientesDisponiveis;
-
-    const searchLower = clienteSearchTerm.toLowerCase().trim();
     
-    const filtered = clientesDisponiveis.filter(cliente => {
-      // Buscar por nome/razão social
-      const matchRazao = cliente.razaoSocial?.toLowerCase().includes(searchLower);
-      
-      // Buscar por nome fantasia
-      const matchFantasia = cliente.nomeFantasia?.toLowerCase().includes(searchLower);
-      
-      // Buscar por grupo/rede
-      const matchGrupo = cliente.grupoRede?.toLowerCase().includes(searchLower);
-      
-      // Buscar por CNPJ (remover caracteres especiais)
-      const cnpjLimpo = cliente.cpfCnpj?.replace(/\D/g, '') || '';
-      const searchCnpj = searchLower.replace(/\D/g, '');
-      const matchCnpj = searchCnpj && cnpjLimpo.includes(searchCnpj);
-      
-      // Buscar por código do cliente
-      const matchCodigo = cliente.codigo?.toLowerCase().includes(searchLower);
-      
-      const match = matchRazao || matchFantasia || matchGrupo || matchCnpj || matchCodigo;
-      
-      if (match) {
-        console.log(`✅ Match encontrado: ${cliente.razaoSocial}`, {
-          razao: matchRazao,
-          fantasia: matchFantasia,
-          grupo: matchGrupo,
-          cnpj: matchCnpj,
-          codigo: matchCodigo || cliente.codigo,
-          razaoSocial: cliente.razaoSocial,
-          nomeFantasia: cliente.nomeFantasia,
-          grupoRede: cliente.grupoRede,
-          cpfCnpj: cliente.cpfCnpj,
-        });
-      }
-      
-      return match;
+    console.log('[VENDAS] Clientes disponíveis após filtro:', {
+      total: filtrados.length,
+      primeiros: filtrados.slice(0, 3).map(c => ({
+        id: c.id,
+        razaoSocial: c.razaoSocial,
+        statusAprovacao: c.statusAprovacao,
+        situacao: c.situacao
+      }))
     });
     
-    console.log('🔍 Termo de busca:', `"${clienteSearchTerm}"`);
-    console.log('📊 Total de resultados:', filtered.length);
-    
-    return filtered;
+    return filtrados;
+  }, [clientes, isBackoffice, usuario]);
+
+  // Debounce para busca de clientes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setClienteSearchDebounced(clienteSearchTerm);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [clienteSearchTerm]);
+
+  // Buscar clientes na API quando o termo de busca mudar
+  useEffect(() => {
+    const buscarClientes = async () => {
+      // Se não há termo de busca, restaurar lista inicial
+      if (!clienteSearchDebounced.trim()) {
+        if (clientesIniciais.length > 0) {
+          console.log('[VENDAS] Restaurando lista inicial de clientes:', clientesIniciais.length);
+          setClientes(clientesIniciais);
+        }
+        return;
+      }
+
+      setLoadingClientes(true);
+      try {
+        console.log('[VENDAS] Buscando clientes na API com termo:', clienteSearchDebounced);
+        
+        const params: Record<string, string | number | undefined> = {
+          page: 1,
+          limit: 100, // Limite razoável para busca
+          search: clienteSearchDebounced.trim(),
+          status_aprovacao: 'aprovado' // Apenas clientes aprovados
+        };
+
+        const response = await api.get<{ clientes: Cliente[]; pagination?: any }>('clientes', { params });
+        
+        // Extrair array de clientes da resposta
+        const clientesEncontrados = Array.isArray(response) 
+          ? response 
+          : (response?.clientes || []);
+        
+        console.log('[VENDAS] Clientes encontrados na busca:', clientesEncontrados.length);
+        
+        // Atualizar lista de clientes com os resultados da busca
+        // Remover duplicatas e manter apenas os clientes encontrados
+        setClientes(removeDuplicatesById(clientesEncontrados));
+      } catch (error: any) {
+        console.error('[VENDAS] Erro ao buscar clientes:', error);
+        toast.error('Erro ao buscar clientes. Tente novamente.');
+      } finally {
+        setLoadingClientes(false);
+      }
+    };
+
+    buscarClientes();
+  }, [clienteSearchDebounced, clientesIniciais]);
+
+  // Clientes filtrados pela busca (agora usa os clientes já filtrados pela API)
+  const clientesFiltrados = useMemo(() => {
+    // Se não há termo de busca, retornar todos os clientes disponíveis
+    if (!clienteSearchTerm.trim()) {
+      return clientesDisponiveis;
+    }
+
+    // Se há termo de busca, os clientes já vêm filtrados da API
+    // Apenas aplicar o filtro de permissões
+    return clientesDisponiveis;
   }, [clientesDisponiveis, clienteSearchTerm]);
 
   // Condições de pagamento do cliente selecionado
@@ -316,8 +354,51 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     try {
       console.log('[VENDAS] Carregando dados iniciais...');
       
-      const [clientesAPI, produtosAPI, naturezasAPI, condicoesAPI, listasPrecoAPI, vendasAPI] = await Promise.all([
-        api.get('clientes'),
+      // Buscar TODOS os clientes (fazendo múltiplas chamadas paginadas)
+      console.log('[VENDAS] Buscando todos os clientes aprovados...');
+      let todosClientes: any[] = [];
+      let paginaAtual = 1;
+      let temMaisPaginas = true;
+      const limitePorPagina = 100; // Limite máximo da Edge Function
+      
+      while (temMaisPaginas) {
+        const clientesResponse = await api.get('clientes', {
+          params: {
+            page: paginaAtual,
+            limit: limitePorPagina,
+            status_aprovacao: 'aprovado' // Apenas clientes aprovados
+          }
+        });
+        
+        // Extrair array de clientes da resposta
+        const clientesPagina = Array.isArray(clientesResponse) 
+          ? clientesResponse 
+          : (clientesResponse?.clientes || []);
+        
+        todosClientes = [...todosClientes, ...clientesPagina];
+        
+        // Verificar se há mais páginas
+        const pagination = Array.isArray(clientesResponse) ? null : (clientesResponse?.pagination || null);
+        if (pagination) {
+          temMaisPaginas = paginaAtual < pagination.total_pages;
+          paginaAtual++;
+          console.log(`[VENDAS] Carregados ${todosClientes.length} de ${pagination.total} clientes (página ${pagination.page}/${pagination.total_pages})`);
+        } else {
+          // Se não há paginação, assumir que carregou tudo
+          temMaisPaginas = false;
+        }
+        
+        // Proteção contra loop infinito
+        if (paginaAtual > 1000) {
+          console.warn('[VENDAS] Limite de páginas atingido. Parando busca.');
+          temMaisPaginas = false;
+        }
+      }
+      
+      console.log(`[VENDAS] Total de clientes carregados: ${todosClientes.length}`);
+      const clientesAPI = todosClientes;
+      
+      const [produtosAPI, naturezasAPI, condicoesAPI, listasPrecoAPI, vendasAPI] = await Promise.all([
         api.get('produtos'),
         api.get('naturezas-operacao'),
         api.get('condicoes-pagamento'),
@@ -332,7 +413,9 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       });
       
       // Remover duplicatas por ID antes de setar os estados
-      setClientes(removeDuplicatesById(clientesAPI));
+      const clientesUnicos = removeDuplicatesById(clientesAPI);
+      setClientes(clientesUnicos);
+      setClientesIniciais(clientesUnicos); // Guardar lista inicial para restaurar quando busca for limpa
       setProdutos(removeDuplicatesById(produtosAPI));
       setNaturezas(removeDuplicatesById(naturezasAPI));
       setCondicoes(removeDuplicatesById(condicoesAPI));
@@ -385,6 +468,15 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         condicoes: condicoesAPI.length,
         listasPreco: listasPrecoAPI.length
       });
+      
+      // Log detalhado dos clientes carregados
+      console.log('[VENDAS] Primeiros 5 clientes carregados:', clientesAPI.slice(0, 5).map(c => ({
+        id: c.id,
+        razaoSocial: c.razaoSocial,
+        nomeFantasia: c.nomeFantasia,
+        statusAprovacao: c.statusAprovacao,
+        situacao: c.situacao
+      })));
     } catch (error) {
       console.error('[VENDAS] Erro ao carregar dados:', error);
       toast.error('Erro ao carregar dados.');
@@ -835,21 +927,53 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     if (formData.clienteId && modo === 'criar' && !clienteJaCarregado) {
       const cliente = clientes.find(c => c.id === formData.clienteId);
       if (cliente && companies.length > 0) {
-        // Buscar lista de preços: primeiro por ID, depois por nome exato, depois por nome parcial
-        let listaPreco = listasPreco.find(lp => lp.id === cliente.listaPrecos);
-        if (!listaPreco && cliente.listaPrecos) {
-          listaPreco = listasPreco.find(lp => lp.nome === cliente.listaPrecos);
-        }
-        if (!listaPreco && cliente.listaPrecos) {
-          // Busca parcial: verifica se o nome da lista contém o texto do cliente
-          listaPreco = listasPreco.find(lp => lp.nome.toLowerCase().includes(cliente.listaPrecos.toLowerCase()));
-        }
-        
-        // Buscar a empresa de faturamento do cliente
-        let empresaFaturamentoId = '';
-        let nomeEmpresaFaturamento = '';
-        
-        if (cliente.empresaFaturamento) {
+        // Função async para buscar lista de preço e processar dados do cliente
+        const processarCliente = async () => {
+          let listaPreco = null;
+          
+          // Buscar lista de preços: primeiro verificar se é um ID numérico e buscar na Edge Function
+          if (cliente.listaPrecos) {
+            // Verificar se listaPrecos é um ID numérico (string que pode ser convertida para número)
+            const listaPrecosValue = String(cliente.listaPrecos).trim();
+            const isNumericId = /^\d+$/.test(listaPrecosValue);
+            
+            if (isNumericId) {
+              // É um ID numérico, buscar na Edge Function
+              try {
+                console.log('[AUTO-PREENCHIMENTO] Buscando lista de preço via Edge Function com ID:', listaPrecosValue);
+                const listaPrecoCompleta = await api.getById('listas-preco', listaPrecosValue);
+                if (listaPrecoCompleta) {
+                  listaPreco = listaPrecoCompleta;
+                  // Adicionar à lista local se não estiver lá
+                  const jaExiste = listasPreco.find(lp => lp.id === listaPrecoCompleta.id);
+                  if (!jaExiste) {
+                    setListasPreco(prev => [...prev, listaPrecoCompleta]);
+                  }
+                  console.log('[AUTO-PREENCHIMENTO] Lista de preço encontrada na Edge Function:', listaPrecoCompleta.nome);
+                }
+              } catch (error) {
+                console.error('[AUTO-PREENCHIMENTO] Erro ao buscar lista de preço na Edge Function:', error);
+                // Fallback: tentar encontrar na lista local
+                listaPreco = listasPreco.find(lp => lp.id === listaPrecosValue);
+              }
+            } else {
+              // Não é um ID numérico, buscar por nome na lista local
+              listaPreco = listasPreco.find(lp => lp.id === cliente.listaPrecos);
+              if (!listaPreco) {
+                listaPreco = listasPreco.find(lp => lp.nome === cliente.listaPrecos);
+              }
+              if (!listaPreco) {
+                // Busca parcial: verifica se o nome da lista contém o texto do cliente
+                listaPreco = listasPreco.find(lp => lp.nome.toLowerCase().includes(cliente.listaPrecos.toLowerCase()));
+              }
+            }
+          }
+          
+          // Buscar a empresa de faturamento do cliente
+          let empresaFaturamentoId = '';
+          let nomeEmpresaFaturamento = '';
+          
+          if (cliente.empresaFaturamento) {
           console.log('[AUTO-PREENCHIMENTO] Buscando empresa de faturamento:', {
             empresaNoCliente: cliente.empresaFaturamento,
             todasEmpresas: companies.map(c => ({
@@ -859,95 +983,99 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             }))
           });
           
-          // Tentar encontrar a empresa por ID primeiro (o mais comum)
-          let empresa = companies.find(c => c.id === cliente.empresaFaturamento);
-          
-          // Se não encontrou por ID, tentar por nome
-          if (!empresa) {
-            // Normalizar para comparação (remover espaços extras, converter para maiúsculas)
-            const empresaNormalizada = cliente.empresaFaturamento.trim().toUpperCase();
+            // Tentar encontrar a empresa por ID primeiro (o mais comum)
+            let empresa = companies.find(c => c.id === cliente.empresaFaturamento);
             
-            // Busca exata por nome
-            empresa = companies.find(c => 
-              c.razaoSocial?.trim().toUpperCase() === empresaNormalizada || 
-              c.nomeFantasia?.trim().toUpperCase() === empresaNormalizada
-            );
-            
-            // Se não encontrou, tentar busca parcial
+            // Se não encontrou por ID, tentar por nome
             if (!empresa) {
+              // Normalizar para comparação (remover espaços extras, converter para maiúsculas)
+              const empresaNormalizada = cliente.empresaFaturamento.trim().toUpperCase();
+              
+              // Busca exata por nome
               empresa = companies.find(c => 
-                c.razaoSocial?.trim().toUpperCase().includes(empresaNormalizada) ||
-                c.nomeFantasia?.trim().toUpperCase().includes(empresaNormalizada) ||
-                empresaNormalizada.includes(c.razaoSocial?.trim().toUpperCase() || '') ||
-                empresaNormalizada.includes(c.nomeFantasia?.trim().toUpperCase() || '')
+                c.razaoSocial?.trim().toUpperCase() === empresaNormalizada || 
+                c.nomeFantasia?.trim().toUpperCase() === empresaNormalizada
               );
+              
+              // Se não encontrou, tentar busca parcial
+              if (!empresa) {
+                empresa = companies.find(c => 
+                  c.razaoSocial?.trim().toUpperCase().includes(empresaNormalizada) ||
+                  c.nomeFantasia?.trim().toUpperCase().includes(empresaNormalizada) ||
+                  empresaNormalizada.includes(c.razaoSocial?.trim().toUpperCase() || '') ||
+                  empresaNormalizada.includes(c.nomeFantasia?.trim().toUpperCase() || '')
+                );
+              }
+            }
+            
+            console.log('[AUTO-PREENCHIMENTO] Empresa encontrada?', {
+              encontrada: !!empresa,
+              empresaId: empresa?.id,
+              empresaRazao: empresa?.razaoSocial,
+              empresaFantasia: empresa?.nomeFantasia
+            });
+            
+            if (empresa) {
+              empresaFaturamentoId = empresa.id;
+              nomeEmpresaFaturamento = empresa.razaoSocial;
+            } else {
+              // ✅ FALLBACK: Usar primeira empresa disponível se o cliente tem empresa antiga/inválida
+              if (companies.length > 0) {
+                const primeiraEmpresa = companies[0];
+                empresaFaturamentoId = primeiraEmpresa.id;
+                nomeEmpresaFaturamento = primeiraEmpresa.razaoSocial;
+                console.log('[AUTO-PREENCHIMENTO] 🔄 Empresa do cliente não encontrada. Usando fallback:', {
+                  empresaCliente: cliente.empresaFaturamento,
+                  empresaFallback: primeiraEmpresa.razaoSocial,
+                  id: primeiraEmpresa.id
+                });
+              } else {
+                nomeEmpresaFaturamento = cliente.empresaFaturamento;
+                console.error('[AUTO-PREENCHIMENTO] ❌ Nenhuma empresa cadastrada no sistema!');
+              }
             }
           }
           
-          console.log('[AUTO-PREENCHIMENTO] Empresa encontrada?', {
-            encontrada: !!empresa,
-            empresaId: empresa?.id,
-            empresaRazao: empresa?.razaoSocial,
-            empresaFantasia: empresa?.nomeFantasia
+          // Se não encontrou empresa, alertar mas NÃO bloquear
+          if (!empresaFaturamentoId && companies.length === 0) {
+            console.error('[AUTO-PREENCHIMENTO] ❌ CRÍTICO: Nenhuma empresa cadastrada no sistema!');
+            toast.error('Nenhuma empresa cadastrada! Configure as empresas antes de criar pedidos.');
+          }
+          
+          console.log('[AUTO-PREENCHIMENTO] Resultado final:', {
+            empresaFaturamentoId,
+            nomeEmpresaFaturamento
           });
           
-          if (empresa) {
-            empresaFaturamentoId = empresa.id;
-            nomeEmpresaFaturamento = empresa.razaoSocial;
-          } else {
-            // ✅ FALLBACK: Usar primeira empresa disponível se o cliente tem empresa antiga/inválida
-            if (companies.length > 0) {
-              const primeiraEmpresa = companies[0];
-              empresaFaturamentoId = primeiraEmpresa.id;
-              nomeEmpresaFaturamento = primeiraEmpresa.razaoSocial;
-              console.log('[AUTO-PREENCHIMENTO] 🔄 Empresa do cliente não encontrada. Usando fallback:', {
-                empresaCliente: cliente.empresaFaturamento,
-                empresaFallback: primeiraEmpresa.razaoSocial,
-                id: primeiraEmpresa.id
-              });
-            } else {
-              nomeEmpresaFaturamento = cliente.empresaFaturamento;
-              console.error('[AUTO-PREENCHIMENTO] ❌ Nenhuma empresa cadastrada no sistema!');
-            }
-          }
-        }
-        
-        // Se não encontrou empresa, alertar mas NÃO bloquear
-        if (!empresaFaturamentoId && companies.length === 0) {
-          console.error('[AUTO-PREENCHIMENTO] ❌ CRÍTICO: Nenhuma empresa cadastrada no sistema!');
-          toast.error('Nenhuma empresa cadastrada! Configure as empresas antes de criar pedidos.');
-        }
-        
-        console.log('[AUTO-PREENCHIMENTO] Resultado final:', {
-          empresaFaturamentoId,
-          nomeEmpresaFaturamento
-        });
-        
-        console.log('[VENDAS] Auto-preenchendo dados do cliente:', {
-          clienteId: cliente.id,
-          clienteNome: cliente.razaoSocial,
-          empresaFaturamento: cliente.empresaFaturamento,
-          empresaFaturamentoId: empresaFaturamentoId,
-          listaPrecoCliente: cliente.listaPrecos,
-          listaPrecoEncontrada: listaPreco?.nome,
-          listaPrecoId: listaPreco?.id,
-          condicoesPagamento: cliente.condicoesPagamentoAssociadas?.length || 0,
-        });
-        
-        setFormData(prev => ({
-          ...prev,
-          nomeCliente: cliente.razaoSocial || cliente.nomeFantasia || '',
-          cnpjCliente: cliente.cpfCnpj || '',
-          inscricaoEstadualCliente: cliente.inscricaoEstadual || '',
-          listaPrecoId: listaPreco?.id || cliente.listaPrecos || '',
-          nomeListaPreco: listaPreco?.nome || cliente.listaPrecos || '',
-          percentualDescontoPadrao: cliente.descontoPadrao || 0,
-          vendedorId: cliente.vendedorAtribuido?.id || cliente.vendedoresAtribuidos?.[0]?.id || '',
-          nomeVendedor: cliente.vendedorAtribuido?.nome || cliente.vendedoresAtribuidos?.[0]?.nome || '',
-          empresaFaturamentoId: empresaFaturamentoId,
-          nomeEmpresaFaturamento: nomeEmpresaFaturamento,
-        }));
-        setClienteJaCarregado(true);
+          console.log('[VENDAS] Auto-preenchendo dados do cliente:', {
+            clienteId: cliente.id,
+            clienteNome: cliente.razaoSocial,
+            empresaFaturamento: cliente.empresaFaturamento,
+            empresaFaturamentoId: empresaFaturamentoId,
+            listaPrecoCliente: cliente.listaPrecos,
+            listaPrecoEncontrada: listaPreco?.nome,
+            listaPrecoId: listaPreco?.id,
+            condicoesPagamento: cliente.condicoesPagamentoAssociadas?.length || 0,
+          });
+          
+          setFormData(prev => ({
+            ...prev,
+            nomeCliente: cliente.razaoSocial || cliente.nomeFantasia || '',
+            cnpjCliente: cliente.cpfCnpj || '',
+            inscricaoEstadualCliente: cliente.inscricaoEstadual || '',
+            listaPrecoId: listaPreco?.id || cliente.listaPrecos || '',
+            nomeListaPreco: listaPreco?.nome || cliente.listaPrecos || '',
+            percentualDescontoPadrao: cliente.descontoPadrao || 0,
+            vendedorId: cliente.vendedorAtribuido?.id || cliente.vendedoresAtribuidos?.[0]?.id || '',
+            nomeVendedor: cliente.vendedorAtribuido?.nome || cliente.vendedoresAtribuidos?.[0]?.nome || '',
+            empresaFaturamentoId: empresaFaturamentoId,
+            nomeEmpresaFaturamento: nomeEmpresaFaturamento,
+          }));
+          setClienteJaCarregado(true);
+        };
+
+        // Chamar função async
+        processarCliente();
       }
     }
   }, [formData.clienteId, clientes, modo, clienteJaCarregado, companies, listasPreco]);
@@ -981,18 +1109,61 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   // Atualizar desconto extra baseado na condição de pagamento (removido - agora é feito no handler)
 
   // Handler para mudança de cliente
-  const handleClienteChange = (clienteId: string) => {
+  const handleClienteChange = async (clienteId: string) => {
     limparErro('clienteId'); // Limpar erro ao selecionar cliente
-    const cliente = clientes.find(c => c.id === clienteId);
-    if (cliente) {
-      // Buscar lista de preços: primeiro por ID, depois por nome exato, depois por nome parcial
-      let listaPreco = listasPreco.find(lp => lp.id === cliente.listaPrecos);
-      if (!listaPreco && cliente.listaPrecos) {
-        listaPreco = listasPreco.find(lp => lp.nome === cliente.listaPrecos);
+    
+    try {
+      // Buscar dados completos do cliente via API
+      console.log('[VENDAS] Buscando dados completos do cliente:', clienteId);
+      const clienteCompleto = await api.getById('clientes', clienteId);
+      
+      if (!clienteCompleto) {
+        toast.error('Cliente não encontrado');
+        return;
       }
-      if (!listaPreco && cliente.listaPrecos) {
-        // Busca parcial: verifica se o nome da lista contém o texto do cliente
-        listaPreco = listasPreco.find(lp => lp.nome.toLowerCase().includes(cliente.listaPrecos.toLowerCase()));
+      
+      console.log('[VENDAS] Cliente completo carregado:', clienteCompleto);
+      
+      // Usar os dados completos do cliente
+      const cliente = clienteCompleto;
+      
+      // Buscar lista de preços: primeiro verificar se é um ID numérico e buscar na Edge Function
+      let listaPreco = null;
+      if (cliente.listaPrecos) {
+        // Verificar se listaPrecos é um ID numérico (string que pode ser convertida para número)
+        const listaPrecosValue = String(cliente.listaPrecos).trim();
+        const isNumericId = /^\d+$/.test(listaPrecosValue);
+        
+        if (isNumericId) {
+          // É um ID numérico, buscar na Edge Function
+          try {
+            console.log('[VENDAS] Buscando lista de preço via Edge Function com ID:', listaPrecosValue);
+            const listaPrecoCompleta = await api.getById('listas-preco', listaPrecosValue);
+            if (listaPrecoCompleta) {
+              listaPreco = listaPrecoCompleta;
+              // Adicionar à lista local se não estiver lá
+              const jaExiste = listasPreco.find(lp => lp.id === listaPrecoCompleta.id);
+              if (!jaExiste) {
+                setListasPreco(prev => [...prev, listaPrecoCompleta]);
+              }
+              console.log('[VENDAS] Lista de preço encontrada na Edge Function:', listaPrecoCompleta.nome);
+            }
+          } catch (error) {
+            console.error('[VENDAS] Erro ao buscar lista de preço na Edge Function:', error);
+            // Fallback: tentar encontrar na lista local
+            listaPreco = listasPreco.find(lp => lp.id === listaPrecosValue);
+          }
+        } else {
+          // Não é um ID numérico, buscar por nome na lista local
+          listaPreco = listasPreco.find(lp => lp.id === cliente.listaPrecos);
+          if (!listaPreco) {
+            listaPreco = listasPreco.find(lp => lp.nome === cliente.listaPrecos);
+          }
+          if (!listaPreco) {
+            // Busca parcial: verifica se o nome da lista contém o texto do cliente
+            listaPreco = listasPreco.find(lp => lp.nome.toLowerCase().includes(cliente.listaPrecos.toLowerCase()));
+          }
+        }
       }
       
       // Buscar a empresa de faturamento do cliente
@@ -1110,6 +1281,121 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       setClienteSearchTerm('');
       
       // Mostrar campos do cliente após seleção (apenas no modo criar)
+      if (modo === 'criar') {
+        setMostrarCamposCliente(true);
+      }
+    } catch (error) {
+      console.error('[VENDAS] Erro ao carregar dados do cliente:', error);
+      
+      // Fallback: usar dados do cliente da lista local se disponível
+      const clienteLocal = clientes.find(c => c.id === clienteId);
+      if (!clienteLocal) {
+        toast.error('Cliente não encontrado');
+        return;
+      }
+      
+      console.log('[VENDAS] Usando dados locais do cliente como fallback');
+      toast.info('Dados completos do cliente não puderam ser carregados. Usando dados disponíveis.');
+      
+      // Usar clienteLocal como fallback
+      const cliente = clienteLocal;
+      
+      // Buscar lista de preços: primeiro verificar se é um ID numérico e buscar na Edge Function
+      let listaPreco = null;
+      if (cliente.listaPrecos) {
+        // Verificar se listaPrecos é um ID numérico (string que pode ser convertida para número)
+        const listaPrecosValue = String(cliente.listaPrecos).trim();
+        const isNumericId = /^\d+$/.test(listaPrecosValue);
+        
+        if (isNumericId) {
+          // É um ID numérico, buscar na Edge Function
+          try {
+            console.log('[HANDLER] Buscando lista de preço via Edge Function com ID:', listaPrecosValue);
+            const listaPrecoCompleta = await api.getById('listas-preco', listaPrecosValue);
+            if (listaPrecoCompleta) {
+              listaPreco = listaPrecoCompleta;
+              // Adicionar à lista local se não estiver lá
+              const jaExiste = listasPreco.find(lp => lp.id === listaPrecoCompleta.id);
+              if (!jaExiste) {
+                setListasPreco(prev => [...prev, listaPrecoCompleta]);
+              }
+              console.log('[HANDLER] Lista de preço encontrada na Edge Function:', listaPrecoCompleta.nome);
+            }
+          } catch (error) {
+            console.error('[HANDLER] Erro ao buscar lista de preço na Edge Function:', error);
+            // Fallback: tentar encontrar na lista local
+            listaPreco = listasPreco.find(lp => lp.id === listaPrecosValue);
+          }
+        } else {
+          // Não é um ID numérico, buscar por nome na lista local
+          listaPreco = listasPreco.find(lp => lp.id === cliente.listaPrecos);
+          if (!listaPreco) {
+            listaPreco = listasPreco.find(lp => lp.nome === cliente.listaPrecos);
+          }
+          if (!listaPreco) {
+            // Busca parcial: verifica se o nome da lista contém o texto do cliente
+            listaPreco = listasPreco.find(lp => lp.nome.toLowerCase().includes(cliente.listaPrecos.toLowerCase()));
+          }
+        }
+      }
+      
+      // Buscar a empresa de faturamento do cliente
+      let empresaFaturamentoId = '';
+      let nomeEmpresaFaturamento = '';
+      
+      if (cliente.empresaFaturamento) {
+        // Tentar encontrar a empresa por ID primeiro (o mais comum)
+        let empresa = companies.find(c => c.id === cliente.empresaFaturamento);
+        
+        // Se não encontrou por ID, tentar por nome
+        if (!empresa) {
+          const empresaNormalizada = cliente.empresaFaturamento.trim().toUpperCase();
+          empresa = companies.find(c => 
+            c.razaoSocial?.trim().toUpperCase() === empresaNormalizada || 
+            c.nomeFantasia?.trim().toUpperCase() === empresaNormalizada
+          );
+          
+          if (!empresa) {
+            empresa = companies.find(c => 
+              c.razaoSocial?.trim().toUpperCase().includes(empresaNormalizada) ||
+              c.nomeFantasia?.trim().toUpperCase().includes(empresaNormalizada)
+            );
+          }
+        }
+        
+        if (empresa) {
+          empresaFaturamentoId = empresa.id;
+          nomeEmpresaFaturamento = empresa.razaoSocial;
+        } else if (companies.length > 0) {
+          const primeiraEmpresa = companies[0];
+          empresaFaturamentoId = primeiraEmpresa.id;
+          nomeEmpresaFaturamento = primeiraEmpresa.razaoSocial;
+        } else {
+          nomeEmpresaFaturamento = cliente.empresaFaturamento;
+        }
+      }
+      
+      setFormData(prev => ({
+        ...prev,
+        clienteId,
+        nomeCliente: cliente.razaoSocial || cliente.nomeFantasia || '',
+        cnpjCliente: cliente.cpfCnpj || '',
+        inscricaoEstadualCliente: cliente.inscricaoEstadual || '',
+        listaPrecoId: listaPreco?.id || cliente.listaPrecos || '',
+        nomeListaPreco: listaPreco?.nome || cliente.listaPrecos || '',
+        percentualDescontoPadrao: cliente.descontoPadrao || 0,
+        vendedorId: cliente.vendedorAtribuido?.id || cliente.vendedoresAtribuidos?.[0]?.id || '',
+        nomeVendedor: cliente.vendedorAtribuido?.nome || cliente.vendedoresAtribuidos?.[0]?.nome || '',
+        empresaFaturamentoId: empresaFaturamentoId,
+        nomeEmpresaFaturamento: nomeEmpresaFaturamento,
+        condicaoPagamentoId: '',
+        nomeCondicaoPagamento: '',
+        naturezaOperacaoId: '',
+        nomeNaturezaOperacao: '',
+      }));
+      setClienteComboOpen(false);
+      setClienteSearchTerm('');
+      
       if (modo === 'criar') {
         setMostrarCamposCliente(true);
       }
@@ -1744,7 +2030,13 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                           value={clienteSearchTerm}
                           onChange={(e) => setClienteSearchTerm(e.target.value)}
                           className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                          disabled={loadingClientes}
                         />
+                        {loadingClientes && (
+                          <div className="ml-2 text-sm text-muted-foreground">
+                            Buscando...
+                          </div>
+                        )}
                       </div>
                       
                       {/* Lista de resultados */}
@@ -1829,7 +2121,20 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                   <div className="space-y-2">
                     <Label>Lista de Preço</Label>
                 <Input
-                  value={formData.nomeListaPreco || ''}
+                  value={(() => {
+                    // Se já temos o nome, usar ele
+                    if (formData.nomeListaPreco) {
+                      return formData.nomeListaPreco;
+                    }
+                    // Se temos o ID, buscar o nome na lista de preços
+                    if (formData.listaPrecoId) {
+                      const listaPreco = listasPreco.find(lp => lp.id === formData.listaPrecoId);
+                      if (listaPreco?.nome) {
+                        return listaPreco.nome;
+                      }
+                    }
+                    return '';
+                  })()}
                   disabled
                   className="bg-muted"
                 />
