@@ -352,6 +352,17 @@ function mapListaPrecoFromApi(item: any): any {
         preco: Number(
           p.preco ?? p.valor ?? p.price ?? p.preco_unitario ?? p.valor_unitario ?? 0
         ),
+        // Incluir informações completas do produto se disponíveis
+        descricao: p.descricao ?? p.descricao_produto ?? null,
+        codigoSku: p.codigoSku ?? p.codigo_sku ?? p.sku ?? null,
+        codigoEan: p.codigoEan ?? p.codigo_ean ?? p.ean ?? p.gtin ?? null,
+        ncm: p.ncm ?? null,
+        cest: p.cest ?? null,
+        pesoLiquido: p.pesoLiquido ?? p.peso_liquido ?? null,
+        pesoBruto: p.pesoBruto ?? p.peso_bruto ?? null,
+        situacao: p.situacao ?? null,
+        ativo: p.ativo ?? true,
+        disponivel: p.disponivel ?? true,
       }))
     : [];
   const faixas = item.faixasDesconto ?? item.faixas_desconto ?? [];
@@ -1303,6 +1314,70 @@ export const api = {
       }
     }
 
+    // Caso especial para conta corrente - usar edge function conta-corrente-v2
+    if (entity === 'conta-corrente') {
+      try {
+        console.log('[API] Listando conta corrente via Edge Function conta-corrente-v2...');
+        
+        // Construir query params
+        const queryParams: Record<string, string> = {};
+        
+        if (options?.params) {
+          if (options.params.dataInicio) {
+            queryParams.dataInicio = String(options.params.dataInicio);
+          }
+          if (options.params.dataFim) {
+            queryParams.dataFim = String(options.params.dataFim);
+          }
+          if (options.params.cliente || options.params.clienteId) {
+            queryParams.cliente = String(options.params.cliente || options.params.clienteId);
+          }
+          if (options.params.tipo) {
+            queryParams.tipo = String(options.params.tipo);
+          }
+          if (options.params.status) {
+            queryParams.status = String(options.params.status);
+          }
+          if (options.params.grupoRede || options.params.grupoRedeId) {
+            queryParams.grupoRede = String(options.params.grupoRede || options.params.grupoRedeId);
+          }
+          if (options.params.busca || options.params.search) {
+            queryParams.busca = String(options.params.busca || options.params.search);
+          }
+          if (options.params.page) {
+            queryParams.page = String(options.params.page);
+          }
+          if (options.params.limit) {
+            queryParams.limit = String(options.params.limit);
+          }
+        }
+        
+        const response = await callEdgeFunction('conta-corrente-v2', 'GET', undefined, undefined, queryParams);
+        
+        // A resposta vem no formato { compromissos: [...], pagination: {...}, estatisticas: {...} }
+        const compromissos = response?.compromissos || [];
+        const pagination = response?.pagination || {};
+        const estatisticas = response?.estatisticas || {};
+        
+        console.log(`[API] ${compromissos.length} compromissos encontrados`);
+        console.log('[API] Estatísticas:', estatisticas);
+        
+        // Retornar objeto com compromissos, paginação e estatísticas
+        return {
+          compromissos,
+          pagination,
+          estatisticas,
+        };
+      } catch (error) {
+        console.error('[API] Erro ao listar conta corrente:', error);
+        return {
+          compromissos: [],
+          pagination: { page: 1, limit: 100, total: 0, total_pages: 0 },
+          estatisticas: { totalCompromissos: 0, totalPagamentos: 0, totalPendente: 0, quantidadeCompromissos: 0, quantidadePagamentos: 0 },
+        };
+      }
+    }
+
     // Caso especial para listas de preço - usar edge function listas-preco-v2
     if (entity === 'listas-preco') {
       try {
@@ -1327,8 +1402,14 @@ export const api = {
       try {
         console.log('[API] Listando empresas via Edge Function empresas-v2...');
         const response = await callEdgeFunction('empresas-v2', 'GET');
-        const empresas = Array.isArray(response) ? response : [];
+        // A resposta pode vir como { success: true, data: [...] } ou como array direto
+        const empresas = Array.isArray(response) 
+          ? response 
+          : (response?.data && Array.isArray(response.data) 
+              ? response.data 
+              : []);
         console.log(`[API] ${empresas.length} empresas encontradas`);
+        console.log('[API] Empresas retornadas:', empresas);
         return empresas;
       } catch (error) {
         console.error('[API] Erro ao listar empresas:', error);
@@ -1594,6 +1675,30 @@ export const api = {
         return venda;
       }
     }
+
+    // Caso especial para conta corrente - usar edge function conta-corrente-v2
+    if (entity === 'conta-corrente') {
+      try {
+        console.log('[API] Buscando compromisso por ID via Edge Function conta-corrente-v2...');
+        const response = await callEdgeFunction('conta-corrente-v2', 'GET', undefined, id);
+        
+        // A resposta vem no formato { compromisso: {...}, pagamentos: [...] }
+        const compromisso = response?.compromisso || response;
+        const pagamentos = response?.pagamentos || [];
+        
+        if (!compromisso) {
+          throw new Error(`Compromisso ${id} não encontrado`);
+        }
+        
+        return {
+          ...compromisso,
+          pagamentos,
+        };
+      } catch (error) {
+        console.error('[API] Erro ao buscar compromisso:', error);
+        throw error;
+      }
+    }
     
     const entityConfig = entityMap[entity];
     if (!entityConfig) {
@@ -1850,6 +1955,27 @@ export const api = {
         return response;
       } catch (error) {
         console.error('[API] Erro ao criar categoria de conta corrente:', error);
+        throw error;
+      }
+    }
+
+    // Caso especial para conta corrente - usar edge function conta-corrente-v2
+    if (entity === 'conta-corrente') {
+      try {
+        console.log('[API] Criando compromisso via Edge Function conta-corrente-v2...');
+        const response = await callEdgeFunction('conta-corrente-v2', 'POST', {
+          clienteId: data.clienteId || data.cliente_id,
+          data: data.data || data.dataCompromisso || data.data_compromisso,
+          valor: data.valor,
+          titulo: data.titulo,
+          tipoCompromisso: data.tipoCompromisso || data.tipo_compromisso,
+          descricao: data.descricao || data.descricaoLonga || data.descricao_longa,
+          vendedorUuid: data.vendedorUuid || data.vendedor_uuid,
+          arquivosAnexos: data.arquivosAnexos || data.arquivos_anexos || [],
+        });
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao criar compromisso:', error);
         throw error;
       }
     }
@@ -2272,6 +2398,25 @@ export const api = {
       }
     }
 
+    // Caso especial para conta corrente - usar edge function conta-corrente-v2
+    if (entity === 'conta-corrente') {
+      try {
+        console.log('[API] Atualizando compromisso via Edge Function conta-corrente-v2...');
+        const response = await callEdgeFunction('conta-corrente-v2', 'PUT', {
+          data: data.data || data.dataCompromisso || data.data_compromisso,
+          valor: data.valor,
+          titulo: data.titulo,
+          descricao: data.descricao || data.descricaoLonga || data.descricao_longa,
+          tipoCompromisso: data.tipoCompromisso || data.tipo_compromisso,
+          arquivosAnexos: data.arquivosAnexos || data.arquivos_anexos,
+        }, id);
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar compromisso:', error);
+        throw error;
+      }
+    }
+
     // Caso especial para empresas - usar edge function
     if (entity === 'empresas') {
       try {
@@ -2627,6 +2772,12 @@ export const api = {
         console.error('[API] Erro ao excluir categoria de conta corrente:', error);
         throw error;
       }
+    }
+
+    // Caso especial para conta corrente - usar edge function conta-corrente-v2
+    // Nota: DELETE não está implementado (tabela não possui deleted_at)
+    if (entity === 'conta-corrente') {
+      throw new Error('Exclusão de compromisso não está implementada. A tabela não possui campo deleted_at.');
     }
 
     // Caso especial para empresas - usar edge function
@@ -3334,6 +3485,70 @@ export const api = {
         console.error('[API] Erro ao excluir venda:', error);
         throw error;
       }
+    },
+  },
+  
+  // Conta Corrente - Usa Edge Function conta-corrente-v2
+  contaCorrente: {
+    list: async (options?: { params?: Record<string, any> }) => {
+      console.log('[API] Buscando compromissos de conta corrente via Edge Function conta-corrente-v2...');
+      const queryParams: Record<string, string> = {};
+      if (options?.params) {
+        Object.keys(options.params).forEach(key => {
+          if (options.params[key] !== null && options.params[key] !== undefined) {
+            queryParams[key] = String(options.params[key]);
+          }
+        });
+      }
+      const response = await callEdgeFunction('conta-corrente-v2', 'GET', undefined, undefined, queryParams);
+      const compromissos = Array.isArray(response?.compromissos) ? response.compromissos : [];
+      return {
+        compromissos,
+        pagination: response?.pagination,
+        estatisticas: response?.estatisticas,
+      };
+    },
+    getById: async (id: string) => {
+      console.log('[API] Buscando compromisso de conta corrente por ID via Edge Function conta-corrente-v2...');
+      const response = await callEdgeFunction('conta-corrente-v2', 'GET', undefined, id);
+      const compromisso = response?.compromisso ? response.compromisso : null;
+      const pagamentos = Array.isArray(response?.pagamentos) ? response.pagamentos : [];
+      return { compromisso, pagamentos };
+    },
+    create: async (data: any) => {
+      console.log('[API] Criando compromisso de conta corrente via Edge Function conta-corrente-v2...');
+      const response = await callEdgeFunction('conta-corrente-v2', 'POST', data);
+      return response;
+    },
+    update: async (id: string, data: any) => {
+      console.log('[API] Atualizando compromisso de conta corrente via Edge Function conta-corrente-v2...');
+      const response = await callEdgeFunction('conta-corrente-v2', 'PUT', data, id);
+      return response;
+    },
+    delete: async (id: string) => {
+      console.log('[API] Excluindo compromisso de conta corrente via Edge Function conta-corrente-v2...');
+      const response = await callEdgeFunction('conta-corrente-v2', 'DELETE', undefined, id);
+      return response;
+    },
+    listPagamentos: async (compromissoId: string) => {
+      console.log('[API] Listando pagamentos de compromisso via Edge Function conta-corrente-v2...');
+      const response = await callEdgeFunction('conta-corrente-v2', 'GET', undefined, `${compromissoId}/pagamentos`);
+      return Array.isArray(response) ? response : [];
+    },
+    createPagamento: async (compromissoId: string, data: any) => {
+      console.log('[API] Criando pagamento para compromisso via Edge Function conta-corrente-v2...');
+      const response = await callEdgeFunction('conta-corrente-v2', 'POST', data, `${compromissoId}/pagamentos`);
+      return response;
+    },
+    updatePagamento: async (compromissoId: string, pagamentoId: string, data: any) => {
+      console.log('[API] Atualizando pagamento de compromisso via Edge Function conta-corrente-v2...');
+      const response = await callEdgeFunction('conta-corrente-v2', 'PUT', data, `${compromissoId}/pagamentos/${pagamentoId}`);
+      return response;
+    },
+    deletePagamento: async (compromissoId: string, pagamentoId: string) => {
+      console.log('[API] Excluindo pagamento de compromisso via Edge Function conta-corrente-v2...');
+      const response = await callEdgeFunction('conta-corrente-v2', 'DELETE', undefined, `${compromissoId}/pagamentos/${pagamentoId}`);
+      return response;
     },
   },
   

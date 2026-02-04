@@ -78,7 +78,10 @@ export function CustomerFormCondicaoComercial({
         
         // Normalizar valores antigos (nome) para IDs
         if (formData.empresaFaturamento && empresasAPI.length > 0) {
-          const empresaAtual = empresasAPI.find((emp: any) => emp.id === formData.empresaFaturamento);
+          // Comparar como string para garantir compatibilidade
+          const empresaAtual = empresasAPI.find((emp: any) => 
+            String(emp.id) === String(formData.empresaFaturamento)
+          );
           // Se não encontrou pelo ID, tenta encontrar pelo nome
           if (!empresaAtual) {
             const empresaPorNome = empresasAPI.find((emp: any) => {
@@ -87,8 +90,24 @@ export function CustomerFormCondicaoComercial({
             });
             if (empresaPorNome) {
               console.log('[CONDICAO-COMERCIAL] Normalizando empresa de nome para ID:', empresaPorNome.id);
-              updateFormData({ empresaFaturamento: empresaPorNome.id });
+              updateFormData({ empresaFaturamento: String(empresaPorNome.id) });
+            } else {
+              console.log('[CONDICAO-COMERCIAL] Empresa não encontrada. Valor atual:', formData.empresaFaturamento);
             }
+          } else {
+            console.log('[CONDICAO-COMERCIAL] Empresa encontrada:', empresaAtual.id, empresaAtual.nomeFantasia || empresaAtual.razaoSocial);
+          }
+        }
+        
+        // Normalizar vendedorAtribuido se necessário
+        if (formData.vendedorAtribuido && formData.vendedorAtribuido.id && vendedoresAPI.length > 0) {
+          const vendedorAtual = vendedoresAPI.find((v: any) => 
+            String(v.id) === String(formData.vendedorAtribuido?.id)
+          );
+          if (!vendedorAtual) {
+            console.log('[CONDICAO-COMERCIAL] Vendedor não encontrado na lista. ID:', formData.vendedorAtribuido.id);
+          } else {
+            console.log('[CONDICAO-COMERCIAL] Vendedor encontrado:', vendedorAtual.id, vendedorAtual.nome);
           }
         }
         
@@ -120,14 +139,15 @@ export function CustomerFormCondicaoComercial({
         if (!emp.ativo) return false;
         // Suporta tanto Company (razaoSocial/nomeFantasia) quanto EmpresaFaturamento (nome)
         const hasName = emp.nomeFantasia || emp.razaoSocial || (emp as any).nome;
-        return emp.id && hasName && emp.cnpj;
+        return emp.id && hasName; // Removido filtro de CNPJ obrigatório
       })
       .map((emp) => {
         // Suporta tanto Company quanto EmpresaFaturamento
         const name = emp.nomeFantasia || emp.razaoSocial || (emp as any).nome;
+        const cnpj = emp.cnpj && emp.cnpj.trim() !== '' ? emp.cnpj : null;
         return {
-          value: emp.id,
-          label: `${name} - ${emp.cnpj}` 
+          value: String(emp.id), // Garantir que value seja sempre string
+          label: cnpj ? `${name} - ${cnpj}` : name
         };
       }),
     [empresasFaturamento]
@@ -146,7 +166,7 @@ export function CustomerFormCondicaoComercial({
   const vendedoresOptions = useMemo(
     () => vendedores
       .filter((v) => v.id && v.nome)
-      .map((v) => ({ value: v.id, label: v.nome })),
+      .map((v) => ({ value: String(v.id), label: v.nome })), // Garantir que value seja sempre string
     [vendedores]
   );
 
@@ -176,10 +196,11 @@ export function CustomerFormCondicaoComercial({
   };
 
   const toggleCondicao = (condicaoId: string) => {
-    if (condicoesDisponiveis.includes(condicaoId)) {
-      setCondicoesDisponiveis(condicoesDisponiveis.filter((id) => id !== condicaoId));
+    const condicaoIdStr = String(condicaoId);
+    if (condicoesDisponiveis.some((id) => String(id) === condicaoIdStr)) {
+      setCondicoesDisponiveis(condicoesDisponiveis.filter((id) => String(id) !== condicaoIdStr));
     } else {
-      setCondicoesDisponiveis([...condicoesDisponiveis, condicaoId]);
+      setCondicoesDisponiveis([...condicoesDisponiveis, condicaoIdStr]);
     }
   };
 
@@ -218,7 +239,7 @@ export function CustomerFormCondicaoComercial({
             <Label htmlFor="empresaFaturamento">Empresa de Faturamento *</Label>
             <Combobox
               options={empresasOptions}
-              value={formData.empresaFaturamento}
+              value={formData.empresaFaturamento ? String(formData.empresaFaturamento) : ''}
               onValueChange={(value) => updateFormData({ empresaFaturamento: value })}
               placeholder="Selecione a empresa"
               searchPlaceholder="Pesquisar empresa..."
@@ -265,7 +286,7 @@ export function CustomerFormCondicaoComercial({
             <Label htmlFor="vendedor">Vendedor Responsável</Label>
             <Combobox
               options={vendedoresOptions}
-              value={formData.vendedorAtribuido?.id || ''}
+              value={formData.vendedorAtribuido?.id ? String(formData.vendedorAtribuido.id) : ''}
               onValueChange={handleVendedorChange}
               placeholder="Selecione um vendedor"
               searchPlaceholder="Pesquisar vendedor..."
@@ -375,30 +396,57 @@ export function CustomerFormCondicaoComercial({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {formData.condicoesPagamentoAssociadas.map((condicaoId) => {
-                  const condicao = condicoesPagamento.find((c) => c.id === condicaoId);
-                  if (!condicao) return null;
+                {(() => {
+                  // Filtrar condições de pagamento pelos IDs associados
+                  const condicoesAssociadas = condicoesPagamento.filter((c) => {
+                    // Comparar IDs (pode ser string ou number)
+                    const condicaoIdStr = String(c.id);
+                    return formData.condicoesPagamentoAssociadas?.some(
+                      (id) => String(id) === condicaoIdStr
+                    );
+                  });
 
-                  return (
-                    <TableRow key={condicao.id}>
-                      <TableCell className="font-medium">{condicao.nome}</TableCell>
-                      <TableCell>{condicao.formaPagamento}</TableCell>
-                      <TableCell>
-                        {condicao.prazoPagamento === '0'
-                          ? 'À vista'
-                          : `${condicao.prazoPagamento} dias`}
-                      </TableCell>
-                      <TableCell>
-                        {condicao.descontoExtra > 0 ? `${condicao.descontoExtra}%` : '-'}
-                      </TableCell>
-                      <TableCell>
-                        R$ {condicao.valorPedidoMinimo.toLocaleString('pt-BR', {
-                          minimumFractionDigits: 2
-                        })}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                  if (condicoesAssociadas.length === 0) {
+                    return (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          Nenhuma condição encontrada. Verifique se as condições estão cadastradas.
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }
+
+                  return condicoesAssociadas.map((condicao) => {
+                    // Formatar prazo: usar intervaloParcela se disponível, senão usar prazo
+                    let prazoTexto = 'À vista';
+                    if (condicao.intervaloParcela && Array.isArray(condicao.intervaloParcela) && condicao.intervaloParcela.length > 0) {
+                      prazoTexto = condicao.intervaloParcela.join('/') + ' dias';
+                    } else if (condicao.prazo && condicao.prazo > 0) {
+                      prazoTexto = `${condicao.prazo} dias`;
+                    }
+
+                    return (
+                      <TableRow key={condicao.id}>
+                        <TableCell className="font-medium">{condicao.nome || 'Sem nome'}</TableCell>
+                        <TableCell>{condicao.formaPagamento || '-'}</TableCell>
+                        <TableCell>{prazoTexto}</TableCell>
+                        <TableCell>
+                          {(condicao.desconto || condicao.descontoExtra) && (condicao.desconto || condicao.descontoExtra) > 0 
+                            ? `${condicao.desconto || condicao.descontoExtra}%` 
+                            : '-'}
+                        </TableCell>
+                        <TableCell>
+                          {(condicao.valorMinimo || condicao.valorPedidoMinimo) && (condicao.valorMinimo || condicao.valorPedidoMinimo) > 0
+                            ? `R$ ${(condicao.valorMinimo || condicao.valorPedidoMinimo).toLocaleString('pt-BR', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`
+                            : '-'}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  });
+                })()}
               </TableBody>
             </Table>
           </div>
@@ -421,40 +469,54 @@ export function CustomerFormCondicaoComercial({
 
           <div className="space-y-4 py-4 max-h-[400px] overflow-y-auto">
             {condicoesPagamento
-              .filter((condicao) => condicao.ativo && condicao.id && condicao.nome)
-              .map((condicao) => (
-              <div
-                key={condicao.id}
-                className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent"
-              >
-                <Checkbox
-                  id={`condicao-${condicao.id}`}
-                  checked={condicoesDisponiveis.includes(condicao.id)}
-                  onCheckedChange={() => toggleCondicao(condicao.id)}
-                />
-                <div className="flex-1">
-                  <Label
-                    htmlFor={`condicao-${condicao.id}`}
-                    className="font-medium cursor-pointer"
+              .filter((condicao) => condicao.id && condicao.nome)
+              .map((condicao) => {
+                // Formatar prazo para exibição
+                let prazoTexto = 'À vista';
+                if (condicao.intervaloParcela && Array.isArray(condicao.intervaloParcela) && condicao.intervaloParcela.length > 0) {
+                  prazoTexto = condicao.intervaloParcela.join('/') + ' dias';
+                } else if (condicao.prazo && condicao.prazo > 0) {
+                  prazoTexto = `${condicao.prazo} dias`;
+                }
+
+                const condicaoIdStr = String(condicao.id);
+                const isChecked = condicoesDisponiveis.some((id) => String(id) === condicaoIdStr);
+
+                return (
+                  <div
+                    key={condicao.id}
+                    className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent"
                   >
-                    {condicao.nome}
-                  </Label>
-                  <div className="text-sm text-muted-foreground mt-1">
-                    {condicao.formaPagamento} •{' '}
-                    {condicao.prazoPagamento === '0'
-                      ? 'À vista'
-                      : `${condicao.prazoPagamento} dias`}
-                    {condicao.descontoExtra > 0 && ` • ${condicao.descontoExtra}% desconto`}
-                    {condicao.valorPedidoMinimo > 0 &&
-                      ` • Mínimo: R$ ${condicao.valorPedidoMinimo.toLocaleString('pt-BR')}`}
+                    <Checkbox
+                      id={`condicao-${condicao.id}`}
+                      checked={isChecked}
+                      onCheckedChange={() => toggleCondicao(condicaoIdStr)}
+                    />
+                    <div className="flex-1">
+                      <Label
+                        htmlFor={`condicao-${condicao.id}`}
+                        className="font-medium cursor-pointer"
+                      >
+                        {condicao.nome}
+                      </Label>
+                      <div className="text-sm text-muted-foreground mt-1">
+                        {condicao.formaPagamento || '-'} • {prazoTexto}
+                        {(condicao.desconto || condicao.descontoExtra) && (condicao.desconto || condicao.descontoExtra) > 0 && 
+                          ` • ${condicao.desconto || condicao.descontoExtra}% desconto`}
+                        {(condicao.valorMinimo || condicao.valorPedidoMinimo) && (condicao.valorMinimo || condicao.valorPedidoMinimo) > 0 &&
+                          ` • Mínimo: R$ ${(condicao.valorMinimo || condicao.valorPedidoMinimo).toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}`}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                );
+              })}
             
-            {condicoesPagamento.filter((c) => c.ativo && c.id && c.nome).length === 0 && (
+            {condicoesPagamento.filter((c) => c.id && c.nome).length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
-                Nenhuma condição de pagamento ativa cadastrada
+                Nenhuma condição de pagamento cadastrada
               </div>
             )}
           </div>

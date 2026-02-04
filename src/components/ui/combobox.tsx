@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
+import { Check, ChevronsUpDown, Loader2 } from "lucide-react"
 
 import { cn } from "./utils"
 import { Button } from "./button"
@@ -31,6 +31,8 @@ interface ComboboxProps {
   emptyText?: string
   disabled?: boolean
   className?: string
+  onSearchChange?: (search: string) => void
+  loading?: boolean
 }
 
 export function Combobox({
@@ -42,10 +44,30 @@ export function Combobox({
   emptyText = "Nenhum resultado encontrado.",
   disabled = false,
   className,
+  onSearchChange,
+  loading = false,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
+  const [searchValue, setSearchValue] = React.useState('')
 
   const selectedOption = options?.find((option) => option.value === value)
+
+  const handleSearchChange = (search: string) => {
+    setSearchValue(search)
+    if (onSearchChange) {
+      onSearchChange(search)
+    }
+  }
+
+  // Resetar busca quando fechar
+  React.useEffect(() => {
+    if (!open) {
+      setSearchValue('')
+      if (onSearchChange) {
+        onSearchChange('')
+      }
+    }
+  }, [open, onSearchChange])
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -65,31 +87,44 @@ export function Combobox({
       </PopoverTrigger>
       <PopoverContent className="w-full p-0" align="start">
         <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+          <CommandInput 
+            placeholder={searchPlaceholder} 
+            value={searchValue}
+            onValueChange={handleSearchChange}
+          />
           <CommandList>
-            <CommandEmpty>{emptyText}</CommandEmpty>
-            <CommandGroup>
-              {options.map((option) => (
-                <CommandItem
-                  key={option.value}
-                  value={option.label}
-                  keywords={[option.value]}
-                  onSelect={() => {
-                    const newValue = option.value === value ? "" : option.value
-                    onValueChange(newValue)
-                    setOpen(false)
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      value === option.value ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  {option.label}
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            {loading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Buscando...</span>
+              </div>
+            ) : (
+              <>
+                <CommandEmpty>{emptyText}</CommandEmpty>
+                <CommandGroup>
+                  {options.map((option) => (
+                    <CommandItem
+                      key={option.value}
+                      value={option.label}
+                      keywords={[option.value]}
+                      onSelect={() => {
+                        const newValue = option.value === value ? "" : option.value
+                        onValueChange(newValue)
+                        setOpen(false)
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          value === option.value ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                      {option.label}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>

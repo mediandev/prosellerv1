@@ -19,6 +19,8 @@ interface PreviewData {
   data: any[];
   fileName: string;
   validationErrors: Array<{ row: number; message: string }>;
+  produtosExistentes: Map<string, any>; // Map<sku|ean, produto>
+  produtosParaAtualizar: Set<number>; // Set<rowNumber>
 }
 
 export function ImportProductsData() {
@@ -154,10 +156,69 @@ export function ImportProductsData() {
         }
       });
 
+      // Buscar produtos existentes para verificar duplicatas
+      console.log('[IMPORT-PRODUTOS] Buscando produtos existentes para verificar duplicatas...');
+      let produtosExistentes = new Map<string, any>();
+      let produtosParaAtualizar = new Set<number>();
+
+      try {
+        const produtosAPI = await api.get('produtos');
+        const produtos = Array.isArray(produtosAPI) ? produtosAPI : [];
+
+        // Criar mapa de produtos por SKU e EAN
+        produtos.forEach((produto: any) => {
+          const sku = produto.codigoSku || produto.codigo_sku;
+          const ean = produto.codigoEan || produto.gtin || produto.codigo_ean;
+          
+          if (sku && sku.trim()) {
+            produtosExistentes.set(`SKU:${sku.trim().toUpperCase()}`, produto);
+          }
+          if (ean && ean.trim()) {
+            produtosExistentes.set(`EAN:${ean.trim()}`, produto);
+          }
+        });
+
+        console.log(`[IMPORT-PRODUTOS] ${produtosExistentes.size} produtos únicos encontrados no banco`);
+
+        // Verificar quais produtos da planilha já existem
+        jsonData.forEach((row: any, index: number) => {
+          const rowNumber = index + 2;
+          
+          // Pular se tiver erro de validação
+          if (errors.some(e => e.row === rowNumber)) {
+            return;
+          }
+
+          const sku = row['Código SKU'] ? String(row['Código SKU']).trim().toUpperCase() : '';
+          const ean = row['Código EAN'] ? String(row['Código EAN']).replace(/\D/g, '').trim() : '';
+
+          // Verificar por SKU
+          if (sku && produtosExistentes.has(`SKU:${sku}`)) {
+            produtosParaAtualizar.add(rowNumber);
+            console.log(`[IMPORT-PRODUTOS] Produto na linha ${rowNumber} será ATUALIZADO (SKU: ${sku})`);
+            return;
+          }
+
+          // Verificar por EAN (se informado)
+          if (ean && produtosExistentes.has(`EAN:${ean}`)) {
+            produtosParaAtualizar.add(rowNumber);
+            console.log(`[IMPORT-PRODUTOS] Produto na linha ${rowNumber} será ATUALIZADO (EAN: ${ean})`);
+            return;
+          }
+        });
+
+        console.log(`[IMPORT-PRODUTOS] ${produtosParaAtualizar.size} produtos serão atualizados, ${jsonData.length - produtosParaAtualizar.size - errors.length} serão criados`);
+      } catch (error) {
+        console.error('[IMPORT-PRODUTOS] Erro ao buscar produtos existentes:', error);
+        // Continuar mesmo se houver erro ao buscar produtos existentes
+      }
+
       setPreview({
         data: jsonData,
         fileName: file.name,
         validationErrors: errors,
+        produtosExistentes,
+        produtosParaAtualizar,
       });
       setShowPreview(true);
       setResult(null);
@@ -286,6 +347,8 @@ export function ImportProductsData() {
       // Importar produtos
       const errors: Array<{ row: number; message: string }> = [...preview.validationErrors];
       let successCount = 0;
+      let createdCount = 0;
+      let updatedCount = 0;
 
       for (let index = 0; index < preview.data.length; index++) {
         const row = preview.data[index];
@@ -297,6 +360,19 @@ export function ImportProductsData() {
         }
 
         try {
+          // Verificar se produto já existe (será atualizado)
+          const sku = String(row['Código SKU']).trim().toUpperCase();
+          const ean = row['Código EAN'] ? String(row['Código EAN']).replace(/\D/g, '').trim() : '';
+          
+          let produtoExistente: any = null;
+          if (preview.produtosExistentes) {
+            if (sku && preview.produtosExistentes.has(`SKU:${sku}`)) {
+              produtoExistente = preview.produtosExistentes.get(`SKU:${sku}`);
+            } else if (ean && preview.produtosExistentes.has(`EAN:${ean}`)) {
+              produtoExistente = preview.produtosExistentes.get(`EAN:${ean}`);
+            }
+          }
+
           // Buscar ou criar marca
           const marcaId = await getOrCreateMarca(row['Marca']);
 
@@ -323,8 +399,17 @@ export function ImportProductsData() {
               ['Sim', 'sim', 'S', 's'].includes(String(row['Disponível para Venda'])),
           };
 
-          // Criar produto
-          await api.create('produtos', produtoData);
+          // Atualizar ou criar produto
+          if (produtoExistente) {
+            const produtoId = produtoExistente.id || produtoExistente.produto_id;
+            await api.update('produtos', produtoId, produtoData);
+            console.log(`[IMPORT-PRODUTOS] Produto atualizado (linha ${rowNumber}): ${produtoId}`);
+            updatedCount++;
+          } else {
+            await api.create('produtos', produtoData);
+            console.log(`[IMPORT-PRODUTOS] Produto criado (linha ${rowNumber})`);
+            createdCount++;
+          }
           successCount++;
 
         } catch (error: any) {
@@ -338,7 +423,14 @@ export function ImportProductsData() {
 
       // Mostrar resultado
       if (successCount > 0) {
-        toast.success(`${successCount} ${successCount === 1 ? 'produto importado' : 'produtos importados'} com sucesso!`);
+        const messages = [];
+        if (createdCount > 0) {
+          messages.push(`${createdCount} ${createdCount === 1 ? 'produto criado' : 'produtos criados'}`);
+        }
+        if (updatedCount > 0) {
+          messages.push(`${updatedCount} ${updatedCount === 1 ? 'produto atualizado' : 'produtos atualizados'}`);
+        }
+        toast.success(`${messages.join(' e ')} com sucesso!`);
       }
 
       if (errors.length > preview.validationErrors.length) {
@@ -398,14 +490,18 @@ export function ImportProductsData() {
           )}
 
           {/* Estatísticas */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div className="border rounded-lg p-4 text-center">
               <p className="text-2xl font-bold">{preview.data.length}</p>
               <p className="text-sm text-muted-foreground">Total</p>
             </div>
             <div className="border rounded-lg p-4 text-center">
-              <p className="text-2xl font-bold text-green-600">{preview.data.length - preview.validationErrors.length}</p>
-              <p className="text-sm text-muted-foreground">Válidos</p>
+              <p className="text-2xl font-bold text-green-600">{preview.data.length - preview.validationErrors.length - (preview.produtosParaAtualizar?.size || 0)}</p>
+              <p className="text-sm text-muted-foreground">Novos</p>
+            </div>
+            <div className="border rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-blue-600">{preview.produtosParaAtualizar?.size || 0}</p>
+              <p className="text-sm text-muted-foreground">Atualizar</p>
             </div>
             <div className="border rounded-lg p-4 text-center">
               <p className="text-2xl font-bold text-red-600">{preview.validationErrors.length}</p>
@@ -428,17 +524,26 @@ export function ImportProductsData() {
                     <TableHead>Unidade</TableHead>
                     <TableHead>Peso Líq.</TableHead>
                     <TableHead>Peso Bruto</TableHead>
-                    <TableHead className="w-24">Validação</TableHead>
+                    <TableHead className="w-24">Ação</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {preview.data.slice(0, 10).map((row: any, idx: number) => {
                     const rowNumber = idx + 2;
                     const hasError = preview.validationErrors.some(e => e.row === rowNumber);
+                    const willUpdate = preview.produtosParaAtualizar?.has(rowNumber) || false;
                     const error = preview.validationErrors.find(e => e.row === rowNumber);
                     
+                    // Determinar classe CSS baseada no status
+                    let rowClassName = '';
+                    if (hasError) {
+                      rowClassName = 'bg-red-50';
+                    } else if (willUpdate) {
+                      rowClassName = 'bg-blue-50';
+                    }
+                    
                     return (
-                      <TableRow key={idx} className={hasError ? 'bg-red-50' : ''}>
+                      <TableRow key={idx} className={rowClassName}>
                         <TableCell className="font-mono text-sm">{rowNumber}</TableCell>
                         <TableCell className="font-mono text-sm">{row['Código SKU']}</TableCell>
                         <TableCell className="max-w-[200px] truncate" title={row['Descrição']}>
@@ -454,9 +559,13 @@ export function ImportProductsData() {
                             <Badge variant="destructive" className="text-xs">
                               Erro
                             </Badge>
+                          ) : willUpdate ? (
+                            <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800 border-blue-300">
+                              Atualizar
+                            </Badge>
                           ) : (
                             <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
-                              OK
+                              Criar
                             </Badge>
                           )}
                         </TableCell>

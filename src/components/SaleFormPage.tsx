@@ -2832,12 +2832,34 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                   <SelectValue placeholder="Buscar por descrição, SKU ou EAN" />
                 </SelectTrigger>
                 <SelectContent>
-                  {produtos.filter(p => p.ativo).map(produto => (
-                    <SelectItem key={produto.id} value={produto.id}>
-                      {produto.nome} - SKU: {produto.codigo}
-                      {produto.codigoEan ? ` - EAN: ${produto.codigoEan}` : ''}
-                    </SelectItem>
-                  ))}
+                  {(() => {
+                    // Usar produtos da lista de preços do cliente se disponível
+                    if (formData.listaPrecoId) {
+                      const listaPreco = listasPreco.find(lp => lp.id === formData.listaPrecoId);
+                      if (listaPreco && listaPreco.produtos && listaPreco.produtos.length > 0) {
+                        // Filtrar apenas produtos com preço válido e disponíveis
+                        return listaPreco.produtos
+                          .filter(pp => pp.preco > 0 && (pp.disponivel !== false) && (pp.ativo !== false))
+                          .map(produtoPreco => {
+                            const descricao = produtoPreco.descricao || 'Produto sem descrição';
+                            const sku = produtoPreco.codigoSku || '';
+                            const ean = produtoPreco.codigoEan || '';
+                            return (
+                              <SelectItem key={produtoPreco.produtoId} value={produtoPreco.produtoId}>
+                                {descricao} {sku ? `- SKU: ${sku}` : ''} {ean ? `- EAN: ${ean}` : ''}
+                              </SelectItem>
+                            );
+                          });
+                      }
+                    }
+                    // Fallback: usar lista completa de produtos se não houver lista de preços
+                    return produtos.filter(p => p.ativo).map(produto => (
+                      <SelectItem key={produto.id} value={produto.id}>
+                        {produto.nome} - SKU: {produto.codigo}
+                        {produto.codigoEan ? ` - EAN: ${produto.codigoEan}` : ''}
+                      </SelectItem>
+                    ));
+                  })()}
                 </SelectContent>
               </Select>
             </div>
@@ -2857,23 +2879,44 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
               <div className="border rounded-lg p-4 bg-muted">
                 <h4 className="mb-2">Informações do Produto</h4>
                 {(() => {
-                  const produto = produtos.find(p => p.id === selectedProdutoId);
-                  if (!produto) return null;
+                  // Buscar produto na lista de preços primeiro
+                  let produtoPreco: any = null;
+                  let produto: any = null;
+                  
+                  if (formData.listaPrecoId) {
+                    const listaPreco = listasPreco.find(lp => lp.id === formData.listaPrecoId);
+                    if (listaPreco && listaPreco.produtos) {
+                      produtoPreco = listaPreco.produtos.find(pp => pp.produtoId === selectedProdutoId);
+                    }
+                  }
+                  
+                  // Se não encontrou na lista de preços, buscar na lista geral de produtos
+                  if (!produtoPreco) {
+                    produto = produtos.find(p => p.id === selectedProdutoId);
+                  }
                   
                   // Buscar preço do produto na lista de preços do cliente
                   let valorTabela = 0;
                   let mensagemErro = '';
+                  let descricao = '';
+                  let sku = '';
+                  let ean = '';
                   
                   if (formData.listaPrecoId) {
                     const listaPreco = listasPreco.find(lp => lp.id === formData.listaPrecoId);
                     
                     if (listaPreco) {
-                      const produtoPreco = listaPreco.produtos?.find(pp => pp.produtoId === produto.id);
-                      
-                      if (produtoPreco && produtoPreco.preco > 0) {
-                        valorTabela = produtoPreco.preco;
+                      if (produtoPreco) {
+                        valorTabela = produtoPreco.preco || 0;
+                        descricao = produtoPreco.descricao || '';
+                        sku = produtoPreco.codigoSku || '';
+                        ean = produtoPreco.codigoEan || '';
+                        
+                        if (valorTabela <= 0) {
+                          mensagemErro = 'Produto sem preço cadastrado nesta lista';
+                        }
                       } else {
-                        mensagemErro = 'Produto sem preço cadastrado nesta lista';
+                        mensagemErro = 'Produto não encontrado nesta lista de preços';
                       }
                     } else {
                       mensagemErro = 'Lista de preços não encontrada';
@@ -2888,30 +2931,51 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
                   if (mensagemErro) {
                     return (
-                      <div className="text-sm text-destructive">
-                        <AlertCircle className="h-4 w-4 inline mr-2" />
-                        {mensagemErro}
+                      <div className="space-y-2">
+                        <div className="text-sm text-destructive">
+                          <AlertCircle className="h-4 w-4 inline mr-2" />
+                          {mensagemErro}
+                        </div>
+                        {(descricao || sku || ean) && (
+                          <div className="text-sm space-y-1">
+                            {descricao && <div><span className="text-muted-foreground">Descrição:</span> {descricao}</div>}
+                            {sku && <div><span className="text-muted-foreground">SKU:</span> {sku}</div>}
+                            {ean && <div><span className="text-muted-foreground">EAN:</span> {ean}</div>}
+                          </div>
+                        )}
                       </div>
                     );
                   }
 
                   return (
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Valor de Tabela:</span>
-                        <p>{formatCurrency(valorTabela)}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Desconto:</span>
-                        <p>{percentualDesconto}%</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Valor Unitário:</span>
-                        <p>{formatCurrency(valorUnitario)}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Subtotal:</span>
-                        <p>{formatCurrency(subtotal)}</p>
+                    <div className="space-y-3">
+                      {/* Informações do produto */}
+                      {(descricao || sku || ean) && (
+                        <div className="text-sm space-y-1 pb-2 border-b">
+                          {descricao && <div><span className="text-muted-foreground">Descrição:</span> {descricao}</div>}
+                          {sku && <div><span className="text-muted-foreground">SKU:</span> {sku}</div>}
+                          {ean && <div><span className="text-muted-foreground">EAN:</span> {ean}</div>}
+                        </div>
+                      )}
+                      
+                      {/* Valores */}
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">Valor de Tabela:</span>
+                          <p className="font-medium">{formatCurrency(valorTabela)}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Desconto:</span>
+                          <p className="font-medium">{percentualDesconto}%</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Valor Unitário:</span>
+                          <p className="font-medium">{formatCurrency(valorUnitario)}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Subtotal:</span>
+                          <p className="font-medium">{formatCurrency(subtotal)}</p>
+                        </div>
                       </div>
                     </div>
                   );

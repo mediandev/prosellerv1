@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -10,11 +10,12 @@ import { Separator } from './ui/separator';
 import { TipoCompromisso } from '../types/contaCorrente';
 import { toast } from 'sonner@2.0.3';
 import { Plus } from 'lucide-react';
+import { api } from '../services/api';
 
 interface NovoCompromissoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  clientesOptions: { label: string; value: string }[];
+  clientesOptions?: { label: string; value: string }[]; // Opcional, usado como fallback
   categoriasOptions: { label: string; value: string }[];
   onSalvar: (compromisso: {
     clienteId: string;
@@ -30,7 +31,7 @@ interface NovoCompromissoDialogProps {
 export function NovoCompromissoDialog({
   open,
   onOpenChange,
-  clientesOptions,
+  clientesOptions = [],
   categoriasOptions,
   onSalvar,
 }: NovoCompromissoDialogProps) {
@@ -43,6 +44,115 @@ export function NovoCompromissoDialog({
     tipoCompromisso: 'Investimento' as TipoCompromisso,
     categoriaId: '',
   });
+
+  // Estados para busca de clientes
+  const [clientes, setClientes] = useState<any[]>([]);
+  const [clienteSearchTerm, setClienteSearchTerm] = useState('');
+  const [clienteSearchDebounced, setClienteSearchDebounced] = useState('');
+  const [loadingClientes, setLoadingClientes] = useState(false);
+  const [clientesIniciais, setClientesIniciais] = useState<any[]>([]);
+
+  // Carregar clientes iniciais quando o dialog abrir
+  useEffect(() => {
+    if (open) {
+      const carregarClientesIniciais = async () => {
+        try {
+          setLoadingClientes(true);
+          console.log('[NOVO-COMPROMISSO] Carregando clientes iniciais...');
+          const response = await api.get('clientes', { params: { page: 1, limit: 100, status_aprovacao: 'aprovado' } });
+          console.log('[NOVO-COMPROMISSO] Resposta da API:', response);
+          // A resposta pode vir como array direto ou como objeto com clientes e pagination
+          const clientesArray = Array.isArray(response) 
+            ? response 
+            : (response?.clientes || (response?.data && Array.isArray(response.data) ? response.data : []));
+          console.log('[NOVO-COMPROMISSO] Clientes extraídos:', clientesArray.length);
+          setClientesIniciais(clientesArray);
+          setClientes(clientesArray);
+        } catch (error) {
+          console.error('[NOVO-COMPROMISSO] Erro ao carregar clientes iniciais:', error);
+          setClientes([]);
+        } finally {
+          setLoadingClientes(false);
+        }
+      };
+      carregarClientesIniciais();
+    } else {
+      // Resetar quando fechar
+      setClienteSearchTerm('');
+      setClienteSearchDebounced('');
+      setClientes([]);
+    }
+  }, [open]);
+
+  // Debounce do termo de busca - aguarda 500ms após o usuário parar de digitar
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setClienteSearchDebounced(clienteSearchTerm);
+    }, 500); // Aumentado para 500ms para dar mais tempo ao usuário terminar de digitar
+    return () => clearTimeout(timer);
+  }, [clienteSearchTerm]);
+
+  // Buscar clientes quando o termo de busca mudar (após debounce)
+  useEffect(() => {
+    if (!open) return;
+
+    const buscarClientes = async () => {
+      const termoLimpo = clienteSearchDebounced.trim();
+      
+      // Se o termo estiver vazio, restaurar lista inicial
+      if (!termoLimpo) {
+        setClientes(clientesIniciais);
+        return;
+      }
+
+      // Só buscar se o termo tiver pelo menos 2 caracteres
+      if (termoLimpo.length < 2) {
+        setClientes(clientesIniciais);
+        return;
+      }
+
+      try {
+        setLoadingClientes(true);
+        console.log('[NOVO-COMPROMISSO] Buscando clientes com termo:', termoLimpo);
+        const response = await api.get('clientes', { 
+          params: { 
+            page: 1, 
+            limit: 100, 
+            search: termoLimpo,
+            status_aprovacao: 'aprovado'
+          } 
+        });
+        console.log('[NOVO-COMPROMISSO] Resposta da busca:', response);
+        // A resposta pode vir como array direto ou como objeto com clientes e pagination
+        const clientesArray = Array.isArray(response) 
+          ? response 
+          : (response?.clientes || (response?.data && Array.isArray(response.data) ? response.data : []));
+        console.log('[NOVO-COMPROMISSO] Clientes encontrados na busca:', clientesArray.length);
+        setClientes(clientesArray);
+      } catch (error) {
+        console.error('[NOVO-COMPROMISSO] Erro ao buscar clientes:', error);
+        toast.error('Erro ao buscar clientes');
+        setClientes([]);
+      } finally {
+        setLoadingClientes(false);
+      }
+    };
+
+    buscarClientes();
+  }, [clienteSearchDebounced, open, clientesIniciais]);
+
+  // Criar opções de clientes para o Combobox
+  const clientesOptionsDinamicos = useMemo(() => {
+    return clientes.map(cliente => ({
+      label: `${cliente.codigo ? `[${cliente.codigo}] ` : ''}${cliente.razaoSocial || cliente.nomeFantasia || ''}`,
+      value: cliente.id,
+    }));
+  }, [clientes]);
+
+  // Usar clientes dinâmicos se disponíveis, senão usar prop
+  const clientesOptionsFinal = clientesOptionsDinamicos.length > 0 
+    ? clientesOptionsDinamicos 
+    : clientesOptions;
 
   const handleSalvar = () => {
     // Validações
@@ -105,12 +215,14 @@ export function NovoCompromissoDialog({
           <div className="space-y-2">
             <Label htmlFor="cliente">Cliente *</Label>
             <Combobox
-              options={clientesOptions}
+              options={clientesOptionsFinal}
               value={formData.clienteId}
               onValueChange={(value) => setFormData({ ...formData, clienteId: value })}
+              onSearchChange={(search) => setClienteSearchTerm(search)}
               placeholder="Selecione um cliente"
               searchPlaceholder="Pesquisar cliente..."
               emptyText="Nenhum cliente encontrado."
+              loading={loadingClientes}
             />
           </div>
 

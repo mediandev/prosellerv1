@@ -95,98 +95,112 @@ export function ContaCorrenteOverview() {
   const [gruposRedes, setGruposRedes] = useState<any[]>([]);
   const [categorias, setCategorias] = useState<any[]>([]);
   const [formasPagamento, setFormasPagamento] = useState<any[]>([]);
-  const [totalVendas, setTotalVendas] = useState<number>(0);
+  
+  // Estados para paginação e estatísticas
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [itensPorPagina, setItensPorPagina] = useState(50);
+  const [totalRegistros, setTotalRegistros] = useState(0);
+  const [estatisticas, setEstatisticas] = useState<{
+    totalCompromissos?: number;
+    totalPagamentos?: number;
+    totalPendente?: number;
+    quantidadeCompromissos?: number;
+    quantidadePagamentos?: number;
+  }>({});
 
   // Carregar dados
   useEffect(() => {
     carregarDados();
-  }, []);
-
-  // Carregar total de vendas com base no período filtrado
-  useEffect(() => {
-    const carregarTotalVendas = async () => {
-      try {
-        console.log('[CONTA-CORRENTE] Carregando total de vendas...');
-        const vendas = await api.get('vendas');
-        
-        console.log('[CONTA-CORRENTE] Total de vendas recebidas:', vendas?.length || 0);
-        console.log('[CONTA-CORRENTE] Período de filtro:', { inicio: filtroPeriodoInicio, fim: filtroPeriodoFim });
-        
-        // Filtrar vendas pelo período
-        let vendasFiltradas = vendas || [];
-        
-        if (filtroPeriodoInicio || filtroPeriodoFim) {
-          vendasFiltradas = vendasFiltradas.filter((v: any) => {
-            const dataVenda = v.dataPedido || v.dataVenda || v.data;
-            if (!dataVenda) return false;
-            
-            // Normalizar datas para comparação (apenas YYYY-MM-DD)
-            const dataVendaNormalizada = dataVenda.split('T')[0];
-            
-            if (filtroPeriodoInicio && dataVendaNormalizada < filtroPeriodoInicio) return false;
-            if (filtroPeriodoFim && dataVendaNormalizada > filtroPeriodoFim) return false;
-            
-            return true;
-          });
-        }
-        
-        console.log('[CONTA-CORRENTE] Vendas após filtro de período:', vendasFiltradas.length);
-        
-        // Verificar quais status existem nas vendas
-        const statusUnicos = [...new Set(vendasFiltradas.map((v: any) => v.status))];
-        console.log('[CONTA-CORRENTE] Status únicos encontrados nas vendas:', statusUnicos);
-        
-        // Calcular total (excluir apenas Rascunho e Cancelado)
-        const statusExcluidos = ['Rascunho', 'Cancelado', 'Cancelada'];
-        const vendasValidas = vendasFiltradas.filter((v: any) => {
-          // Se não tiver status, considerar válida
-          if (!v.status) return true;
-          // Excluir apenas rascunhos e canceladas
-          return !statusExcluidos.includes(v.status);
-        });
-        
-        console.log('[CONTA-CORRENTE] Vendas válidas (excluindo rascunho/cancelado):', vendasValidas.length);
-        
-        const total = vendasValidas.reduce((sum: number, v: any) => {
-          const valor = v.valorPedido || v.valorTotal || v.valor || 0;
-          return sum + valor;
-        }, 0);
-        
-        setTotalVendas(total);
-        console.log('[CONTA-CORRENTE] Total de vendas carregado:', total);
-        
-        if (vendasValidas.length > 0) {
-          console.log('[CONTA-CORRENTE] Exemplo de vendas válidas:', vendasValidas.slice(0, 3).map((v: any) => ({
-            data: v.dataPedido || v.dataVenda || v.data,
-            valor: v.valorPedido || v.valorTotal || v.valor,
-            status: v.status
-          })));
-        }
-      } catch (error) {
-        console.error('[CONTA-CORRENTE] Erro ao carregar vendas:', error);
-        setTotalVendas(0);
-      }
-    };
-    
-    carregarTotalVendas();
-  }, [filtroPeriodoInicio, filtroPeriodoFim]);
+  }, [paginaAtual, itensPorPagina, filtroPeriodoInicio, filtroPeriodoFim, filtroCliente, filtroStatus, filtroBusca]);
 
   const carregarDados = async () => {
     try {
+      setLoading(true);
       console.log('[CONTA-CORRENTE] Carregando dados...');
       
-      const [compromissosAPI, pagamentosAPI, clientesAPI, gruposAPI, categsAPI, formasAPI] = await Promise.all([
-        api.get('conta-corrente/compromissos'),
-        api.get('conta-corrente/pagamentos'),
+      // Preparar filtros para a API
+      const params: Record<string, any> = {
+        page: paginaAtual,
+        limit: itensPorPagina,
+      };
+      
+      if (filtroPeriodoInicio) params.dataInicio = filtroPeriodoInicio;
+      if (filtroPeriodoFim) params.dataFim = filtroPeriodoFim;
+      if (filtroCliente) params.cliente = filtroCliente;
+      if (filtroStatus !== 'todos') params.status = filtroStatus;
+      if (filtroBusca) params.search = filtroBusca;
+      
+      console.log('[CONTA-CORRENTE] Chamando api.contaCorrente.list com params:', params);
+      
+      // Buscar compromissos da Edge Function
+      const response = await api.contaCorrente.list({ params });
+      
+      console.log('[CONTA-CORRENTE] Resposta da API:', response);
+      console.log('[CONTA-CORRENTE] Tipo da resposta:', typeof response);
+      console.log('[CONTA-CORRENTE] response.compromissos:', response?.compromissos);
+      console.log('[CONTA-CORRENTE] response.pagination:', response?.pagination);
+      console.log('[CONTA-CORRENTE] response.estatisticas:', response?.estatisticas);
+      
+      // Mapear compromissos da API para o formato do frontend
+      const compromissosMapeados = (response.compromissos || []).map((comp: any): Compromisso => ({
+        id: String(comp.id),
+        clienteId: String(comp.clienteId),
+        clienteNome: comp.clienteNome || '',
+        data: comp.data,
+        valor: Number(comp.valor),
+        titulo: comp.titulo || '',
+        descricao: comp.descricao || '',
+        tipoCompromisso: comp.tipoCompromisso === 'Investimento' ? 'Investimento' : 'Ressarcimento',
+        categoriaId: comp.categoriaId ? String(comp.categoriaId) : undefined,
+        categoriaNome: comp.categoria || comp.categoriaNome,
+        arquivos: Array.isArray(comp.arquivosAnexos) ? comp.arquivosAnexos.map((arq: any) => ({
+          id: String(arq.id || ''),
+          nomeArquivo: arq.nomeArquivo || arq.nome || '',
+          tamanho: Number(arq.tamanho || 0),
+          tipoArquivoId: String(arq.tipoArquivoId || ''),
+          tipoArquivoNome: arq.tipoArquivoNome || arq.tipo || '',
+          url: arq.url || '',
+          dataUpload: arq.dataUpload || arq.data || '',
+          uploadedBy: arq.uploadedBy || arq.criadoPor || '',
+        })) : [],
+        status: comp.status === 'Pendente' ? 'Pendente' : 
+                comp.status === 'Pago Parcialmente' ? 'Pago Parcialmente' : 
+                comp.status === 'Pago Integralmente' ? 'Pago Integralmente' : 
+                'Pendente',
+        valorPago: Number(comp.valorPago || 0),
+        valorPendente: Number(comp.valorPendente || comp.valor),
+        dataCriacao: comp.dataCriacao || new Date().toISOString(),
+        criadoPor: comp.criadoPor || 'Sistema',
+        dataAtualizacao: comp.dataAtualizacao || comp.dataCriacao || new Date().toISOString(),
+        atualizadoPor: comp.atualizadoPor || comp.criadoPor || 'Sistema',
+      }));
+      
+      setCompromissos(compromissosMapeados);
+      
+      // Não buscar pagamentos de todos os compromissos de uma vez (ineficiente)
+      // Os pagamentos serão buscados apenas quando necessário (ao visualizar um compromisso)
+      // Por enquanto, manteremos o estado vazio ou apenas os pagamentos já carregados
+      // setPagamentos([]);
+      
+      // Atualizar paginação e estatísticas
+      if (response.pagination) {
+        setTotalRegistros(response.pagination.total || 0);
+        setPaginaAtual(response.pagination.page || 1);
+      }
+      
+      if (response.estatisticas) {
+        setEstatisticas(response.estatisticas);
+      }
+      
+      // Carregar dados auxiliares
+      const [clientesAPI, gruposAPI, categsAPI, formasAPI] = await Promise.all([
         api.get('clientes'),
         api.get('grupos-redes'),
         api.get('categorias-conta-corrente'),
         api.get('formas-pagamento'),
       ]);
 
-      setCompromissos(compromissosAPI || []);
-      setPagamentos(pagamentosAPI || []);
-      setClientes(clientesAPI || []);
+      setClientes(Array.isArray(clientesAPI) ? clientesAPI : (clientesAPI?.data || []));
       
       // A API pode retornar um array direto ou um objeto com paginação
       let gruposArray = [];
@@ -201,9 +215,10 @@ export function ContaCorrenteOverview() {
       setFormasPagamento(formasAPI || []);
 
       console.log('[CONTA-CORRENTE] Dados carregados:', {
-        compromissos: compromissosAPI?.length || 0,
-        pagamentos: pagamentosAPI?.length || 0,
-        clientes: clientesAPI?.length || 0
+        compromissos: compromissosMapeados.length,
+        pagamentos: pagamentos.length,
+        clientes: Array.isArray(clientesAPI) ? clientesAPI.length : (clientesAPI?.data?.length || 0),
+        estatisticas: response.estatisticas
       });
     } catch (error) {
       console.error('[CONTA-CORRENTE] Erro ao carregar dados:', error);
@@ -227,8 +242,19 @@ export function ContaCorrenteOverview() {
     }).format(value);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
+  const formatDate = (dateString: string | undefined | null) => {
+    if (!dateString || dateString === 'undefined' || dateString === 'null') {
+      return '-';
+    }
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return '-';
+      }
+      return date.toLocaleDateString('pt-BR');
+    } catch (error) {
+      return '-';
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -292,6 +318,8 @@ export function ContaCorrenteOverview() {
   }, [formasPagamento]);
 
   // Unificar compromissos e pagamentos em uma única lista
+  // Nota: Por padrão, mostramos apenas compromissos na tabela unificada
+  // Os pagamentos são mostrados apenas nos detalhes do compromisso
   const lancamentosUnificados = useMemo((): LancamentoUnificado[] => {
     const compromissosComTipo: LancamentoUnificado[] = compromissos.map((comp) => ({
       id: `comp-${comp.id}`,
@@ -309,9 +337,10 @@ export function ContaCorrenteOverview() {
       arquivosCount: comp.arquivos?.length || 0,
       clienteId: comp.clienteId,
       clienteNome: comp.clienteNome,
-      clienteGrupoRede: clientes.find(c => c.id === comp.clienteId)?.grupoRede,
+      clienteGrupoRede: comp.clienteGrupoRede || clientes.find(c => c.id === comp.clienteId)?.grupoRede,
     }));
 
+    // Incluir pagamentos apenas se estiverem carregados (ex: após visualizar um compromisso)
     const pagamentosComTipo: LancamentoUnificado[] = pagamentos.map((pag) => {
       const compromisso = compromissos.find((c) => c.id === pag.compromissoId);
       return {
@@ -326,7 +355,7 @@ export function ContaCorrenteOverview() {
         categoriaNome: pag.categoriaNome,
         clienteId: compromisso?.clienteId || '',
         clienteNome: compromisso?.clienteNome || '',
-        clienteGrupoRede: compromisso ? clientes.find(c => c.id === compromisso.clienteId)?.grupoRede : undefined,
+        clienteGrupoRede: compromisso ? (compromisso.clienteGrupoRede || clientes.find(c => c.id === compromisso.clienteId)?.grupoRede) : undefined,
       };
     });
 
@@ -375,23 +404,27 @@ export function ContaCorrenteOverview() {
 
   // Cálculos de totais
   const totais = useMemo(() => {
-    const totalCompromissos = lancamentosFiltrados
-      .filter(l => l.tipo === 'compromisso')
-      .reduce((sum, l) => sum + l.valor, 0);
+    // Usar estatísticas da API se disponíveis, senão calcular do frontend
+    const totalCompromissos = estatisticas.totalCompromissos !== undefined
+      ? estatisticas.totalCompromissos
+      : lancamentosFiltrados
+          .filter(l => l.tipo === 'compromisso')
+          .reduce((sum, l) => sum + l.valor, 0);
     
-    const totalPagamentos = lancamentosFiltrados
-      .filter(l => l.tipo === 'pagamento')
-      .reduce((sum, l) => sum + l.valor, 0);
+    const totalPagamentos = estatisticas.totalPagamentos !== undefined
+      ? estatisticas.totalPagamentos
+      : lancamentosFiltrados
+          .filter(l => l.tipo === 'pagamento')
+          .reduce((sum, l) => sum + l.valor, 0);
     
-    const totalPendente = lancamentosFiltrados
-      .filter(l => l.tipo === 'compromisso')
-      .reduce((sum, l) => sum + (l.valorPendente || 0), 0);
-    
-    // Calcular ROI: (Total Investimentos / Total Vendas) * 100
-    const roi = totalVendas > 0 ? (totalCompromissos / totalVendas) * 100 : 0;
+    const totalPendente = estatisticas.totalPendente !== undefined
+      ? estatisticas.totalPendente
+      : lancamentosFiltrados
+          .filter(l => l.tipo === 'compromisso')
+          .reduce((sum, l) => sum + (l.valorPendente || 0), 0);
 
-    return { totalCompromissos, totalPagamentos, totalPendente, roi };
-  }, [lancamentosFiltrados, totalVendas]);
+    return { totalCompromissos, totalPagamentos, totalPendente };
+  }, [lancamentosFiltrados, estatisticas]);
 
   const limparFiltros = () => {
     setFiltroTipo('todos');
@@ -403,11 +436,105 @@ export function ContaCorrenteOverview() {
     setFiltroBusca('');
   };
 
-  const handleVisualizarCompromisso = (idCompromisso: string) => {
-    const compromisso = compromissos.find(c => c.id === idCompromisso);
-    if (compromisso) {
-      setCompromissoSelecionado(compromisso);
-      setDialogDetalhesCompromissoOpen(true);
+  const handleVisualizarCompromisso = async (idCompromisso: string) => {
+    try {
+      // Buscar compromisso completo da API
+      const response = await api.contaCorrente.getById(idCompromisso);
+      
+      if (response?.compromisso) {
+        const comp = response.compromisso;
+        const compromissoCompleto: Compromisso = {
+          id: String(comp.id),
+          clienteId: String(comp.clienteId),
+          clienteNome: comp.clienteNome || '',
+          data: comp.data,
+          valor: Number(comp.valor),
+          titulo: comp.titulo || '',
+          descricao: comp.descricao || '',
+          tipoCompromisso: comp.tipoCompromisso === 'Investimento' ? 'Investimento' : 'Ressarcimento',
+          categoriaId: comp.categoriaId ? String(comp.categoriaId) : undefined,
+          categoriaNome: comp.categoriaNome,
+          arquivos: Array.isArray(comp.arquivosAnexos) ? comp.arquivosAnexos.map((arq: any) => ({
+            id: String(arq.id || ''),
+            nomeArquivo: arq.nomeArquivo || arq.nome || '',
+            tamanho: Number(arq.tamanho || 0),
+            tipoArquivoId: String(arq.tipoArquivoId || ''),
+            tipoArquivoNome: arq.tipoArquivoNome || arq.tipo || '',
+            url: arq.url || '',
+            dataUpload: arq.dataUpload || arq.data || '',
+            uploadedBy: arq.uploadedBy || arq.criadoPor || '',
+          })) : [],
+          status: comp.status === 'Pendente' ? 'Pendente' : 
+                  comp.status === 'Pago Parcialmente' ? 'Pago Parcialmente' : 
+                  comp.status === 'Pago Integralmente' ? 'Pago Integralmente' : 
+                  'Pendente',
+          valorPago: Number(comp.valorPago || 0),
+          valorPendente: Number(comp.valorPendente || comp.valor),
+          dataCriacao: comp.dataCriacao || new Date().toISOString(),
+          criadoPor: comp.criadoPor || 'Sistema',
+          dataAtualizacao: comp.dataAtualizacao || comp.dataCriacao || new Date().toISOString(),
+          atualizadoPor: comp.atualizadoPor || comp.criadoPor || 'Sistema',
+        };
+        
+        setCompromissoSelecionado(compromissoCompleto);
+        
+        // Mapear pagamentos
+        const pagamentosMapeados = (response.pagamentos || []).map((pag: any): Pagamento => {
+          // Garantir que compromissoId seja tratado corretamente
+          const compromissoIdValue = pag.compromissoId != null && pag.compromissoId !== undefined && pag.compromissoId !== 'undefined'
+            ? String(pag.compromissoId)
+            : (pag.conta_corrente_id != null && pag.conta_corrente_id !== undefined && pag.conta_corrente_id !== 'undefined'
+              ? String(pag.conta_corrente_id)
+              : idCompromisso) // Fallback: usar o ID do compromisso atual
+          
+          return {
+            id: String(pag.id),
+            compromissoId: compromissoIdValue,
+            compromissoTitulo: compromissoCompleto.titulo,
+            dataPagamento: pag.dataPagamento || pag.data_pagamento || pag.dataCriacao || pag.created_at || new Date().toISOString(),
+            valor: Number(pag.valor || pag.valor_pago || 0),
+            formaPagamento: pag.formaPagamento || pag.forma_pagamento || '',
+            categoriaId: pag.categoriaId ? String(pag.categoriaId) : undefined,
+            categoriaNome: pag.categoria || pag.categoriaNome,
+            comprovanteAnexo: pag.arquivoComprovante ? {
+              id: String(pag.arquivoComprovante.id || ''),
+              nomeArquivo: pag.arquivoComprovante.nomeArquivo || pag.arquivoComprovante.nome || '',
+              tamanho: Number(pag.arquivoComprovante.tamanho || 0),
+              tipoArquivoId: String(pag.arquivoComprovante.tipoArquivoId || ''),
+              tipoArquivoNome: pag.arquivoComprovante.tipoArquivoNome || pag.arquivoComprovante.tipo || '',
+              url: pag.arquivoComprovante.url || '',
+              dataUpload: pag.arquivoComprovante.dataUpload || pag.arquivoComprovante.data || '',
+              uploadedBy: pag.arquivoComprovante.uploadedBy || pag.arquivoComprovante.criadoPor || '',
+            } : undefined,
+            observacoes: pag.observacoes,
+            dataCriacao: pag.dataCriacao || new Date().toISOString(),
+            criadoPor: pag.criadoPor || 'Sistema',
+          }
+        });
+        
+        // Atualizar pagamentos locais para este compromisso
+        setPagamentos(prev => {
+          const outros = prev.filter(p => p.compromissoId !== idCompromisso);
+          return [...outros, ...pagamentosMapeados];
+        });
+        
+        setDialogDetalhesCompromissoOpen(true);
+      } else {
+        // Fallback: buscar do estado local
+        const compromisso = compromissos.find(c => c.id === idCompromisso);
+        if (compromisso) {
+          setCompromissoSelecionado(compromisso);
+          setDialogDetalhesCompromissoOpen(true);
+        }
+      }
+    } catch (error) {
+      console.error('[CONTA-CORRENTE] Erro ao buscar compromisso:', error);
+      // Fallback: buscar do estado local
+      const compromisso = compromissos.find(c => c.id === idCompromisso);
+      if (compromisso) {
+        setCompromissoSelecionado(compromisso);
+        setDialogDetalhesCompromissoOpen(true);
+      }
     }
   };
 
@@ -429,26 +556,47 @@ export function ContaCorrenteOverview() {
     setDialogExcluirOpen(true);
   };
 
-  const handleExcluir = () => {
+  const handleExcluir = async () => {
     if (!itemParaExcluir) return;
 
-    console.log('Excluindo lançamento:', itemParaExcluir);
-    toast.success(
-      itemParaExcluir.tipo === 'compromisso'
-        ? 'Compromisso excluído com sucesso!'
-        : 'Pagamento excluído com sucesso!'
-    );
-    
-    setDialogExcluirOpen(false);
-    setItemParaExcluir(null);
-    
-    if (dialogDetalhesCompromissoOpen) {
-      setDialogDetalhesCompromissoOpen(false);
-      setCompromissoSelecionado(null);
-    }
-    if (dialogDetalhesPagamentoOpen) {
-      setDialogDetalhesPagamentoOpen(false);
-      setPagamentoSelecionado(null);
+    try {
+      console.log('[CONTA-CORRENTE] Excluindo lançamento:', itemParaExcluir);
+      
+      if (itemParaExcluir.tipo === 'compromisso') {
+        // Extrair ID do compromisso (remover prefixo 'comp-')
+        const compromissoId = itemParaExcluir.id.replace('comp-', '');
+        await api.contaCorrente.delete(compromissoId);
+        toast.success('Compromisso excluído com sucesso!');
+      } else {
+        // Extrair ID do pagamento (remover prefixo 'pag-')
+        const pagamentoId = itemParaExcluir.id.replace('pag-', '');
+        const pagamento = pagamentos.find(p => p.id === pagamentoId);
+        if (pagamento) {
+          await api.contaCorrente.deletePagamento(pagamento.compromissoId, pagamentoId);
+          toast.success('Pagamento excluído com sucesso!');
+        } else {
+          toast.error('Pagamento não encontrado');
+          return;
+        }
+      }
+      
+      setDialogExcluirOpen(false);
+      setItemParaExcluir(null);
+      
+      if (dialogDetalhesCompromissoOpen) {
+        setDialogDetalhesCompromissoOpen(false);
+        setCompromissoSelecionado(null);
+      }
+      if (dialogDetalhesPagamentoOpen) {
+        setDialogDetalhesPagamentoOpen(false);
+        setPagamentoSelecionado(null);
+      }
+      
+      // Recarregar dados
+      await carregarDados();
+    } catch (error: any) {
+      console.error('[CONTA-CORRENTE] Erro ao excluir lançamento:', error);
+      toast.error(`Erro ao excluir: ${error.message || 'Erro desconhecido'}`);
     }
   };
 
@@ -479,36 +627,21 @@ export function ContaCorrenteOverview() {
     try {
       console.log('[CONTA-CORRENTE] Salvando novo compromisso:', compromisso);
       
-      // Buscar informações do cliente e categoria
-      const cliente = clientes.find(c => c.id === compromisso.clienteId);
-      const categoria = categorias.find(c => c.id === compromisso.categoriaId);
-      
       const valorNumerico = parseFloat(compromisso.valor);
       
-      // Criar objeto do compromisso
-      const novoCompromisso: Compromisso = {
-        id: Date.now().toString(),
+      // Preparar payload para a Edge Function
+      const payload = {
         clienteId: compromisso.clienteId,
-        clienteNome: cliente?.nomeFantasia || cliente?.razaoSocial || 'Cliente não encontrado',
         data: compromisso.data,
         valor: valorNumerico,
         titulo: compromisso.titulo,
         descricao: compromisso.descricao,
         tipoCompromisso: compromisso.tipoCompromisso,
         categoriaId: compromisso.categoriaId || undefined,
-        categoriaNome: categoria?.nome || undefined,
-        arquivos: [],
-        status: 'Pendente',
-        valorPago: 0,
-        valorPendente: valorNumerico,
-        dataCriacao: new Date().toISOString(),
-        criadoPor: 'Sistema', // TODO: pegar do contexto de autenticação
-        dataAtualizacao: new Date().toISOString(),
-        atualizadoPor: 'Sistema', // TODO: pegar do contexto de autenticação
       };
       
-      // Salvar no backend
-      await api.create('conta-corrente/compromissos', novoCompromisso);
+      // Salvar no backend via Edge Function
+      await api.contaCorrente.create(payload);
       
       toast.success('Compromisso criado com sucesso!');
       setDialogNovoCompromissoOpen(false);
@@ -561,60 +694,25 @@ export function ContaCorrenteOverview() {
     try {
       console.log('[CONTA-CORRENTE] Salvando pagamento:', pagamento);
       
-      // Buscar informações
-      const compromisso = compromissos.find(c => c.id === pagamento.compromissoId);
-      const formaPagamento = formasPagamento.find(f => f.id === pagamento.formaPagamentoId);
-      const categoria = categorias.find(c => c.id === pagamento.categoriaId);
-      
       const valorNumerico = parseFloat(pagamento.valor);
       
-      // Criar objeto do pagamento
-      const novoPagamento: Pagamento = {
-        id: Date.now().toString(),
-        compromissoId: pagamento.compromissoId,
-        compromissoTitulo: compromisso?.titulo || 'Compromisso não encontrado',
+      // Preparar payload para a Edge Function
+      const payload = {
         dataPagamento: pagamento.dataPagamento,
         valor: valorNumerico,
-        formaPagamento: formaPagamento?.nome || 'Não informado',
+        formaPagamento: pagamento.formaPagamentoId,
         categoriaId: pagamento.categoriaId || undefined,
-        categoriaNome: categoria?.nome || undefined,
-        observacoes: pagamento.observacoes,
-        dataCriacao: new Date().toISOString(),
-        criadoPor: 'Sistema', // TODO: pegar do contexto de autenticação
+        observacoes: pagamento.observacoes || undefined,
       };
       
-      // Salvar no backend
-      await api.create('conta-corrente/pagamentos', novoPagamento);
-      
-      // Atualizar compromisso
-      if (compromisso) {
-        const novoValorPago = compromisso.valorPago + valorNumerico;
-        const novoValorPendente = compromisso.valor - novoValorPago;
-        let novoStatus: 'Pendente' | 'Pago Parcialmente' | 'Pago Integralmente' = 'Pendente';
-        
-        if (novoValorPendente === 0) {
-          novoStatus = 'Pago Integralmente';
-        } else if (novoValorPago > 0) {
-          novoStatus = 'Pago Parcialmente';
-        }
-        
-        const compromissoAtualizado = {
-          ...compromisso,
-          valorPago: novoValorPago,
-          valorPendente: novoValorPendente,
-          status: novoStatus,
-          dataAtualizacao: new Date().toISOString(),
-          atualizadoPor: 'Sistema',
-        };
-        
-        await api.update('conta-corrente/compromissos', compromisso.id, compromissoAtualizado);
-      }
+      // Salvar no backend via Edge Function
+      await api.contaCorrente.createPagamento(pagamento.compromissoId, payload);
       
       toast.success('Pagamento registrado com sucesso!');
       setDialogRegistrarPagamentoOpen(false);
       setCompromissoParaPagamento(null);
       
-      // Recarregar dados
+      // Recarregar dados (a Edge Function já atualiza o compromisso automaticamente)
       await carregarDados();
     } catch (error: any) {
       console.error('[CONTA-CORRENTE] Erro ao registrar pagamento:', error);
@@ -625,7 +723,7 @@ export function ContaCorrenteOverview() {
   return (
     <div className="space-y-6">
       {/* Cards de Resumo */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Compromissos</CardTitle>
@@ -660,21 +758,6 @@ export function ContaCorrenteOverview() {
             <p className="text-xs text-muted-foreground mt-1">
               Saldo a pagar
             </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">ROI</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {totais.roi.toFixed(2)}%
-            </div>
-            <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-              <p>Investimentos: {formatCurrency(totais.totalCompromissos)}</p>
-              <p>Vendas: {formatCurrency(totalVendas)}</p>
-            </div>
           </CardContent>
         </Card>
       </div>

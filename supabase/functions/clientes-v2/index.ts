@@ -147,6 +147,7 @@ function mapClienteCompleto(rpc: {
     descontoFinanceiro: Number((c as any).desconto_financeiro ?? (c as any).descontoFinanceiro ?? 0),
     pedidoMinimo: Number((c as any).pedido_minimo ?? (c as any).pedidoMinimo ?? 0),
     condicoesPagamentoAssociadas: Array.isArray((c as any).condicoesdisponiveis) ? (c as any).condicoesdisponiveis.map((x: unknown) => String(x)) : [],
+    empresaFaturamento: (c as any).empresaFaturamento != null ? String((c as any).empresaFaturamento) : undefined,
     vendedoresAtribuidos: vendedores.map((v: any) => ({ id: v.user_id ?? v.id, nome: v.nome ?? '', email: v.email ?? '' })),
     vendedorAtribuido: vendedorAtribuido ? { id: (vendedorAtribuido as any).user_id ?? (vendedorAtribuido as any).id, nome: (vendedorAtribuido as any).nome ?? '', email: (vendedorAtribuido as any).email ?? '' } : undefined,
     contato: {
@@ -360,6 +361,65 @@ serve(async (req) => {
         }
       }
       
+      // Processar vendedoresAtribuidos - pode vir como array de IDs ou array de objetos
+      let vendedoresAtribuidosArray: string[] | null = null
+      if (body.vendedoresAtribuidos && Array.isArray(body.vendedoresAtribuidos) && body.vendedoresAtribuidos.length > 0) {
+        // Se for array de objetos, extrair IDs
+        if (typeof body.vendedoresAtribuidos[0] === 'object') {
+          vendedoresAtribuidosArray = body.vendedoresAtribuidos.map((v: any) => String(v.id || v.user_id || v))
+        } else {
+          // Se for array de IDs
+          vendedoresAtribuidosArray = body.vendedoresAtribuidos.map((v: any) => String(v))
+        }
+      } else if (body.vendedorAtribuido?.id) {
+        // Fallback: se vier vendedorAtribuido como objeto único ou se vendedoresAtribuidos estiver vazio
+        vendedoresAtribuidosArray = [String(body.vendedorAtribuido.id)]
+      }
+
+      // Processar condicoesPagamentoAssociadas - pode vir como array de IDs ou array de objetos
+      let condicoesPagamentoIds: number[] | null = null
+      if (body.condicoesPagamentoAssociadas) {
+        if (Array.isArray(body.condicoesPagamentoAssociadas)) {
+          if (body.condicoesPagamentoAssociadas.length > 0) {
+            // Se for array de objetos, extrair IDs
+            if (typeof body.condicoesPagamentoAssociadas[0] === 'object') {
+              condicoesPagamentoIds = body.condicoesPagamentoAssociadas.map((c: any) => 
+                Number(c.id || c.condicao_id || c.condicaoId || c)
+              )
+            } else {
+              // Se for array de IDs (números ou strings)
+              condicoesPagamentoIds = body.condicoesPagamentoAssociadas.map((c: any) => Number(c))
+            }
+          }
+        }
+      }
+
+      // Processar empresaFaturamento - pode vir como ID ou objeto
+      let empresaFaturamentoId: number | null = null
+      if (body.empresaFaturamento) {
+        if (typeof body.empresaFaturamento === 'object' && body.empresaFaturamento.id) {
+          empresaFaturamentoId = Number(body.empresaFaturamento.id)
+        } else if (typeof body.empresaFaturamento === 'string' && body.empresaFaturamento.trim() !== '') {
+          // Se for string não vazia, converter para número
+          empresaFaturamentoId = Number(body.empresaFaturamento)
+        } else if (typeof body.empresaFaturamento === 'number') {
+          empresaFaturamentoId = body.empresaFaturamento
+        }
+      } else if (body.empresaFaturamentoId) {
+        empresaFaturamentoId = Number(body.empresaFaturamentoId)
+      }
+      
+      // Log para debug
+      console.log('[CLIENTES-V2] Processando campos:', {
+        empresaFaturamento: body.empresaFaturamento,
+        empresaFaturamentoId,
+        vendedorAtribuido: body.vendedorAtribuido,
+        vendedoresAtribuidos: body.vendedoresAtribuidos,
+        vendedoresAtribuidosArray,
+        condicoesPagamentoAssociadas: body.condicoesPagamentoAssociadas,
+        condicoesPagamentoIds,
+      })
+
       const { data: rpcData, error: rpcError } = await supabase.rpc('update_cliente_v2', {
         p_cliente_id: idNum,
         p_nome: String(nome).trim(),
@@ -371,7 +431,9 @@ serve(async (req) => {
         p_lista_de_preco: body.listaPrecos ?? body.lista_de_preco != null ? Number(body.listaPrecos ?? body.lista_de_preco) : null,
         p_desconto_financeiro: body.descontoFinanceiro ?? body.desconto_financeiro ?? null,
         p_pedido_minimo: body.pedidoMinimo ?? body.pedido_minimo ?? null,
-        p_vendedoresatribuidos: body.vendedoresAtribuidos ?? body.vendedoresatribuidos ?? null,
+        p_vendedoresatribuidos: vendedoresAtribuidosArray,
+        p_empresa_faturamento_id: empresaFaturamentoId,
+        p_condicoes_pagamento_ids: condicoesPagamentoIds,
         p_observacao_interna: body.observacoesInternas ?? body.observacao_interna ?? null,
         p_segmento_id: body.segmentoId ?? body.segmento_id != null ? Number(body.segmentoId ?? body.segmento_id) : null,
         p_ref_situacao_id: refSituacaoId,

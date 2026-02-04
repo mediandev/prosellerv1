@@ -18,7 +18,6 @@ import { CustomerHistoryTab } from './CustomerHistoryTab';
 import { CustomerMixTab } from './CustomerMixTab';
 import { CustomerIndicatorsTab } from './CustomerIndicatorsTab';
 import { CNPJDebugger } from './CNPJDebugger';
-import { FormDataDebugger } from './FormDataDebugger';
 import { historyService } from '../services/historyService';
 import { customerCodeService } from '../services/customerCodeService';
 import { emailService } from '../services/emailService';
@@ -713,7 +712,6 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
                 <X className="h-4 w-4 mr-2" />
                 Cancelar
               </Button>
-              <FormDataDebugger formData={formData} />
               <Button onClick={handleSave}>
                 <Save className="h-4 w-4 mr-2" />
                 Salvar
@@ -722,7 +720,6 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
           )}
           {modo !== 'visualizar' && modo !== 'aprovar' && !readOnly && (
             <>
-              <FormDataDebugger formData={formData} />
               <Button onClick={handleSave}>
                 <Save className="h-4 w-4 mr-2" />
                 Salvar

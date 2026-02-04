@@ -482,7 +482,6 @@ export function CustomersListPage({
                       )}
                     </button>
                   </TableHead>
-                  <TableHead>Contato</TableHead>
                   <TableHead>
                     <button
                       onClick={() => handleSort('situacao')}
@@ -506,7 +505,7 @@ export function CustomersListPage({
               <TableBody>
                 {clientesFiltrados.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                       Nenhum cliente encontrado
                     </TableCell>
                   </TableRow>
@@ -541,26 +540,6 @@ export function CustomersListPage({
                         {cliente.cpfCnpj}
                       </TableCell>
                       <TableCell>{cliente.segmentoMercado || '—'}</TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          {cliente.emailPrincipal && (
-                            <div className="flex items-center gap-1 text-sm">
-                              <Mail className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-muted-foreground truncate max-w-[200px]">
-                                {cliente.emailPrincipal}
-                              </span>
-                            </div>
-                          )}
-                          {cliente.telefoneCelularPrincipal && (
-                            <div className="flex items-center gap-1 text-sm">
-                              <Phone className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-muted-foreground">
-                                {cliente.telefoneCelularPrincipal}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
                       <TableCell>{getSituacaoBadge(cliente.situacao)}</TableCell>
                       <TableCell>
                         <DropdownMenu>
