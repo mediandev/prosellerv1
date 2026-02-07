@@ -23,14 +23,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { 
-  Search, 
-  Download, 
-  MoreVertical, 
+import {
+  Search,
+  MoreVertical,
   Eye,
   DollarSign,
   TrendingUp,
-  Calendar as CalendarIcon,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -46,19 +44,19 @@ import {
   Loader2,
   Edit,
   RotateCcw,
-  Lock,
   Unlock,
+  Download,
   ChevronLeft,
   ChevronRight,
   Settings,
   Trash2
 } from "lucide-react";
-import { 
+import {
   RelatorioPeriodoComissoes,
   RelatorioComissoesCompleto,
   ComissaoVenda,
-  LancamentoManual, 
-  PagamentoPeriodo 
+  LancamentoManual,
+  PagamentoPeriodo
 } from "../types/comissao";
 
 import { CommissionReportPage } from "./CommissionReportPage";
@@ -83,17 +81,17 @@ export function CommissionsManagement({
   const [pagamentos, setPagamentos] = useState<PagamentoPeriodo[]>([]);
   const [vendedores, setVendedores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   const [relatorioSelecionado, setRelatorioSelecionado] = useState<RelatorioComissoesCompleto | null>(null);
   const [visualizandoRelatorio, setVisualizandoRelatorio] = useState(false);
-  
+
   // Dialogs
   const [dialogLancamento, setDialogLancamento] = useState(false);
   const [dialogPagamento, setDialogPagamento] = useState(false);
   const [dialogEnvioEmMassa, setDialogEnvioEmMassa] = useState(false);
   const [dialogEditarLancamento, setDialogEditarLancamento] = useState(false);
   const [dialogReabrir, setDialogReabrir] = useState(false);
-  
+
   // Filtros
   const [searchTerm, setSearchTerm] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
@@ -102,7 +100,7 @@ export function CommissionsManagement({
   const [progressoEnvio, setProgressoEnvio] = useState({ atual: 0, total: 0 });
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>(customDateRange);
-  
+
   // Período selecionado - usar data atual do sistema
   const dataAtual = new Date();
   const mesAtual = dataAtual.getMonth() + 1; // getMonth() retorna 0-11
@@ -144,7 +142,7 @@ export function CommissionsManagement({
   const avancarMes = () => {
     const mesNum = parseInt(mesSelecionado);
     const anoNum = parseInt(anoSelecionado);
-    
+
     if (mesNum === 12) {
       setMesSelecionado('01');
       setAnoSelecionado((anoNum + 1).toString());
@@ -156,7 +154,7 @@ export function CommissionsManagement({
   const voltarMes = () => {
     const mesNum = parseInt(mesSelecionado);
     const anoNum = parseInt(anoSelecionado);
-    
+
     if (mesNum === 1) {
       setMesSelecionado('12');
       setAnoSelecionado((anoNum - 1).toString());
@@ -168,18 +166,18 @@ export function CommissionsManagement({
   const handlePeriodoInputChange = (valor: string) => {
     // Remove caracteres não numéricos e barra
     const apenasNumeros = valor.replace(/[^\d/]/g, '');
-    
+
     // Se tem barra, divide em mês e ano
     if (apenasNumeros.includes('/')) {
       const [mes, ano] = apenasNumeros.split('/');
-      
+
       if (mes && mes.length <= 2) {
         const mesNum = parseInt(mes);
         if (mesNum >= 1 && mesNum <= 12) {
           setMesSelecionado(mes.padStart(2, '0'));
         }
       }
-      
+
       if (ano && ano.length === 4) {
         setAnoSelecionado(ano);
       }
@@ -189,64 +187,96 @@ export function CommissionsManagement({
   // Carregar dados de comissões
   useEffect(() => {
     carregarComissoes();
-  }, []);
+  }, [periodoSelecionado]);
 
   const carregarComissoes = async () => {
     try {
-      console.log('[COMISSOES] Carregando dados...');
-      
+      setLoading(true);
+      console.log('[COMISSOES] Carregando dados para o período:', periodoSelecionado);
+
       const [relatoriosAPI, lancamentosAPI, pagamentosAPI, comissoesVendasAPI, vendedoresAPI] = await Promise.all([
-        api.get('relatoriosComissao'),
-        api.get('lancamentosComissao'),
-        api.get('pagamentosComissao'),
-        api.get('comissoesVendas'),
+        api.comissoes.getRelatorio(periodoSelecionado),
+        api.comissoes.getLancamentos(periodoSelecionado),
+        api.comissoes.getPagamentos(periodoSelecionado),
+        api.comissoes.getVendas(periodoSelecionado),
         api.get('vendedores'),
       ]);
 
-      // Recalcular valores de todos os relatórios em tempo real
-      const relatoriosRecalculados = Array.isArray(relatoriosAPI) ? relatoriosAPI.map((relatorio: any) => {
-        const vendas = (Array.isArray(comissoesVendasAPI) ? comissoesVendasAPI : []).filter((cv: any) => 
-          cv.vendedorId === relatorio.vendedorId && cv.periodo === relatorio.periodo
-        );
-        
-        const lancamentos = (Array.isArray(lancamentosAPI) ? lancamentosAPI : []).filter((lm: any) => 
-          lm.vendedorId === relatorio.vendedorId && lm.periodo === relatorio.periodo
-        );
-        
-        const pagsRelatorio = (Array.isArray(pagamentosAPI) ? pagamentosAPI : []).filter((p: any) => 
-          p.vendedorId === relatorio.vendedorId && p.periodo === relatorio.periodo
-        );
+      // Mapear Relatórios (RPC já retorna totais calculados, mas o frontend pode recalcular se quiser)
+      // O RPC retorna snake_case: vendedor_id, total_vendas, etc.
+      // O frontend espera camelCase: vendedorId, valorLiquido, etc.
+      const relatoriosMapeados = Array.isArray(relatoriosAPI) ? relatoriosAPI.map((r: any) => ({
+        id: `REL-${r.vendedor_id}-${r.periodo}`, // ID sintético se não vier do banco
+        vendedorId: r.vendedor_id,
+        periodo: r.periodo,
+        status: r.status,
+        valorLiquido: Number(r.saldo_final || 0), // RPC retorna saldo_final já calculado
+        saldoAnterior: Number(r.saldo_anterior || 0),
+        totalPago: Number(r.total_pagos || 0),
+        saldoDevedor: Number(r.saldo_final || 0) - (r.status === 'pago' ? Number(r.total_pagos || 0) : 0), // Ajustar lógica se necessário
+        dataGeracao: new Date().toISOString(), // Fallback para data de visualização
+        dataFechamento: r.data_fechamento,
+        dataPagamento: r.status === 'pago' ? r.data_fechamento : undefined,
+        // Campos auxiliares do RPC
+        totalVendas: Number(r.total_vendas || 0),
+        totalComissao: Number(r.total_comissao || 0),
+        totalCreditos: Number(r.total_creditos || 0),
+        totalDebitos: Number(r.total_debitos || 0)
+      })) : [];
 
-        const totalComissoes = vendas.reduce((sum: number, v: any) => sum + v.valorComissao, 0);
-        const totalCreditos = lancamentos.filter((l: any) => l.tipo === 'credito').reduce((sum: number, l: any) => sum + l.valor, 0);
-        const totalDebitos = lancamentos.filter((l: any) => l.tipo === 'debito').reduce((sum: number, l: any) => sum + l.valor, 0);
-        const totalPago = pagsRelatorio.reduce((sum: number, p: any) => sum + p.valor, 0);
+      // Mapear Lançamentos
+      const lancamentosMapeados = Array.isArray(lancamentosAPI) ? lancamentosAPI.map((l: any) => ({
+        id: String(l.id),
+        vendedorId: l.vendedor_uuid,
+        periodo: l.periodo,
+        data: l.data_lancamento, // data_lancamento no banco
+        tipo: l.tipo,
+        valor: Number(l.valor),
+        descricao: l.descricao,
+        criadoPor: l.criado_por,
+        criadoEm: l.created_at
+      })) : [];
 
-        const valorLiquido = totalComissoes + totalCreditos - totalDebitos + (relatorio.saldoAnterior || 0);
-        const saldoDevedor = valorLiquido - totalPago;
-        const status = saldoDevedor <= 0 && relatorio.status === "fechado" ? "pago" as const : relatorio.status;
+      // Mapear Pagamentos
+      const pagamentosMapeados = Array.isArray(pagamentosAPI) ? pagamentosAPI.map((p: any) => ({
+        id: String(p.id),
+        vendedorId: p.vendedor_uuid,
+        periodo: p.periodo,
+        data: p.data_pagamento,
+        valor: Number(p.valor),
+        formaPagamento: p.forma_pagamento,
+        comprovante: p.comprovante_url,
+        observacoes: p.observacoes,
+        realizadoPor: p.realizado_por,
+        realizadoEm: p.created_at
+      })) : [];
 
-        return {
-          ...relatorio,
-          valorLiquido,
-          totalPago,
-          saldoDevedor,
-          status,
-          dataPagamento: status === "pago" && !relatorio.dataPagamento ? new Date().toISOString() : relatorio.dataPagamento
-        };
-      }) : [];
+      // Mapear Vendas
+      const vendasMapeadas = Array.isArray(comissoesVendasAPI) ? comissoesVendasAPI.map((v: any) => ({
+        id: String(v.vendedor_comissao_id || v.id),
+        vendedorId: v.vendedor_uuid,
+        periodo: v.periodo,
+        dataVenda: v.criado_em || v.data_inicio, // Usando criado_em como data da venda/registro
+        valorTotalVenda: Number(v.valor_total),
+        valorComissao: Number(v.valor_comissao),
+        percentualComissao: Number(v.percentual_comissao),
+        pedidoId: v.pedido_id,
+        clienteNome: v.cliente_nome
+      })) : [];
 
-      setRelatorios(relatoriosRecalculados);
-      setLancamentosManuais(Array.isArray(lancamentosAPI) ? lancamentosAPI : []);
-      setPagamentos(Array.isArray(pagamentosAPI) ? pagamentosAPI : []);
-      setComissoesVendas(Array.isArray(comissoesVendasAPI) ? comissoesVendasAPI : []);
+      setRelatorios(relatoriosMapeados);
+      setLancamentosManuais(lancamentosMapeados);
+      setPagamentos(pagamentosMapeados);
+      setComissoesVendas(vendasMapeadas);
       setVendedores(Array.isArray(vendedoresAPI) ? vendedoresAPI : []);
 
-      console.log('[COMISSOES] Dados carregados e recalculados:', {
-        relatorios: relatoriosRecalculados?.length || 0,
-        lancamentos: lancamentosAPI?.length || 0,
-        pagamentos: pagamentosAPI?.length || 0
+      console.log('[COMISSOES] Dados carregados:', {
+        relatorios: relatoriosMapeados.length,
+        lancamentos: lancamentosMapeados.length,
+        pagamentos: pagamentosMapeados.length,
+        vendas: vendasMapeadas.length
       });
+
     } catch (error) {
       console.error('[COMISSOES] Erro ao carregar dados:', error);
       toast.error('Erro ao carregar comissões da API.');
@@ -254,7 +284,6 @@ export function CommissionsManagement({
       setComissoesVendas([]);
       setLancamentosManuais([]);
       setPagamentos([]);
-      setVendedores([]);
     } finally {
       setLoading(false);
     }
@@ -284,31 +313,31 @@ export function CommissionsManagement({
   const calcularRelatorioCompleto = (relatorio: RelatorioPeriodoComissoes): RelatorioComissoesCompleto => {
     // Buscar vendedor
     const vendedor = vendedores.find(v => v.id === relatorio.vendedorId);
-    
+
     // Buscar lançamentos do período
-    const vendas = comissoesVendas.filter(cv => 
+    const vendas = comissoesVendas.filter(cv =>
       cv.vendedorId === relatorio.vendedorId && cv.periodo === relatorio.periodo
     );
-    
-    const lancamentos = lancamentosManuais.filter(lm => 
+
+    const lancamentos = lancamentosManuais.filter(lm =>
       lm.vendedorId === relatorio.vendedorId && lm.periodo === relatorio.periodo
     );
-    
-    const pagsRelatorio = pagamentos.filter(p => 
+
+    const pagsRelatorio = pagamentos.filter(p =>
       p.vendedorId === relatorio.vendedorId && p.periodo === relatorio.periodo
     );
-    
+
     // Separar lançamentos
     const lancamentosCredito = lancamentos.filter(l => l.tipo === 'credito');
     const lancamentosDebito = lancamentos.filter(l => l.tipo === 'debito');
-    
+
     // Calcular totalizadores
     const totalVendas = vendas.reduce((sum, v) => sum + v.valorTotalVenda, 0);
     const quantidadeVendas = vendas.length;
     const totalComissoes = vendas.reduce((sum, v) => sum + v.valorComissao, 0);
     const totalCreditos = lancamentosCredito.reduce((sum, l) => sum + l.valor, 0);
     const totalDebitos = lancamentosDebito.reduce((sum, l) => sum + l.valor, 0);
-    
+
     return {
       relatorio,
       vendedorNome: vendedor?.nome || relatorio.vendedorId,
@@ -333,11 +362,11 @@ export function CommissionsManagement({
 
   const relatoriosFiltrados = useMemo(() => {
     return relatoriosCompletos.filter((relCompleto) => {
-      const matchesSearch = searchTerm === "" || 
-                           relCompleto.vendedorNome.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = searchTerm === "" ||
+        relCompleto.vendedorNome.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = filtroStatus === "todos" || relCompleto.relatorio.status === filtroStatus;
       const matchesPeriodo = relCompleto.relatorio.periodo === periodoSelecionado;
-      
+
       return matchesSearch && matchesStatus && matchesPeriodo;
     });
   }, [relatoriosCompletos, searchTerm, filtroStatus, periodoSelecionado]);
@@ -381,36 +410,33 @@ export function CommissionsManagement({
 
   const handleSalvarLancamento = () => {
     if (!relatorioSelecionado) return;
-    
+
     if (!formLancamento.valor || parseFloat(formLancamento.valor) <= 0) {
       toast.error("Informe um valor válido");
       return;
     }
-    
+
     if (!formLancamento.descricao.trim()) {
       toast.error("Informe a descrição do lançamento");
       return;
     }
 
-    const novoLancamento: LancamentoManual = {
-      id: `L${formLancamento.tipo === 'credito' ? 'C' : 'D'}-${Date.now()}`,
-      vendedorId: relatorioSelecionado.relatorio.vendedorId,
-      periodo: relatorioSelecionado.relatorio.periodo,
-      data: formLancamento.data,
+
+
+    // Salvar no Supabase
+    // Salvar no Supabase
+    api.comissoes.createLancamento({
+      vendedor_uuid: relatorioSelecionado.relatorio.vendedorId,
       tipo: formLancamento.tipo,
       valor: parseFloat(formLancamento.valor),
       descricao: formLancamento.descricao,
-      criadoPor: "Usuário Backoffice", // Em produção, pegar do contexto
-      criadoEm: new Date().toISOString()
-    };
-
-    // Salvar no Supabase
-    api.create('lancamentosComissao', novoLancamento)
+      periodo: relatorioSelecionado.relatorio.periodo
+    })
       .then(() => {
-        setLancamentosManuais([...lancamentosManuais, novoLancamento]);
-        recalcularRelatorio(relatorioSelecionado.relatorio.id);
-        toast.success(`Lançamento de ${formLancamento.tipo} registrado com sucesso!`);
-        setDialogLancamento(false);
+        carregarComissoes().then(() => {
+          toast.success(`Lançamento de ${formLancamento.tipo} registrado com sucesso!`);
+          setDialogLancamento(false);
+        });
       })
       .catch((error: any) => {
         console.error('[COMISSOES] Erro ao salvar lançamento:', error);
@@ -436,37 +462,34 @@ export function CommissionsManagement({
 
   const handleSalvarPagamento = () => {
     if (!relatorioSelecionado) return;
-    
+
     if (!formPagamento.valor || parseFloat(formPagamento.valor) <= 0) {
       toast.error("Informe um valor válido");
       return;
     }
-    
+
     if (!formPagamento.formaPagamento) {
       toast.error("Selecione a forma de pagamento");
       return;
     }
 
-    const novoPagamento: PagamentoPeriodo = {
-      id: `PG-${Date.now()}`,
-      vendedorId: relatorioSelecionado.relatorio.vendedorId,
-      periodo: relatorioSelecionado.relatorio.periodo,
-      data: formPagamento.data,
-      valor: parseFloat(formPagamento.valor),
-      formaPagamento: formPagamento.formaPagamento,
-      comprovante: formPagamento.comprovante || undefined,
-      observacoes: formPagamento.observacoes || undefined,
-      realizadoPor: "Usuário Backoffice",
-      realizadoEm: new Date().toISOString()
-    };
+
 
     // Salvar no Supabase
-    api.create('pagamentosComissao', novoPagamento)
+    // Salvar no Supabase
+    api.comissoes.createPagamento({
+      vendedor_uuid: relatorioSelecionado.relatorio.vendedorId,
+      valor: parseFloat(formPagamento.valor),
+      periodo: relatorioSelecionado.relatorio.periodo,
+      forma_pagamento: formPagamento.formaPagamento,
+      comprovante_url: formPagamento.comprovante || undefined,
+      observacoes: formPagamento.observacoes || undefined
+    })
       .then(() => {
-        setPagamentos([...pagamentos, novoPagamento]);
-        recalcularRelatorio(relatorioSelecionado.relatorio.id);
-        toast.success("Pagamento registrado com sucesso!");
-        setDialogPagamento(false);
+        carregarComissoes().then(() => {
+          toast.success("Pagamento registrado com sucesso!");
+          setDialogPagamento(false);
+        });
       })
       .catch((error: any) => {
         console.error('[COMISSOES] Erro ao salvar pagamento:', error);
@@ -511,25 +534,25 @@ export function CommissionsManagement({
 
     // Atualizar no array correspondente
     if (tipo === 'venda') {
-      setComissoesVendas(comissoesVendas.map(cv => 
+      setComissoesVendas(comissoesVendas.map(cv =>
         cv.id === dados.id ? dadosEditados as ComissaoVenda : cv
       ));
     } else if (tipo === 'lancamentoManual') {
-      setLancamentosManuais(lancamentosManuais.map(lm => 
+      setLancamentosManuais(lancamentosManuais.map(lm =>
         lm.id === dados.id ? dadosEditados as LancamentoManual : lm
       ));
     } else if (tipo === 'pagamento') {
-      setPagamentos(pagamentos.map(p => 
+      setPagamentos(pagamentos.map(p =>
         p.id === dados.id ? dadosEditados as PagamentoPeriodo : p
       ));
     }
 
     // Recalcular ambos os períodos se mudou
     if (periodoAnterior !== periodoNovo) {
-      const relAnterior = relatorios.find(r => 
+      const relAnterior = relatorios.find(r =>
         r.vendedorId === dados.vendedorId && r.periodo === periodoAnterior
       );
-      const relNovo = relatorios.find(r => 
+      const relNovo = relatorios.find(r =>
         r.vendedorId === dados.vendedorId && r.periodo === periodoNovo
       );
 
@@ -538,7 +561,7 @@ export function CommissionsManagement({
 
       toast.success(`Lançamento transferido de ${formatPeriodo(periodoAnterior)} para ${formatPeriodo(periodoNovo)}`);
     } else {
-      recalcularRelatorio(relatorios.find(r => 
+      recalcularRelatorio(relatorios.find(r =>
         r.vendedorId === dados.vendedorId && r.periodo === periodoNovo
       )?.id || "");
       toast.success("Lançamento atualizado com sucesso!");
@@ -595,15 +618,15 @@ export function CommissionsManagement({
     const relatorio = relatorios.find(r => r.id === relatorioId);
     if (!relatorio) return;
 
-    const vendas = comissoesVendas.filter(cv => 
+    const vendas = comissoesVendas.filter(cv =>
       cv.vendedorId === relatorio.vendedorId && cv.periodo === relatorio.periodo
     );
-    
-    const lancamentos = lancamentosManuais.filter(lm => 
+
+    const lancamentos = lancamentosManuais.filter(lm =>
       lm.vendedorId === relatorio.vendedorId && lm.periodo === relatorio.periodo
     );
-    
-    const pagsRelatorio = pagamentos.filter(p => 
+
+    const pagsRelatorio = pagamentos.filter(p =>
       p.vendedorId === relatorio.vendedorId && p.periodo === relatorio.periodo
     );
 
@@ -664,11 +687,11 @@ export function CommissionsManagement({
   const handleEnvioEmMassa = async () => {
     setEnviandoEmMassa(true);
     setDialogEnvioEmMassa(false);
-    
+
     const relatoriosParaEnviar = relatoriosCompletos.filter(r => relatoriosSelecionados.has(r.relatorio.id));
-    
+
     setProgressoEnvio({ atual: 0, total: relatoriosParaEnviar.length });
-    
+
     const resultados = {
       sucessos: [] as string[],
       falhas: [] as { vendedor: string; motivo: string }[]
@@ -676,11 +699,11 @@ export function CommissionsManagement({
 
     for (let i = 0; i < relatoriosParaEnviar.length; i++) {
       const relCompleto = relatoriosParaEnviar[i];
-      
+
       setProgressoEnvio({ atual: i + 1, total: relatoriosParaEnviar.length });
-      
+
       await new Promise(resolve => setTimeout(resolve, 800));
-      
+
       if (!relCompleto.vendedorEmail) {
         resultados.falhas.push({
           vendedor: relCompleto.vendedorNome,
@@ -696,7 +719,7 @@ export function CommissionsManagement({
         console.log('Período:', formatPeriodo(relCompleto.relatorio.periodo));
         console.log('Valor Líquido:', formatCurrency(relCompleto.relatorio.valorLiquido));
         console.log('==========================================');
-        
+
         resultados.sucessos.push(relCompleto.vendedorNome);
       } catch (error) {
         resultados.falhas.push({
@@ -708,7 +731,7 @@ export function CommissionsManagement({
 
     setEnviandoEmMassa(false);
     setProgressoEnvio({ atual: 0, total: 0 });
-    
+
     if (resultados.sucessos.length > 0 && resultados.falhas.length === 0) {
       toast.success(
         `${resultados.sucessos.length} ${resultados.sucessos.length === 1 ? 'relatório enviado' : 'relatórios enviados'} com sucesso!\n\n` +
@@ -728,7 +751,7 @@ export function CommissionsManagement({
         { duration: 8000 }
       );
     }
-    
+
     setRelatoriosSelecionados(new Set());
   };
 
@@ -740,12 +763,12 @@ export function CommissionsManagement({
     try {
       setLoading(true);
       toast.info('Calculando comissões de vendas concluídas...');
-      
+
       const resultado = await api.create('comissoesVendas/calcular', {});
-      
+
       if (resultado.success) {
         toast.success(resultado.message, { duration: 5000 });
-        
+
         // Recarregar dados
         await carregarComissoes();
       } else {
@@ -767,9 +790,9 @@ export function CommissionsManagement({
     try {
       setLoading(true);
       toast.info('🧹 Limpando comissões de vendas canceladas...');
-      
+
       const resultado = await api.create('comissoesVendas/limpar-canceladas', {});
-      
+
       if (resultado.success) {
         const detalhes = resultado.detalhes;
         if (detalhes.comissoesExcluidas > 0) {
@@ -781,7 +804,7 @@ export function CommissionsManagement({
         } else {
           toast.info('✓ Nenhuma comissão de venda cancelada encontrada', { duration: 4000 });
         }
-        
+
         // Recarregar dados
         await carregarComissoes();
       } else {
@@ -805,10 +828,10 @@ export function CommissionsManagement({
       fechado: { variant: "outline", icon: AlertCircle, label: "Fechado" },
       pago: { variant: "default", icon: CheckCircle2, label: "Pago" }
     };
-    
+
     const config = variants[status] || variants.aberto;
     const Icon = config.icon;
-    
+
     return (
       <Badge variant={config.variant} className="gap-1">
         <Icon className="h-3 w-3" />
@@ -824,17 +847,21 @@ export function CommissionsManagement({
     }).format(value);
   };
 
-  const formatDate = (dateString: string) => {
-    return format(new Date(dateString), "dd/MM/yyyy", { locale: ptBR });
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return "—";
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "—";
+    return format(date, "dd/MM/yyyy", { locale: ptBR });
   };
 
-  const formatPeriodo = (periodo: string) => {
-    const [ano, mes] = periodo.split('-');
-    if (mes) {
-      const data = new Date(parseInt(ano), parseInt(mes) - 1);
-      return format(data, "MMMM/yyyy", { locale: ptBR });
-    }
-    return ano;
+  const formatPeriodo = (periodo: string | null | undefined) => {
+    if (!periodo) return "—";
+    const parts = periodo.split('-');
+    if (parts.length < 2) return periodo;
+    const [ano, mes] = parts;
+    const data = new Date(parseInt(ano), parseInt(mes) - 1);
+    if (isNaN(data.getTime())) return periodo;
+    return format(data, "MMMM/yyyy", { locale: ptBR });
   };
 
   const meses = [
@@ -859,10 +886,10 @@ export function CommissionsManagement({
 
   // Atualizar relatório de detalhes (callback do CommissionReportPage)
   const handleAtualizarRelatorioDetalhe = (relatorioAtualizado: RelatorioPeriodoComissoes) => {
-    setRelatorios(relatorios.map(rel => 
+    setRelatorios(relatorios.map(rel =>
       rel.id === relatorioAtualizado.id ? relatorioAtualizado : rel
     ));
-    
+
     // Recalcular relatório completo
     const relCompleto = calcularRelatorioCompleto(relatorioAtualizado);
     setRelatorioSelecionado(relCompleto);
@@ -871,7 +898,7 @@ export function CommissionsManagement({
   // Períodos disponíveis para transferência
   const periodosDisponiveis = useMemo(() => {
     if (!lancamentoEditando) return [];
-    
+
     // Pegar períodos do mesmo vendedor
     const vendedorId = lancamentoEditando.dados.vendedorId;
     return relatorios
@@ -888,11 +915,12 @@ export function CommissionsManagement({
   // Se está visualizando um relatório, mostrar a página de detalhes
   if (visualizandoRelatorio && relatorioSelecionado) {
     return (
-      <CommissionReportPage 
+      <CommissionReportPage
         relatorio={relatorioSelecionado.relatorio}
         relatorioCompleto={relatorioSelecionado}
         onVoltar={handleVoltarLista}
         onAtualizarRelatorio={handleAtualizarRelatorioDetalhe}
+        onRecarregar={carregarComissoes}
       />
     );
   }
@@ -951,7 +979,7 @@ export function CommissionsManagement({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {estatisticas.totalComissoes > 0 
+              {estatisticas.totalComissoes > 0
                 ? ((estatisticas.totalPago / estatisticas.totalComissoes) * 100).toFixed(1)
                 : 0}%
             </div>
@@ -975,7 +1003,7 @@ export function CommissionsManagement({
                 Visualize, gerencie lançamentos manuais e registre pagamentos
               </CardDescription>
             </div>
-            
+
             {/* Dropdown de Ações Administrativas */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1311,9 +1339,9 @@ export function CommissionsManagement({
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Tipo de Lançamento</Label>
-              <Select 
-                value={formLancamento.tipo} 
-                onValueChange={(value: "credito" | "debito") => setFormLancamento({...formLancamento, tipo: value})}
+              <Select
+                value={formLancamento.tipo}
+                onValueChange={(value: "credito" | "debito") => setFormLancamento({ ...formLancamento, tipo: value })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -1343,7 +1371,7 @@ export function CommissionsManagement({
                 min="0"
                 placeholder="0,00"
                 value={formLancamento.valor}
-                onChange={(e) => setFormLancamento({...formLancamento, valor: e.target.value})}
+                onChange={(e) => setFormLancamento({ ...formLancamento, valor: e.target.value })}
               />
             </div>
 
@@ -1352,7 +1380,7 @@ export function CommissionsManagement({
               <Input
                 type="date"
                 value={formLancamento.data}
-                onChange={(e) => setFormLancamento({...formLancamento, data: e.target.value})}
+                onChange={(e) => setFormLancamento({ ...formLancamento, data: e.target.value })}
               />
             </div>
 
@@ -1361,7 +1389,7 @@ export function CommissionsManagement({
               <Textarea
                 placeholder="Ex: Bonificação por atingimento de meta"
                 value={formLancamento.descricao}
-                onChange={(e) => setFormLancamento({...formLancamento, descricao: e.target.value})}
+                onChange={(e) => setFormLancamento({ ...formLancamento, descricao: e.target.value })}
                 rows={3}
               />
             </div>
@@ -1411,7 +1439,7 @@ export function CommissionsManagement({
                 min="0"
                 placeholder="0,00"
                 value={formPagamento.valor}
-                onChange={(e) => setFormPagamento({...formPagamento, valor: e.target.value})}
+                onChange={(e) => setFormPagamento({ ...formPagamento, valor: e.target.value })}
               />
             </div>
 
@@ -1420,15 +1448,15 @@ export function CommissionsManagement({
               <Input
                 type="date"
                 value={formPagamento.data}
-                onChange={(e) => setFormPagamento({...formPagamento, data: e.target.value})}
+                onChange={(e) => setFormPagamento({ ...formPagamento, data: e.target.value })}
               />
             </div>
 
             <div className="space-y-2">
               <Label>Forma de Pagamento</Label>
-              <Select 
-                value={formPagamento.formaPagamento} 
-                onValueChange={(value) => setFormPagamento({...formPagamento, formaPagamento: value})}
+              <Select
+                value={formPagamento.formaPagamento}
+                onValueChange={(value) => setFormPagamento({ ...formPagamento, formaPagamento: value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione..." />
@@ -1449,7 +1477,7 @@ export function CommissionsManagement({
               <Input
                 placeholder="Ex: PIX-2025-001"
                 value={formPagamento.comprovante}
-                onChange={(e) => setFormPagamento({...formPagamento, comprovante: e.target.value})}
+                onChange={(e) => setFormPagamento({ ...formPagamento, comprovante: e.target.value })}
               />
             </div>
 
@@ -1458,7 +1486,7 @@ export function CommissionsManagement({
               <Textarea
                 placeholder="Informações adicionais sobre o pagamento"
                 value={formPagamento.observacoes}
-                onChange={(e) => setFormPagamento({...formPagamento, observacoes: e.target.value})}
+                onChange={(e) => setFormPagamento({ ...formPagamento, observacoes: e.target.value })}
                 rows={2}
               />
             </div>
@@ -1496,7 +1524,7 @@ export function CommissionsManagement({
                   <span className="text-muted-foreground">Tipo:</span>
                   <span className="font-medium">
                     {lancamentoEditando.tipo === 'venda' && 'Comissão de Venda'}
-                    {lancamentoEditando.tipo === 'lancamentoManual' && 
+                    {lancamentoEditando.tipo === 'lancamentoManual' &&
                       `Lançamento Manual (${(lancamentoEditando.dados as LancamentoManual).tipo})`}
                     {lancamentoEditando.tipo === 'pagamento' && 'Pagamento'}
                   </span>
@@ -1504,8 +1532,8 @@ export function CommissionsManagement({
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Valor:</span>
                   <span className="font-medium">
-                    {formatCurrency('valor' in lancamentoEditando.dados 
-                      ? lancamentoEditando.dados.valor 
+                    {formatCurrency('valor' in lancamentoEditando.dados
+                      ? lancamentoEditando.dados.valor
                       : (lancamentoEditando.dados as ComissaoVenda).valorComissao)}
                   </span>
                 </div>
@@ -1520,7 +1548,7 @@ export function CommissionsManagement({
                 <Label>Transferir para período</Label>
                 <Select
                   value={formEdicao.periodo}
-                  onValueChange={(value) => setFormEdicao({...formEdicao, periodo: value})}
+                  onValueChange={(value) => setFormEdicao({ ...formEdicao, periodo: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -1535,7 +1563,7 @@ export function CommissionsManagement({
                 </Select>
                 {formEdicao.periodo !== lancamentoEditando.dados.periodo && (
                   <p className="text-sm text-amber-600">
-                    ⚠️ O lançamento será transferido de {formatPeriodo(lancamentoEditando.dados.periodo)} 
+                    ⚠️ O lançamento será transferido de {formatPeriodo(lancamentoEditando.dados.periodo)}
                     para {formatPeriodo(formEdicao.periodo)}
                   </p>
                 )}
@@ -1547,7 +1575,7 @@ export function CommissionsManagement({
                   <Label>Observações</Label>
                   <Textarea
                     value={formEdicao.observacoes}
-                    onChange={(e) => setFormEdicao({...formEdicao, observacoes: e.target.value})}
+                    onChange={(e) => setFormEdicao({ ...formEdicao, observacoes: e.target.value })}
                     placeholder="Adicione observações..."
                     rows={2}
                   />
@@ -1609,7 +1637,7 @@ export function CommissionsManagement({
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Fechado em:</span>
                   <span className="font-medium">
-                    {relatorioSelecionado.relatorio.dataFechamento 
+                    {relatorioSelecionado.relatorio.dataFechamento
                       ? new Date(relatorioSelecionado.relatorio.dataFechamento).toLocaleString('pt-BR')
                       : '-'}
                   </span>
@@ -1683,7 +1711,7 @@ export function CommissionsManagement({
 
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
               <p className="text-xs text-amber-900">
-                ⚠️ <span className="font-semibold">NOTA DE DEMONSTRAÇÃO:</span> Esta é uma simulação. 
+                ⚠️ <span className="font-semibold">NOTA DE DEMONSTRAÇÃO:</span> Esta é uma simulação.
                 Em produção, os PDFs seriam gerados e enviados via API de backend com serviço de e-mail configurado.
               </p>
             </div>

@@ -93,6 +93,8 @@ export interface Cliente {
   
   // Dados Cadastrais - Identificação
   tipoPessoa: TipoPessoa;
+  /** ID do tipo de pessoa (ref_tipo_pessoa_id_FK) - enviado para a API como ref_tipo_pessoa_id */
+  refTipoPessoaId?: number;
   cpfCnpj: string;
   razaoSocial: string;
   nomeFantasia?: string;

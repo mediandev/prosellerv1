@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Cliente } from '../types/customer';
-import { Compromisso, Pagamento, TipoCompromisso, TipoArquivo } from '../types/contaCorrente';
+import { ArquivoAnexo, Compromisso, Pagamento, TipoCompromisso, TipoArquivo } from '../types/contaCorrente';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -46,6 +46,84 @@ interface LancamentoUnificado {
   observacoes?: string;
   arquivosCount?: number;
 }
+
+const mapCompromisso = (comp: any): Compromisso => ({
+  id: String(comp.id ?? ''),
+  clienteId: String(comp.clienteId ?? comp.cliente_id ?? ''),
+  clienteNome: comp.clienteNome ?? comp.cliente_nome ?? '',
+  data: comp.data ?? '',
+  valor: Number(comp.valor ?? 0),
+  titulo: comp.titulo ?? '',
+  descricao: comp.descricao ?? '',
+  tipoCompromisso: comp.tipoCompromisso === 'Investimento' ? 'Investimento' : 'Ressarcimento',
+  categoriaId: comp.categoriaId != null ? String(comp.categoriaId) : undefined,
+  categoriaNome: comp.categoria || comp.categoriaNome || undefined,
+  arquivos: Array.isArray(comp.arquivosAnexos)
+    ? comp.arquivosAnexos.map((arq: any): ArquivoAnexo => ({
+        id: String(arq.id || ''),
+        nomeArquivo: arq.nomeArquivo || arq.nome || '',
+        tamanho: Number(arq.tamanho || 0),
+        tipoArquivoId: String(arq.tipoArquivoId || ''),
+        tipoArquivoNome: arq.tipoArquivoNome || arq.tipo || '',
+        url: arq.url || '',
+        dataUpload: arq.dataUpload || arq.data || '',
+        uploadedBy: arq.uploadedBy || arq.criadoPor || '',
+      }))
+    : [],
+  status:
+    comp.status === 'Pago Integralmente'
+      ? 'Pago Integralmente'
+      : comp.status === 'Pago Parcialmente'
+        ? 'Pago Parcialmente'
+        : 'Pendente',
+  valorPago: Number(comp.valorPago || 0),
+  valorPendente: Number(comp.valorPendente || comp.valor || 0),
+  dataCriacao: comp.dataCriacao || new Date().toISOString(),
+  criadoPor: comp.criadoPor || 'Sistema',
+  dataAtualizacao: comp.dataAtualizacao || comp.dataCriacao || new Date().toISOString(),
+  atualizadoPor: comp.atualizadoPor || comp.criadoPor || 'Sistema',
+});
+
+const mapPagamento = (
+  pag: any,
+  compromissoLookup: Record<string, Compromisso>,
+  categoriasLookup: Record<string, string>
+): Pagamento => {
+  const compromissoIdValue = pag.compromissoId != null
+    ? String(pag.compromissoId)
+    : (pag.conta_corrente_id != null ? String(pag.conta_corrente_id) : '');
+  const compromisso = compromissoLookup[compromissoIdValue];
+
+  return {
+    id: String(pag.id ?? ''),
+    compromissoId: compromissoIdValue,
+    compromissoTitulo: compromisso?.titulo || '',
+    dataPagamento: pag.dataPagamento || pag.data_pagamento || pag.dataCriacao || pag.created_at || new Date().toISOString(),
+    valor: Number(pag.valor || pag.valor_pago || 0),
+    formaPagamento: pag.formaPagamento || pag.forma_pagamento || '',
+    categoriaId: pag.categoriaId != null ? String(pag.categoriaId) : undefined,
+    categoriaNome:
+      (pag.categoriaId != null ? categoriasLookup[String(pag.categoriaId)] : undefined) ||
+      pag.categoria ||
+      pag.categoriaNome ||
+      undefined,
+    comprovanteAnexo: pag.arquivoComprovante
+      ? {
+          id: String(pag.arquivoComprovante.id || ''),
+          nomeArquivo: pag.arquivoComprovante.nomeArquivo || pag.arquivoComprovante.nome || '',
+          tamanho: Number(pag.arquivoComprovante.tamanho || 0),
+          tipoArquivoId: String(pag.arquivoComprovante.tipoArquivoId || ''),
+          tipoArquivoNome: pag.arquivoComprovante.tipoArquivoNome || pag.arquivoComprovante.tipo || '',
+          url: pag.arquivoComprovante.url || '',
+          dataUpload: pag.arquivoComprovante.dataUpload || pag.arquivoComprovante.data || '',
+          uploadedBy: pag.arquivoComprovante.uploadedBy || pag.arquivoComprovante.criadoPor || '',
+        }
+      : undefined,
+    observacoes: pag.observacoes,
+    dataCriacao: pag.dataCriacao || new Date().toISOString(),
+    criadoPor: pag.criadoPor || 'Sistema',
+  };
+};
 
 export function CustomerFormContaCorrente({ formData, readOnly }: CustomerFormContaCorrenteProps) {
   // Estados para dados do servidor
@@ -123,18 +201,40 @@ export function CustomerFormContaCorrente({ formData, readOnly }: CustomerFormCo
   useEffect(() => {
     const carregarDados = async () => {
       try {
-        const [compData, pagData, tiposData, formasData, catData] = await Promise.all([
-          api.get(`conta-corrente/compromissos?clienteId=${formData.id}`),
-          api.get(`conta-corrente/pagamentos?clienteId=${formData.id}`),
+        const [compResponse, tiposData, formasData, catData] = await Promise.all([
+          api.contaCorrente.list({ params: { cliente_id: formData.id, page: 1, limit: 100 } }),
           api.get('conta-corrente/tipos-arquivo'),
           api.get('formas-pagamento'),
           api.get('categorias-conta-corrente'),
         ]);
-        setCompromissos(compData || []);
-        setPagamentos(pagData || []);
+
+        const compromissosMapeados = (compResponse?.compromissos || []).map(mapCompromisso);
+        setCompromissos(compromissosMapeados);
         setTiposArquivo(tiposData || []);
         setFormasPagamento(formasData || []);
         setCategoriasContaCorrente(catData || []);
+
+        const compromissoLookup = compromissosMapeados.reduce<Record<string, Compromisso>>((acc, comp) => {
+          acc[comp.id] = comp;
+          return acc;
+        }, {});
+
+        const categoriasLookup = (catData || []).reduce<Record<string, string>>((acc: Record<string, string>, cat: any) => {
+          acc[String(cat.id)] = cat.nome;
+          return acc;
+        }, {});
+
+        if (compromissosMapeados.length > 0) {
+          const pagamentosPorCompromisso = await Promise.all(
+            compromissosMapeados.map((comp) => api.contaCorrente.listPagamentos(comp.id))
+          );
+          const pagamentosMapeados = pagamentosPorCompromisso
+            .flat()
+            .map((pag) => mapPagamento(pag, compromissoLookup, categoriasLookup));
+          setPagamentos(pagamentosMapeados);
+        } else {
+          setPagamentos([]);
+        }
       } catch (error) {
         console.error('[CONTA-CORRENTE] Erro ao carregar dados:', error);
         setCompromissos([]);

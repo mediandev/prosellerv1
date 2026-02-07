@@ -135,6 +135,8 @@ function mapClienteCompleto(rpc: {
     cpfCnpj: (c as any).cpf_cnpj ?? (c as any).cpfCnpj ?? '',
     codigo: (c as any).codigo ?? '',
     inscricaoEstadual: (c as any).inscricao_estadual ?? (c as any).inscricaoEstadual ?? '',
+    refTipoPessoaId: (c as any).ref_tipo_pessoa_id_FK != null ? Number((c as any).ref_tipo_pessoa_id_FK) : undefined,
+    tipoPessoa: (c as any).tipo_pessoa_nome ?? (c as any).tipoPessoa ?? (String((c as any).cpf_cnpj ?? '').replace(/\D/g, '').length === 11 ? 'Pessoa Física' : 'Pessoa Jurídica'),
     statusAprovacao,
     situacao,
     segmentoId: (c as any).segmento_id != null ? String((c as any).segmento_id) : undefined,
@@ -146,7 +148,11 @@ function mapClienteCompleto(rpc: {
     descontoPadrao: Number((c as any).desconto ?? (c as any).descontoPadrao ?? 0),
     descontoFinanceiro: Number((c as any).desconto_financeiro ?? (c as any).descontoFinanceiro ?? 0),
     pedidoMinimo: Number((c as any).pedido_minimo ?? (c as any).pedidoMinimo ?? 0),
-    condicoesPagamentoAssociadas: Array.isArray((c as any).condicoesdisponiveis) ? (c as any).condicoesdisponiveis.map((x: unknown) => String(x)) : [],
+    condicoesPagamentoAssociadas: Array.isArray((c as any).condicoesdisponiveis)
+      ? (c as any).condicoesdisponiveis.map((x: unknown) => String(x))
+      : Array.isArray(rpc.condicoes_cliente)
+        ? rpc.condicoes_cliente.map((cond: any) => String(cond.ID_condições ?? cond.id_condicao ?? cond.condicao_id ?? cond.id))
+        : [],
     empresaFaturamento: (c as any).empresaFaturamento != null ? String((c as any).empresaFaturamento) : undefined,
     vendedoresAtribuidos: vendedores.map((v: any) => ({ id: v.user_id ?? v.id, nome: v.nome ?? '', email: v.email ?? '' })),
     vendedorAtribuido: vendedorAtribuido ? { id: (vendedorAtribuido as any).user_id ?? (vendedorAtribuido as any).id, nome: (vendedorAtribuido as any).nome ?? '', email: (vendedorAtribuido as any).email ?? '' } : undefined,
@@ -265,7 +271,7 @@ serve(async (req) => {
       const body = await req.json().catch(() => ({}))
       const nome = body.nome ?? body.razaoSocial ?? ''
       if (!nome || String(nome).trim().length < 2) throw new Error('Nome deve ter pelo menos 2 caracteres')
-      
+
       // Extrair grupo_id (UUID) do grupoRede
       let grupoId: string | null = null
       if (body.grupoRede || body.grupo_rede || body.grupoId || body.grupo_id) {
@@ -286,11 +292,28 @@ serve(async (req) => {
           }
         }
       }
-      
+
+      // Processar tipoPessoa - pode vir como objeto com ref_tipo_pessoa_id, ID inteiro ou string
+      let refTipoPessoaId: number | null = null
+      if (body.tipoPessoa) {
+        if (typeof body.tipoPessoa === 'object') {
+          // Objeto com ref_tipo_pessoa_id ou id
+          refTipoPessoaId = Number(body.tipoPessoa.ref_tipo_pessoa_id ?? body.tipoPessoa.id ?? body.tipoPessoa.tipoPessoaId ?? null)
+        } else if (typeof body.tipoPessoa === 'string' && body.tipoPessoa.trim() !== '') {
+          // Se for string não vazia, converter para número
+          refTipoPessoaId = Number(body.tipoPessoa)
+        } else if (typeof body.tipoPessoa === 'number') {
+          refTipoPessoaId = body.tipoPessoa
+        }
+      } else if (body.tipoPessoaId || body.ref_tipo_pessoa_id_FK || body.ref_tipo_pessoa_id) {
+        refTipoPessoaId = Number(body.tipoPessoaId ?? body.ref_tipo_pessoa_id_FK ?? body.ref_tipo_pessoa_id)
+      }
+
       const p = {
         p_nome: String(nome).trim(),
         p_nome_fantasia: body.nomeFantasia ?? body.nome_fantasia ?? null,
-        p_cpf_cnpj: body.cpfCnpj ?? body.cpf_cnpj ? String(body.cpfCnpj ?? body.cpf_cnpj).replace(/\D/g, '') : null,
+        p_cpf_cnpj: body.cpfCnpj ?? body.cpf_cnpj ?? null,
+        p_ref_tipo_pessoa_id_fk: refTipoPessoaId,
         p_inscricao_estadual: body.inscricaoEstadual ?? body.inscricao_estadual ?? null,
         p_codigo: body.codigo ?? null,
         p_grupo_id: grupoId,
@@ -326,7 +349,7 @@ serve(async (req) => {
       if (isNaN(idNum) || idNum <= 0) throw new Error('ID inválido')
       const nome = body.nome ?? body.razaoSocial ?? ''
       if (!nome || String(nome).trim().length < 2) throw new Error('Nome deve ter pelo menos 2 caracteres')
-      
+
       // Extrair grupo_id (UUID) do grupoRede
       let grupoId: string | null = null
       if (body.grupoRede || body.grupo_rede || body.grupoId || body.grupo_id) {
@@ -347,7 +370,7 @@ serve(async (req) => {
           }
         }
       }
-      
+
       // Converter situacao para ref_situacao_id se necessário
       let refSituacaoId: number | null = null
       if (body.situacao) {
@@ -360,7 +383,7 @@ serve(async (req) => {
           refSituacaoId = situacaoData.ref_situacao_id
         }
       }
-      
+
       // Processar vendedoresAtribuidos - pode vir como array de IDs ou array de objetos
       let vendedoresAtribuidosArray: string[] | null = null
       if (body.vendedoresAtribuidos && Array.isArray(body.vendedoresAtribuidos) && body.vendedoresAtribuidos.length > 0) {
@@ -383,7 +406,7 @@ serve(async (req) => {
           if (body.condicoesPagamentoAssociadas.length > 0) {
             // Se for array de objetos, extrair IDs
             if (typeof body.condicoesPagamentoAssociadas[0] === 'object') {
-              condicoesPagamentoIds = body.condicoesPagamentoAssociadas.map((c: any) => 
+              condicoesPagamentoIds = body.condicoesPagamentoAssociadas.map((c: any) =>
                 Number(c.id || c.condicao_id || c.condicaoId || c)
               )
             } else {
@@ -408,11 +431,29 @@ serve(async (req) => {
       } else if (body.empresaFaturamentoId) {
         empresaFaturamentoId = Number(body.empresaFaturamentoId)
       }
-      
+
+      // Processar tipoPessoa - pode vir como objeto com ref_tipo_pessoa_id, ID inteiro ou string
+      let refTipoPessoaId: number | null = null
+      if (body.tipoPessoa) {
+        if (typeof body.tipoPessoa === 'object') {
+          // Objeto com ref_tipo_pessoa_id ou id
+          refTipoPessoaId = Number(body.tipoPessoa.ref_tipo_pessoa_id ?? body.tipoPessoa.id ?? body.tipoPessoa.tipoPessoaId ?? null)
+        } else if (typeof body.tipoPessoa === 'string' && body.tipoPessoa.trim() !== '') {
+          // Se for string não vazia, converter para número
+          refTipoPessoaId = Number(body.tipoPessoa)
+        } else if (typeof body.tipoPessoa === 'number') {
+          refTipoPessoaId = body.tipoPessoa
+        }
+      } else if (body.tipoPessoaId || body.ref_tipo_pessoa_id_FK || body.ref_tipo_pessoa_id) {
+        refTipoPessoaId = Number(body.tipoPessoaId ?? body.ref_tipo_pessoa_id_FK ?? body.ref_tipo_pessoa_id)
+      }
+
       // Log para debug
       console.log('[CLIENTES-V2] Processando campos:', {
         empresaFaturamento: body.empresaFaturamento,
         empresaFaturamentoId,
+        tipoPessoa: body.tipoPessoa,
+        refTipoPessoaId,
         vendedorAtribuido: body.vendedorAtribuido,
         vendedoresAtribuidos: body.vendedoresAtribuidos,
         vendedoresAtribuidosArray,
@@ -424,7 +465,8 @@ serve(async (req) => {
         p_cliente_id: idNum,
         p_nome: String(nome).trim(),
         p_nome_fantasia: body.nomeFantasia ?? body.nome_fantasia ?? null,
-        p_cpf_cnpj: body.cpfCnpj ?? body.cpf_cnpj ? String(body.cpfCnpj ?? body.cpf_cnpj).replace(/\D/g, '') : null,
+        p_cpf_cnpj: body.cpfCnpj ?? body.cpf_cnpj ?? null,
+        p_ref_tipo_pessoa_id_fk: refTipoPessoaId,
         p_inscricao_estadual: body.inscricaoEstadual ?? body.inscricao_estadual ?? null,
         p_codigo: body.codigo ?? null,
         p_grupo_id: grupoId,

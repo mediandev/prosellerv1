@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { 
+import {
   ArrowLeft,
   Download,
   FileText,
@@ -34,8 +34,10 @@ import {
   Plus,
   Mail,
   Edit,
-  Eye
+  Eye,
+  Trash2
 } from "lucide-react";
+import { api } from "../services/api";
 import { RelatorioPeriodoComissoes, RelatorioComissoesCompleto, LancamentoManual, PagamentoPeriodo, ComissaoVenda } from "../types/comissao";
 import { toast } from "sonner@2.0.3";
 import jsPDF from "jspdf";
@@ -46,15 +48,16 @@ interface CommissionReportPageProps {
   relatorioCompleto?: RelatorioComissoesCompleto; // Opcional para compatibilidade
   onVoltar: () => void;
   onAtualizarRelatorio?: (relatorioAtualizado: RelatorioPeriodoComissoes) => void;
+  onRecarregar?: () => void;
 }
 
-export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, onAtualizarRelatorio }: CommissionReportPageProps) {
+export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, onAtualizarRelatorio, onRecarregar }: CommissionReportPageProps) {
   const [dialogLancamento, setDialogLancamento] = useState(false);
   const [dialogPagamento, setDialogPagamento] = useState(false);
   const [dialogVenda, setDialogVenda] = useState(false);
   const [dialogEmail, setDialogEmail] = useState(false);
   const [emailDestino, setEmailDestino] = useState("");
-  
+
   // Estados para visualização/edição
   const [modoLancamento, setModoLancamento] = useState<'novo' | 'visualizar' | 'editar'>('novo');
   const [modoPagamento, setModoPagamento] = useState<'novo' | 'visualizar' | 'editar'>('novo');
@@ -62,27 +65,27 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
   const [lancamentoSelecionado, setLancamentoSelecionado] = useState<LancamentoManual | null>(null);
   const [pagamentoSelecionado, setPagamentoSelecionado] = useState<PagamentoPeriodo | null>(null);
   const [vendaSelecionada, setVendaSelecionada] = useState<ComissaoVenda | null>(null);
-  
+
   // Dados do relatório completo vêm das props
   const vendedor = relatorioCompleto?.vendedor;
   const vendas = relatorioCompleto?.vendas || [];
   const lancamentos = relatorioCompleto?.lancamentos || [];
   const pagamentosRelatorio = relatorioCompleto?.pagamentos || [];
-  
+
   const lancamentosCredito = lancamentos.filter((l: any) => l.tipo === 'credito');
   const lancamentosDebito = lancamentos.filter((l: any) => l.tipo === 'debito');
-  
+
   const totalVendas = vendas.reduce((sum: number, v: any) => sum + v.valorTotalVenda, 0);
   const quantidadeVendas = vendas.length;
   const totalComissoes = vendas.reduce((sum: number, v: any) => sum + v.valorComissao, 0);
   const totalCreditos = lancamentosCredito.reduce((sum: number, l: any) => sum + l.valor, 0);
   const totalDebitos = lancamentosDebito.reduce((sum: number, l: any) => sum + l.valor, 0);
-  
+
   // Calcular valor líquido e saldo em tempo real
   const valorLiquidoCalculado = totalComissoes + totalCreditos - totalDebitos + (relatorio.saldoAnterior || 0);
   const totalPagoCalculado = pagamentosRelatorio.reduce((sum: number, p: any) => sum + p.valor, 0);
   const saldoDevedorCalculado = valorLiquidoCalculado - totalPagoCalculado;
-  
+
   // Usar dados do relatorioCompleto se fornecido, senão usar calculados
   const dadosRelatorio = relatorioCompleto || {
     relatorio,
@@ -99,7 +102,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     totalCreditos,
     totalDebitos
   };
-  
+
   // Formulário de lançamento manual
   const [formLancamento, setFormLancamento] = useState({
     tipo: "credito" as "credito" | "debito",
@@ -118,7 +121,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     data: format(new Date(), "yyyy-MM-dd"),
     periodo: relatorio.periodo
   });
-  
+
   // Formulário de venda (para visualização/edição)
   const [formVenda, setFormVenda] = useState({
     periodo: relatorio.periodo,
@@ -130,10 +133,10 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
       fechado: { variant: "outline", icon: AlertCircle, label: "Fechado" },
       pago: { variant: "default", icon: CheckCircle2, label: "Pago" }
     };
-    
+
     const config = variants[status] || variants.aberto;
     const Icon = config.icon;
-    
+
     return (
       <Badge variant={config.variant} className="gap-1">
         <Icon className="h-3 w-3" />
@@ -149,17 +152,21 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     }).format(value);
   };
 
-  const formatDate = (dateString: string) => {
-    return format(new Date(dateString), "dd/MM/yyyy", { locale: ptBR });
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return "—";
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "—";
+    return format(date, "dd/MM/yyyy", { locale: ptBR });
   };
 
-  const formatPeriodo = (periodo: string) => {
-    const [ano, mes] = periodo.split('-');
-    if (mes) {
-      const data = new Date(parseInt(ano), parseInt(mes) - 1);
-      return format(data, "MMMM/yyyy", { locale: ptBR });
-    }
-    return ano;
+  const formatPeriodo = (periodo: string | null | undefined) => {
+    if (!periodo) return "—";
+    const parts = periodo.split('-');
+    if (parts.length < 2) return periodo;
+    const [ano, mes] = parts;
+    const data = new Date(parseInt(ano), parseInt(mes) - 1);
+    if (isNaN(data.getTime())) return periodo;
+    return format(data, "MMMM/yyyy", { locale: ptBR });
   };
 
   const formatPeriodoInput = (periodo: string) => {
@@ -184,7 +191,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
 
   const handleExportarPDF = () => {
     const fileName = `relatorio-comissoes-${relatorio.vendedorId}-${relatorio.periodo}.pdf`;
-    
+
     toast.promise(
       new Promise((resolve, reject) => {
         setTimeout(() => {
@@ -192,24 +199,24 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
             let yPos = 20;
-            
+
             // Título
             doc.setFontSize(18);
             doc.setFont('helvetica', 'bold');
             doc.text('RELATORIO DE COMISSOES', pageWidth / 2, yPos, { align: 'center' });
             yPos += 10;
-            
+
             // Linha divisória 1
             doc.setDrawColor(200, 200, 200);
             doc.line(15, yPos, pageWidth - 15, yPos);
             yPos += 8;
-            
+
             // Informações do Vendedor
             doc.setFontSize(12);
             doc.setFont('helvetica', 'bold');
             doc.text('INFORMACOES DO VENDEDOR', 15, yPos);
             yPos += 8;
-            
+
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
             doc.text('Vendedor: ' + dadosRelatorio.vendedorNome, 15, yPos);
@@ -220,18 +227,18 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
             yPos += 6;
             doc.text('Status: ' + relatorio.status.toUpperCase(), 15, yPos);
             yPos += 8;
-            
+
             // Linha divisória 2
             doc.setDrawColor(200, 200, 200);
             doc.line(15, yPos, pageWidth - 15, yPos);
             yPos += 8;
-            
+
             // Resumo Financeiro
             doc.setFontSize(12);
             doc.setFont('helvetica', 'bold');
             doc.text('RESUMO FINANCEIRO', 15, yPos);
             yPos += 8;
-            
+
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
             doc.text('Total de Vendas: ' + formatCurrency(dadosRelatorio.totalVendas), 15, yPos);
@@ -239,30 +246,30 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
             yPos += 6;
             doc.text('Total de Comissoes: ' + formatCurrency(dadosRelatorio.totalComissoes), 15, yPos);
             yPos += 6;
-            
+
             if (dadosRelatorio.totalCreditos > 0) {
               doc.setTextColor(0, 150, 0);
               doc.text('Creditos: +' + formatCurrency(dadosRelatorio.totalCreditos), 15, yPos);
               doc.setTextColor(0, 0, 0);
               yPos += 6;
             }
-            
+
             if (dadosRelatorio.totalDebitos > 0) {
               doc.setTextColor(200, 0, 0);
               doc.text('Debitos: -' + formatCurrency(dadosRelatorio.totalDebitos), 15, yPos);
               doc.setTextColor(0, 0, 0);
               yPos += 6;
             }
-            
+
             doc.setFont('helvetica', 'bold');
             doc.text('Valor Liquido: ' + formatCurrency(relatorio.valorLiquido), 15, yPos);
             yPos += 6;
-            
+
             doc.setTextColor(0, 150, 0);
             doc.text('Total Pago: ' + formatCurrency(relatorio.totalPago), 15, yPos);
             doc.setTextColor(0, 0, 0);
             yPos += 6;
-            
+
             doc.setFont('helvetica', 'bold');
             if (saldoDevedorCalculado > 0) {
               doc.setTextColor(200, 0, 0);
@@ -273,19 +280,19 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
             doc.setTextColor(0, 0, 0);
             doc.setFont('helvetica', 'normal');
             yPos += 8;
-            
+
             // Linha divisória 3
             doc.setDrawColor(200, 200, 200);
             doc.line(15, yPos, pageWidth - 15, yPos);
             yPos += 8;
-            
+
             // Tabela de Vendas
             if (dadosRelatorio.vendas.length > 0) {
               doc.setFontSize(12);
               doc.setFont('helvetica', 'bold');
               doc.text('VENDAS DO PERIODO (' + dadosRelatorio.quantidadeVendas + ')', 15, yPos);
               yPos += 5;
-              
+
               const vendasData = dadosRelatorio.vendas.map(v => [
                 v.vendaId,
                 v.clienteNome.substring(0, 30) + (v.clienteNome.length > 30 ? '...' : ''),
@@ -294,7 +301,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
                 v.percentualComissao + '%',
                 formatCurrency(v.valorComissao)
               ]);
-              
+
               autoTable(doc, {
                 startY: yPos,
                 head: [['ID', 'Cliente', 'Data', 'Valor Venda', '%', 'Comissao']],
@@ -311,22 +318,22 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
                   5: { cellWidth: 30 }
                 }
               });
-              
+
               yPos = (doc as any).lastAutoTable.finalY + 10;
             }
-            
+
             // Lançamentos Manuais (se houver)
             if (dadosRelatorio.lancamentosCredito.length > 0 || dadosRelatorio.lancamentosDebito.length > 0) {
               if (yPos > 250) {
                 doc.addPage();
                 yPos = 20;
               }
-              
+
               doc.setFontSize(12);
               doc.setFont('helvetica', 'bold');
               doc.text('LANCAMENTOS MANUAIS', 15, yPos);
               yPos += 5;
-              
+
               const lancamentosData = [
                 ...dadosRelatorio.lancamentosCredito.map(l => [
                   format(new Date(l.data), 'dd/MM/yyyy'),
@@ -341,7 +348,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
                   formatCurrency(l.valor)
                 ])
               ];
-              
+
               autoTable(doc, {
                 startY: yPos,
                 head: [['Data', 'Tipo', 'Descricao', 'Valor']],
@@ -356,29 +363,29 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
                   3: { cellWidth: 30 }
                 }
               });
-              
+
               yPos = (doc as any).lastAutoTable.finalY + 10;
             }
-            
+
             // Histórico de Pagamentos (se houver)
             if (dadosRelatorio.pagamentos.length > 0) {
               if (yPos > 250) {
                 doc.addPage();
                 yPos = 20;
               }
-              
+
               doc.setFontSize(12);
               doc.setFont('helvetica', 'bold');
               doc.text('HISTORICO DE PAGAMENTOS', 15, yPos);
               yPos += 5;
-              
+
               const pagamentosData = dadosRelatorio.pagamentos.map(p => [
                 format(new Date(p.data), 'dd/MM/yyyy'),
                 p.formaPagamento,
                 p.comprovante || '-',
                 formatCurrency(p.valor)
               ]);
-              
+
               autoTable(doc, {
                 startY: yPos,
                 head: [['Data', 'Forma Pagamento', 'Comprovante', 'Valor']],
@@ -393,10 +400,10 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
                   3: { cellWidth: 30 }
                 }
               });
-              
+
               yPos = (doc as any).lastAutoTable.finalY + 10;
             }
-            
+
             // Rodapé
             const totalPages = (doc as any).internal.pages.length - 1;
             for (let i = 1; i <= totalPages; i++) {
@@ -416,7 +423,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
                 { align: 'right' }
               );
             }
-            
+
             // Salva o PDF
             doc.save(fileName);
             resolve(fileName);
@@ -437,7 +444,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
   const handleEnviarEmail = async () => {
     // Busca o vendedor para obter o e-mail atual
     const vendedorEmail = relatorioCompleto?.vendedor;
-    
+
     if (!vendedorEmail || !vendedorEmail.email) {
       toast.error('Vendedor não possui e-mail cadastrado');
       return;
@@ -450,9 +457,9 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
 
   const handleConfirmarEnvioEmail = async () => {
     setDialogEmail(false);
-    
+
     const fileName = `relatorio-comissoes-${relatorio.vendedorId}-${relatorio.periodo}.pdf`;
-    
+
     toast.promise(
       new Promise((resolve, reject) => {
         setTimeout(() => {
@@ -461,24 +468,24 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
             let yPos = 20;
-            
+
             // Título
             doc.setFontSize(18);
             doc.setFont('helvetica', 'bold');
             doc.text('RELATORIO DE COMISSOES', pageWidth / 2, yPos, { align: 'center' });
             yPos += 10;
-            
+
             // Linha divisória 1
             doc.setDrawColor(200, 200, 200);
             doc.line(15, yPos, pageWidth - 15, yPos);
             yPos += 8;
-            
+
             // Informações do Vendedor
             doc.setFontSize(12);
             doc.setFont('helvetica', 'bold');
             doc.text('INFORMACOES DO VENDEDOR', 15, yPos);
             yPos += 8;
-            
+
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
             doc.text('Vendedor: ' + dadosRelatorio.vendedorNome, 15, yPos);
@@ -486,11 +493,11 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
             doc.text('Email: ' + emailDestino, 15, yPos);
             yPos += 6;
             doc.text('Periodo: ' + formatPeriodo(relatorio.periodo), 15, yPos);
-            
+
             // Gera o PDF em memória (output como blob)
             const pdfBlob = doc.output('blob');
             const pdfSizeKB = (pdfBlob.size / 1024).toFixed(2);
-            
+
             // Simula o envio do e-mail
             // Em produção, aqui você faria uma chamada para sua API de e-mail
             const corpoEmail = `Ola ${dadosRelatorio.vendedorNome},
@@ -515,7 +522,7 @@ Equipe de Vendas`;
             console.log('Corpo do e-mail:');
             console.log(corpoEmail);
             console.log('====================================');
-            
+
             resolve({ email: emailDestino, fileName, pdfSizeKB, corpoEmail });
           } catch (error) {
             console.error('Erro ao preparar e-mail:', error);
@@ -609,12 +616,53 @@ Equipe de Vendas`;
     setModoVenda('editar');
   };
 
-  const handleSalvarLancamento = () => {
+
+
+  const handleExcluirLancamento = async () => {
+    if (!lancamentoSelecionado) return;
+
+    if (!confirm("Tem certeza que deseja excluir este lançamento?")) return;
+
+    try {
+      if (lancamentoSelecionado.tipo === 'venda') {
+        toast.error("Não é possível excluir comissão de venda automática");
+        return;
+      }
+
+      await api.comissoes.deleteLancamento(lancamentoSelecionado.id);
+      toast.success("Lançamento excluído com sucesso!");
+      await api.comissoes.deleteLancamento(lancamentoSelecionado.id);
+      toast.success("Lançamento excluído com sucesso!");
+      setDialogLancamento(false);
+      onRecarregar?.();
+    } catch (error) {
+      console.error("Erro ao excluir lançamento:", error);
+      toast.error("Erro ao excluir lançamento");
+    }
+  };
+
+  const handleExcluirPagamento = async () => {
+    if (!pagamentoSelecionado) return;
+
+    if (!confirm("Tem certeza que deseja excluir este pagamento?")) return;
+
+    try {
+      await api.comissoes.deletePagamento(pagamentoSelecionado.id);
+      toast.success("Pagamento excluído com sucesso!");
+      setDialogPagamento(false);
+      onRecarregar?.();
+    } catch (error) {
+      console.error("Erro ao excluir pagamento:", error);
+      toast.error("Erro ao excluir pagamento");
+    }
+  };
+
+  const handleSalvarLancamento = async () => {
     if (!formLancamento.valor || parseFloat(formLancamento.valor) <= 0) {
       toast.error("Informe um valor válido");
       return;
     }
-    
+
     if (!formLancamento.descricao.trim()) {
       toast.error("Informe a descrição do lançamento");
       return;
@@ -625,99 +673,43 @@ Equipe de Vendas`;
       return;
     }
 
-    if (modoLancamento === 'editar' && lancamentoSelecionado) {
-      // Editando lançamento existente
-      const lancamentoAtualizado: LancamentoManual = {
-        ...lancamentoSelecionado,
-        data: formLancamento.data,
-        valor: parseFloat(formLancamento.valor),
-        descricao: formLancamento.descricao,
-        periodo: formLancamento.periodo,
-        editadoPor: "Usuário Atual",
-        editadoEm: new Date().toISOString()
-      };
-
-      const lancamentosCredito = formLancamento.tipo === 'credito' 
-        ? relatorio.lancamentosCredito.map(l => l.id === lancamentoSelecionado.id ? lancamentoAtualizado : l)
-        : relatorio.lancamentosCredito;
-      
-      const lancamentosDebito = formLancamento.tipo === 'debito'
-        ? relatorio.lancamentosDebito.map(l => l.id === lancamentoSelecionado.id ? lancamentoAtualizado : l)
-        : relatorio.lancamentosDebito;
-
-      const totalCreditos = lancamentosCredito.reduce((sum, l) => sum + l.valor, 0);
-      const totalDebitos = lancamentosDebito.reduce((sum, l) => sum + l.valor, 0);
-      const valorLiquido = relatorio.totalComissoes + totalCreditos - totalDebitos;
-      const saldoDevedor = valorLiquido - relatorio.totalPago;
-
-      const relatorioAtualizado = {
-        ...relatorio,
-        lancamentosCredito,
-        lancamentosDebito,
-        totalCreditos,
-        totalDebitos,
-        valorLiquido,
-        saldoDevedor
-      };
-
-      if (onAtualizarRelatorio) {
-        onAtualizarRelatorio(relatorioAtualizado);
+    try {
+      if (modoLancamento === 'editar' && lancamentoSelecionado) {
+        // Editando lançamento existente
+        await api.comissoes.updateLancamento({
+          id: lancamentoSelecionado.id,
+          tipo: formLancamento.tipo,
+          valor: parseFloat(formLancamento.valor),
+          descricao: formLancamento.descricao,
+          periodo: formLancamento.periodo
+        });
+        toast.success(`Lançamento atualizado com sucesso!`);
+      } else {
+        // Novo lançamento
+        await api.comissoes.createLancamento({
+          vendedor_uuid: relatorio.vendedorId,
+          tipo: formLancamento.tipo,
+          valor: parseFloat(formLancamento.valor),
+          descricao: formLancamento.descricao,
+          periodo: formLancamento.periodo
+        });
+        toast.success(`Lançamento de ${formLancamento.tipo} registrado com sucesso!`);
       }
 
-      toast.success(`Lançamento atualizado com sucesso!`);
-    } else {
-      // Novo lançamento
-      const novoLancamento: LancamentoManual = {
-        id: `L${formLancamento.tipo === 'credito' ? 'C' : 'D'}-${Date.now()}`,
-        vendedorId: relatorio.vendedorId,
-        data: formLancamento.data,
-        tipo: formLancamento.tipo,
-        valor: parseFloat(formLancamento.valor),
-        descricao: formLancamento.descricao,
-        periodo: formLancamento.periodo,
-        criadoPor: "Usuário Atual",
-        criadoEm: new Date().toISOString()
-      };
-
-      const lancamentosCredito = formLancamento.tipo === 'credito' 
-        ? [...relatorio.lancamentosCredito, novoLancamento]
-        : relatorio.lancamentosCredito;
-      
-      const lancamentosDebito = formLancamento.tipo === 'debito'
-        ? [...relatorio.lancamentosDebito, novoLancamento]
-        : relatorio.lancamentosDebito;
-
-      const totalCreditos = lancamentosCredito.reduce((sum, l) => sum + l.valor, 0);
-      const totalDebitos = lancamentosDebito.reduce((sum, l) => sum + l.valor, 0);
-      const valorLiquido = relatorio.totalComissoes + totalCreditos - totalDebitos;
-      const saldoDevedor = valorLiquido - relatorio.totalPago;
-
-      const relatorioAtualizado = {
-        ...relatorio,
-        lancamentosCredito,
-        lancamentosDebito,
-        totalCreditos,
-        totalDebitos,
-        valorLiquido,
-        saldoDevedor
-      };
-
-      if (onAtualizarRelatorio) {
-        onAtualizarRelatorio(relatorioAtualizado);
-      }
-
-      toast.success(`Lançamento de ${formLancamento.tipo} registrado com sucesso!`);
+      setDialogLancamento(false);
+      onRecarregar?.();
+    } catch (error) {
+      console.error("Erro ao salvar lançamento:", error);
+      toast.error("Erro ao salvar lançamento");
     }
-    
-    setDialogLancamento(false);
   };
 
-  const handleSalvarPagamento = () => {
+  const handleSalvarPagamento = async () => {
     if (!formPagamento.valor || parseFloat(formPagamento.valor) <= 0) {
       toast.error("Informe um valor válido");
       return;
     }
-    
+
     if (!formPagamento.formaPagamento) {
       toast.error("Selecione a forma de pagamento");
       return;
@@ -728,88 +720,37 @@ Equipe de Vendas`;
       return;
     }
 
-    if (modoPagamento === 'editar' && pagamentoSelecionado) {
-      // Editando pagamento existente
-      const pagamentoAtualizado: PagamentoPeriodo = {
-        ...pagamentoSelecionado,
-        data: formPagamento.data,
-        valor: parseFloat(formPagamento.valor),
-        formaPagamento: formPagamento.formaPagamento,
-        comprovante: formPagamento.comprovante || undefined,
-        observacoes: formPagamento.observacoes || undefined,
-        periodo: formPagamento.periodo,
-        editadoPor: "Usuário Atual",
-        editadoEm: new Date().toISOString()
-      };
-
-      const pagamentos = relatorio.pagamentos.map(p => 
-        p.id === pagamentoSelecionado.id ? pagamentoAtualizado : p
-      );
-      const totalPago = pagamentos.reduce((sum, p) => sum + p.valor, 0);
-      const saldoDevedor = relatorio.valorLiquido - totalPago;
-      
-      // Atualiza status se necessário
-      let novoStatus = relatorio.status;
-      if (saldoDevedor <= 0) {
-        novoStatus = "pago";
+    try {
+      if (modoPagamento === 'editar' && pagamentoSelecionado) {
+        // Editando pagamento existente
+        await api.comissoes.updatePagamento({
+          id: pagamentoSelecionado.id,
+          valor: parseFloat(formPagamento.valor),
+          periodo: formPagamento.periodo,
+          forma_pagamento: formPagamento.formaPagamento,
+          comprovante_url: formPagamento.comprovante || undefined, // Ajuste no nome conforme API
+          observacoes: formPagamento.observacoes || undefined
+        });
+        toast.success("Pagamento atualizado com sucesso!");
+      } else {
+        // Novo pagamento
+        await api.comissoes.createPagamento({
+          vendedor_uuid: relatorio.vendedorId,
+          valor: parseFloat(formPagamento.valor),
+          periodo: formPagamento.periodo,
+          forma_pagamento: formPagamento.formaPagamento,
+          comprovante_url: formPagamento.comprovante || undefined,
+          observacoes: formPagamento.observacoes || undefined
+        });
+        toast.success("Pagamento registrado com sucesso!");
       }
 
-      const relatorioAtualizado = {
-        ...relatorio,
-        pagamentos,
-        totalPago,
-        saldoDevedor,
-        status: novoStatus,
-        dataPagamento: saldoDevedor <= 0 ? formPagamento.data : relatorio.dataPagamento
-      };
-
-      if (onAtualizarRelatorio) {
-        onAtualizarRelatorio(relatorioAtualizado);
-      }
-
-      toast.success("Pagamento atualizado com sucesso!");
-    } else {
-      // Novo pagamento
-      const novoPagamento: PagamentoPeriodo = {
-        id: `PG-${Date.now()}`,
-        vendedorId: relatorio.vendedorId,
-        data: formPagamento.data,
-        valor: parseFloat(formPagamento.valor),
-        formaPagamento: formPagamento.formaPagamento,
-        comprovante: formPagamento.comprovante || undefined,
-        observacoes: formPagamento.observacoes || undefined,
-        periodo: formPagamento.periodo,
-        realizadoPor: "Usuário Atual",
-        realizadoEm: new Date().toISOString()
-      };
-
-      const pagamentos = [...relatorio.pagamentos, novoPagamento];
-      const totalPago = pagamentos.reduce((sum, p) => sum + p.valor, 0);
-      const saldoDevedor = relatorio.valorLiquido - totalPago;
-      
-      // Atualiza status se necessário
-      let novoStatus = relatorio.status;
-      if (saldoDevedor <= 0) {
-        novoStatus = "pago";
-      }
-
-      const relatorioAtualizado = {
-        ...relatorio,
-        pagamentos,
-        totalPago,
-        saldoDevedor,
-        status: novoStatus,
-        dataPagamento: saldoDevedor <= 0 ? formPagamento.data : relatorio.dataPagamento
-      };
-
-      if (onAtualizarRelatorio) {
-        onAtualizarRelatorio(relatorioAtualizado);
-      }
-
-      toast.success("Pagamento registrado com sucesso!");
+      setDialogPagamento(false);
+      onRecarregar?.();
+    } catch (error) {
+      console.error("Erro ao salvar pagamento:", error);
+      toast.error("Erro ao salvar pagamento");
     }
-    
-    setDialogPagamento(false);
   };
 
   const handleSalvarVenda = () => {
@@ -920,13 +861,12 @@ Equipe de Vendas`;
             <Wallet className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${
-              saldoDevedorCalculado > 0 
-                ? 'text-red-600' 
-                : saldoDevedorCalculado < 0 
-                  ? 'text-green-600' 
-                  : 'text-foreground'
-            }`}>
+            <div className={`text-2xl font-bold ${saldoDevedorCalculado > 0
+              ? 'text-red-600'
+              : saldoDevedorCalculado < 0
+                ? 'text-green-600'
+                : 'text-foreground'
+              }`}>
               {saldoDevedorCalculado > 0 && '-'}{formatCurrency(Math.abs(saldoDevedorCalculado))}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -1012,8 +952,8 @@ Equipe de Vendas`;
               </TableHeader>
               <TableBody>
                 {dadosRelatorio.vendas.map((venda) => (
-                  <TableRow 
-                    key={venda.id} 
+                  <TableRow
+                    key={venda.id}
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => handleVisualizarVenda(venda)}
                   >
@@ -1061,7 +1001,7 @@ Equipe de Vendas`;
                 </TableHeader>
                 <TableBody>
                   {dadosRelatorio.lancamentosCredito.map((lanc) => (
-                    <TableRow 
+                    <TableRow
                       key={lanc.id}
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => handleVisualizarLancamento(lanc)}
@@ -1083,7 +1023,7 @@ Equipe de Vendas`;
                     </TableRow>
                   ))}
                   {dadosRelatorio.lancamentosDebito.map((lanc) => (
-                    <TableRow 
+                    <TableRow
                       key={lanc.id}
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => handleVisualizarLancamento(lanc)}
@@ -1135,7 +1075,7 @@ Equipe de Vendas`;
                 </TableHeader>
                 <TableBody>
                   {dadosRelatorio.pagamentos.map((pag) => (
-                    <TableRow 
+                    <TableRow
                       key={pag.id}
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => handleVisualizarPagamento(pag)}
@@ -1173,9 +1113,8 @@ Equipe de Vendas`;
               <span className="text-muted-foreground">Total de Comissões</span>
               <span className="font-medium">{formatCurrency(dadosRelatorio.totalComissoes)}</span>
             </div>
-            <div className={`flex justify-between items-center py-2 ${
-              relatorio.saldoAnterior > 0 ? 'text-red-600' : relatorio.saldoAnterior < 0 ? 'text-green-600' : 'text-muted-foreground'
-            }`}>
+            <div className={`flex justify-between items-center py-2 ${relatorio.saldoAnterior > 0 ? 'text-red-600' : relatorio.saldoAnterior < 0 ? 'text-green-600' : 'text-muted-foreground'
+              }`}>
               <span className="flex items-center gap-2">
                 <Clock className="h-4 w-4" />
                 Saldo Anterior
@@ -1215,19 +1154,19 @@ Equipe de Vendas`;
             </div>
             <div className="flex justify-between items-center py-3 border-t font-semibold">
               <span className={
-                saldoDevedorCalculado > 0 
-                  ? 'text-red-600' 
-                  : saldoDevedorCalculado < 0 
-                    ? 'text-green-600' 
+                saldoDevedorCalculado > 0
+                  ? 'text-red-600'
+                  : saldoDevedorCalculado < 0
+                    ? 'text-green-600'
                     : ''
               }>
                 Saldo
               </span>
               <span className={
-                saldoDevedorCalculado > 0 
-                  ? 'text-red-600' 
-                  : saldoDevedorCalculado < 0 
-                    ? 'text-green-600' 
+                saldoDevedorCalculado > 0
+                  ? 'text-red-600'
+                  : saldoDevedorCalculado < 0
+                    ? 'text-green-600'
                     : ''
               }>
                 {saldoDevedorCalculado > 0 && '-'}{formatCurrency(Math.abs(saldoDevedorCalculado))}
@@ -1247,16 +1186,16 @@ Equipe de Vendas`;
               ) : (
                 <Wallet className="h-5 w-5" />
               )}
-              {modoLancamento === 'novo' ? 'Novo Lançamento Manual' : 
-               modoLancamento === 'visualizar' ? 'Detalhes do Lançamento' : 
-               'Editar Lançamento'}
+              {modoLancamento === 'novo' ? 'Novo Lançamento Manual' :
+                modoLancamento === 'visualizar' ? 'Detalhes do Lançamento' :
+                  'Editar Lançamento'}
             </DialogTitle>
             <DialogDescription>
-              {modoLancamento === 'novo' 
+              {modoLancamento === 'novo'
                 ? `Adicione créditos ou débitos ao relatório de ${dadosRelatorio.vendedorNome}`
                 : modoLancamento === 'visualizar'
-                ? 'Visualize os detalhes do lançamento. Clique em "Editar" para fazer alterações.'
-                : `Edite o lançamento de ${dadosRelatorio.vendedorNome}`
+                  ? 'Visualize os detalhes do lançamento. Clique em "Editar" para fazer alterações.'
+                  : `Edite o lançamento de ${dadosRelatorio.vendedorNome}`
               }
             </DialogDescription>
           </DialogHeader>
@@ -1293,9 +1232,9 @@ Equipe de Vendas`;
 
             <div className="space-y-2">
               <Label>Tipo de Lançamento</Label>
-              <Select 
-                value={formLancamento.tipo} 
-                onValueChange={(value: "credito" | "debito") => setFormLancamento({...formLancamento, tipo: value})}
+              <Select
+                value={formLancamento.tipo}
+                onValueChange={(value: "credito" | "debito") => setFormLancamento({ ...formLancamento, tipo: value })}
                 disabled={modoLancamento === 'visualizar'}
               >
                 <SelectTrigger>
@@ -1326,9 +1265,9 @@ Equipe de Vendas`;
                 onChange={(e) => {
                   const novoPeriodo = parsePeriodoInput(e.target.value);
                   if (novoPeriodo) {
-                    setFormLancamento({...formLancamento, periodo: novoPeriodo});
+                    setFormLancamento({ ...formLancamento, periodo: novoPeriodo });
                   } else {
-                    setFormLancamento({...formLancamento, periodo: e.target.value});
+                    setFormLancamento({ ...formLancamento, periodo: e.target.value });
                   }
                 }}
                 disabled={modoLancamento === 'visualizar'}
@@ -1346,7 +1285,7 @@ Equipe de Vendas`;
                 min="0"
                 placeholder="0,00"
                 value={formLancamento.valor}
-                onChange={(e) => setFormLancamento({...formLancamento, valor: e.target.value})}
+                onChange={(e) => setFormLancamento({ ...formLancamento, valor: e.target.value })}
                 disabled={modoLancamento === 'visualizar'}
               />
             </div>
@@ -1356,7 +1295,7 @@ Equipe de Vendas`;
               <Input
                 type="date"
                 value={formLancamento.data}
-                onChange={(e) => setFormLancamento({...formLancamento, data: e.target.value})}
+                onChange={(e) => setFormLancamento({ ...formLancamento, data: e.target.value })}
                 disabled={modoLancamento === 'visualizar'}
               />
             </div>
@@ -1366,7 +1305,7 @@ Equipe de Vendas`;
               <Textarea
                 placeholder="Ex: Bonificação por meta, Desconto de vale transporte..."
                 value={formLancamento.descricao}
-                onChange={(e) => setFormLancamento({...formLancamento, descricao: e.target.value})}
+                onChange={(e) => setFormLancamento({ ...formLancamento, descricao: e.target.value })}
                 rows={3}
                 disabled={modoLancamento === 'visualizar'}
               />
@@ -1378,6 +1317,10 @@ Equipe de Vendas`;
               <>
                 <Button variant="outline" onClick={() => setDialogLancamento(false)}>
                   Fechar
+                </Button>
+                <Button variant="destructive" onClick={handleExcluirLancamento}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir
                 </Button>
                 <Button onClick={handleEditarLancamento}>
                   <Edit className="h-4 w-4 mr-2" />
@@ -1477,7 +1420,7 @@ Equipe de Vendas`;
               {modoVenda === 'visualizar' ? 'Detalhes da Comissão' : 'Editar Comissão'}
             </DialogTitle>
             <DialogDescription>
-              {modoVenda === 'visualizar' 
+              {modoVenda === 'visualizar'
                 ? 'Visualize os detalhes da comissão. Clique em "Editar" para fazer alterações.'
                 : 'Edite os dados da comissão de venda'
               }
@@ -1537,9 +1480,9 @@ Equipe de Vendas`;
 
               <div className="space-y-2">
                 <Label>Valor da Comissão</Label>
-                <Input 
-                  value={formatCurrency(vendaSelecionada.valorComissao)} 
-                  disabled 
+                <Input
+                  value={formatCurrency(vendaSelecionada.valorComissao)}
+                  disabled
                   className="font-semibold text-green-600"
                 />
               </div>
@@ -1552,9 +1495,9 @@ Equipe de Vendas`;
                   onChange={(e) => {
                     const novoPeriodo = parsePeriodoInput(e.target.value);
                     if (novoPeriodo) {
-                      setFormVenda({...formVenda, periodo: novoPeriodo});
+                      setFormVenda({ ...formVenda, periodo: novoPeriodo });
                     } else {
-                      setFormVenda({...formVenda, periodo: e.target.value});
+                      setFormVenda({ ...formVenda, periodo: e.target.value });
                     }
                   }}
                   disabled={modoVenda === 'visualizar'}
@@ -1569,7 +1512,7 @@ Equipe de Vendas`;
                 <Textarea
                   placeholder="Observações sobre esta comissão..."
                   value={formVenda.observacoes}
-                  onChange={(e) => setFormVenda({...formVenda, observacoes: e.target.value})}
+                  onChange={(e) => setFormVenda({ ...formVenda, observacoes: e.target.value })}
                   rows={3}
                   disabled={modoVenda === 'visualizar'}
                 />
@@ -1612,16 +1555,16 @@ Equipe de Vendas`;
               ) : (
                 <CreditCard className="h-5 w-5" />
               )}
-              {modoPagamento === 'novo' ? 'Registrar Pagamento' : 
-               modoPagamento === 'visualizar' ? 'Detalhes do Pagamento' : 
-               'Editar Pagamento'}
+              {modoPagamento === 'novo' ? 'Registrar Pagamento' :
+                modoPagamento === 'visualizar' ? 'Detalhes do Pagamento' :
+                  'Editar Pagamento'}
             </DialogTitle>
             <DialogDescription>
-              {modoPagamento === 'novo' 
+              {modoPagamento === 'novo'
                 ? `Registre um pagamento para ${dadosRelatorio.vendedorNome}`
                 : modoPagamento === 'visualizar'
-                ? 'Visualize os detalhes do pagamento. Clique em "Editar" para fazer alterações.'
-                : `Edite o pagamento de ${dadosRelatorio.vendedorNome}`
+                  ? 'Visualize os detalhes do pagamento. Clique em "Editar" para fazer alterações.'
+                  : `Edite o pagamento de ${dadosRelatorio.vendedorNome}`
               }
             </DialogDescription>
           </DialogHeader>
@@ -1675,9 +1618,9 @@ Equipe de Vendas`;
                 onChange={(e) => {
                   const novoPeriodo = parsePeriodoInput(e.target.value);
                   if (novoPeriodo) {
-                    setFormPagamento({...formPagamento, periodo: novoPeriodo});
+                    setFormPagamento({ ...formPagamento, periodo: novoPeriodo });
                   } else {
-                    setFormPagamento({...formPagamento, periodo: e.target.value});
+                    setFormPagamento({ ...formPagamento, periodo: e.target.value });
                   }
                 }}
                 disabled={modoPagamento === 'visualizar'}
@@ -1695,7 +1638,7 @@ Equipe de Vendas`;
                 min="0"
                 placeholder="0,00"
                 value={formPagamento.valor}
-                onChange={(e) => setFormPagamento({...formPagamento, valor: e.target.value})}
+                onChange={(e) => setFormPagamento({ ...formPagamento, valor: e.target.value })}
                 disabled={modoPagamento === 'visualizar'}
               />
             </div>
@@ -1705,16 +1648,16 @@ Equipe de Vendas`;
               <Input
                 type="date"
                 value={formPagamento.data}
-                onChange={(e) => setFormPagamento({...formPagamento, data: e.target.value})}
+                onChange={(e) => setFormPagamento({ ...formPagamento, data: e.target.value })}
                 disabled={modoPagamento === 'visualizar'}
               />
             </div>
 
             <div className="space-y-2">
               <Label>Forma de Pagamento</Label>
-              <Select 
-                value={formPagamento.formaPagamento} 
-                onValueChange={(value) => setFormPagamento({...formPagamento, formaPagamento: value})}
+              <Select
+                value={formPagamento.formaPagamento}
+                onValueChange={(value) => setFormPagamento({ ...formPagamento, formaPagamento: value })}
                 disabled={modoPagamento === 'visualizar'}
               >
                 <SelectTrigger>
@@ -1734,7 +1677,7 @@ Equipe de Vendas`;
               <Input
                 placeholder="Ex: COMP-2025-001, PIX-123456..."
                 value={formPagamento.comprovante}
-                onChange={(e) => setFormPagamento({...formPagamento, comprovante: e.target.value})}
+                onChange={(e) => setFormPagamento({ ...formPagamento, comprovante: e.target.value })}
                 disabled={modoPagamento === 'visualizar'}
               />
             </div>
@@ -1744,7 +1687,7 @@ Equipe de Vendas`;
               <Textarea
                 placeholder="Informações adicionais sobre o pagamento..."
                 value={formPagamento.observacoes}
-                onChange={(e) => setFormPagamento({...formPagamento, observacoes: e.target.value})}
+                onChange={(e) => setFormPagamento({ ...formPagamento, observacoes: e.target.value })}
                 rows={2}
                 disabled={modoPagamento === 'visualizar'}
               />
@@ -1756,6 +1699,10 @@ Equipe de Vendas`;
               <>
                 <Button variant="outline" onClick={() => setDialogPagamento(false)}>
                   Fechar
+                </Button>
+                <Button variant="destructive" onClick={handleExcluirPagamento}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir
                 </Button>
                 <Button onClick={handleEditarPagamento}>
                   <Edit className="h-4 w-4 mr-2" />

@@ -232,14 +232,17 @@ serve(async (req) => {
       if (!body.vendedorId && !body.vendedor_id) {
         throw new Error('vendedorId é obrigatório')
       }
-      if (!body.naturezaOperacao && !body.natureza_operacao) {
-        throw new Error('naturezaOperacao é obrigatória')
+      const naturezaOperacaoNome = body.nomeNaturezaOperacao || body.nome_natureza_operacao || body.naturezaOperacao || body.natureza_operacao
+      const nomeTrimmed = naturezaOperacaoNome ? String(naturezaOperacaoNome).trim() : ''
+      if (!nomeTrimmed) {
+        throw new Error('naturezaOperacao é obrigatória (informe nomeNaturezaOperacao ou naturezaOperacao)')
       }
 
-      // Preparar produtos para JSONB
+      // Preparar produtos para JSONB (aceita itens ou produtos)
+      const produtosPayload = body.produtos ?? body.itens
       let produtosJsonb = null
-      if (body.produtos && Array.isArray(body.produtos) && body.produtos.length > 0) {
-        produtosJsonb = body.produtos.map((p: any) => ({
+      if (produtosPayload && Array.isArray(produtosPayload) && produtosPayload.length > 0) {
+        produtosJsonb = produtosPayload.map((p: any) => ({
           produtoId: p.produtoId || p.produto_id,
           numero: p.numero || 1,
           descricaoProduto: p.descricaoProduto || p.descricao || '',
@@ -260,7 +263,7 @@ serve(async (req) => {
         .rpc('create_pedido_venda_v2', {
           p_cliente_id: parseInt(String(body.clienteId || body.cliente_id), 10),
           p_vendedor_uuid: body.vendedorId || body.vendedor_id,
-          p_natureza_operacao: body.naturezaOperacao || body.natureza_operacao,
+          p_natureza_operacao: nomeTrimmed,
           p_numero_pedido: body.numero || body.numeroPedido || null,
           p_empresa_faturamento_id: body.empresaFaturamentoId || body.empresa_faturamento_id ? parseInt(String(body.empresaFaturamentoId || body.empresa_faturamento_id), 10) : null,
           p_lista_preco_id: body.listaPrecoId || body.lista_preco_id ? parseInt(String(body.listaPrecoId || body.lista_preco_id), 10) : null,
@@ -312,13 +315,14 @@ serve(async (req) => {
       
       const body = await req.json().catch(() => ({}))
 
-      // Preparar produtos para JSONB (se fornecidos)
+      // Preparar produtos para JSONB (aceita itens ou produtos)
+      const produtosPayloadPut = body.produtos ?? body.itens
       let produtosJsonb = undefined
-      if (body.produtos && Array.isArray(body.produtos)) {
-        if (body.produtos.length === 0) {
+      if (produtosPayloadPut && Array.isArray(produtosPayloadPut)) {
+        if (produtosPayloadPut.length === 0) {
           produtosJsonb = []
         } else {
-          produtosJsonb = body.produtos.map((p: any) => ({
+          produtosJsonb = produtosPayloadPut.map((p: any) => ({
             produtoId: p.produtoId || p.produto_id,
             numero: p.numero || 1,
             descricaoProduto: p.descricaoProduto || p.descricao || '',
@@ -342,7 +346,10 @@ serve(async (req) => {
           p_cliente_id: body.clienteId || body.cliente_id ? parseInt(String(body.clienteId || body.cliente_id), 10) : null,
           p_vendedor_uuid: body.vendedorId || body.vendedor_id || null,
           p_numero_pedido: body.numero || body.numeroPedido || null,
-          p_natureza_operacao: body.naturezaOperacao || body.natureza_operacao || null,
+          p_natureza_operacao: (() => {
+          const nome = body.nomeNaturezaOperacao || body.nome_natureza_operacao || body.naturezaOperacao || body.natureza_operacao
+          return nome ? String(nome).trim() : null
+        })(),
           p_empresa_faturamento_id: body.empresaFaturamentoId || body.empresa_faturamento_id ? parseInt(String(body.empresaFaturamentoId || body.empresa_faturamento_id), 10) : null,
           p_lista_preco_id: body.listaPrecoId || body.lista_preco_id ? parseInt(String(body.listaPrecoId || body.lista_preco_id), 10) : null,
           p_percentual_desconto_padrao: body.percentualDescontoPadrao ?? body.percentual_desconto_padrao ?? null,

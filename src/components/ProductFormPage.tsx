@@ -379,8 +379,8 @@ export function ProductFormPage({ productId, onBack, onSave }: ProductFormPagePr
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
+    <div className="space-y-6 min-h-0">
+      <div className="flex items-center gap-4 flex-shrink-0">
         <Button variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </Button>

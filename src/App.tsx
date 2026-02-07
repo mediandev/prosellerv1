@@ -1080,8 +1080,8 @@ function AppContent() {
           </header>
 
           {/* Page Content */}
-          <main className="flex-1 overflow-auto">
-            <div className="p-6">
+          <main className="flex-1 overflow-auto min-h-0">
+            <div className="p-6 min-h-full">
               {renderContent()}
             </div>
           </main>

@@ -2,13 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner@2.0.3';
 import { api } from '../services/api';
 import { consultarCNPJCompleto, consultarCEP } from '../services/integrations';
-import { 
-  DadosBancariosCliente, 
-  TipoContaCliente, 
-  TipoChavePixCliente, 
-  Cliente, 
-  TipoPessoa, 
-  SituacaoCliente 
+import {
+  DadosBancariosCliente,
+  TipoContaCliente,
+  TipoChavePixCliente,
+  Cliente,
+  TipoPessoa,
+  SituacaoCliente
 } from '../types/customer';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -80,6 +80,8 @@ export function CustomerFormDadosCadastrais({
   const [mockBanks, setMockBanks] = useState<any[]>([]);
   const [segmentosMercado, setSegmentosMercado] = useState<string[]>([]);
   const [situacoes, setSituacoes] = useState<Array<{ id: string; nome: string; descricao?: string }>>([]);
+  const [tiposPessoaOptions, setTiposPessoaOptions] = useState<Array<{ ref_tipo_pessoa_id: number; nome: string; nome_completo?: string }>>([]);
+  const [loadingTiposPessoa, setLoadingTiposPessoa] = useState(false);
   const [formBancario, setFormBancario] = useState<Partial<DadosBancariosCliente>>({
     banco: '',
     agencia: '',
@@ -100,17 +102,17 @@ export function CustomerFormDadosCadastrais({
       try {
         setLoadingGrupos(true);
         const data = await api.get('grupos-redes');
-        
+
         // A API pode retornar um array direto ou um objeto com paginação
         let gruposArray: Array<{ id: string; nome: string; descricao?: string }> = [];
-        
+
         if (Array.isArray(data)) {
           gruposArray = data;
         } else if (data && typeof data === 'object' && 'grupos' in data) {
           // Resposta com paginação do backend
           gruposArray = data.grupos || [];
         }
-        
+
         setGruposRedes(gruposArray);
         console.log('[GRUPOS-REDES] Carregados:', gruposArray.length);
       } catch (error: any) {
@@ -130,16 +132,16 @@ export function CustomerFormDadosCadastrais({
     if (gruposRedes.length > 0 && formData.grupoRede) {
       // Se grupoRede é um nome (string que não é UUID), buscar o ID correspondente
       const grupoRedeValue = formData.grupoRede;
-      
+
       // Verificar se é UUID (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(grupoRedeValue);
-      
+
       if (!isUUID) {
         // É um nome, buscar o ID correspondente
-        const grupoEncontrado = gruposRedes.find(g => 
+        const grupoEncontrado = gruposRedes.find(g =>
           g.nome.toLowerCase() === grupoRedeValue.toLowerCase()
         );
-        
+
         if (grupoEncontrado) {
           console.log('[GRUPOS-REDES] Convertendo nome para ID:', grupoRedeValue, '->', grupoEncontrado.id);
           updateFormData({ grupoRede: grupoEncontrado.id });
@@ -152,7 +154,7 @@ export function CustomerFormDadosCadastrais({
 
   // Carregar segmentos de mercado (com IDs)
   const [segmentosCompletos, setSegmentosCompletos] = useState<Array<{ id: string; nome: string; descricao?: string }>>([]);
-  
+
   useEffect(() => {
     const carregarSegmentos = async () => {
       try {
@@ -194,20 +196,100 @@ export function CustomerFormDadosCadastrais({
     carregarSituacoes();
   }, []);
 
+  // Carregar tipos de pessoa da edge function tipos-pessoa-v2
+  useEffect(() => {
+    const carregarTiposPessoa = async () => {
+      try {
+        setLoadingTiposPessoa(true);
+        const data = await api.get('tipos-pessoa');
+        const arr = Array.isArray(data) ? data : [];
+        setTiposPessoaOptions(arr.map((t: any) => ({
+          ref_tipo_pessoa_id: Number(t.ref_tipo_pessoa_id ?? t.id ?? 0),
+          nome: t.nome ?? t.nome_completo ?? '',
+          nome_completo: t.nome_completo ?? t.nome ?? '',
+        })).filter((t: any) => t.ref_tipo_pessoa_id > 0));
+      } catch (error: any) {
+        console.error('[TIPOS-PESSOA] Erro ao carregar:', error);
+        setTiposPessoaOptions([]);
+      } finally {
+        setLoadingTiposPessoa(false);
+      }
+    };
+    carregarTiposPessoa();
+  }, []);
+
+  // Sincronizar refTipoPessoaId quando temos tipoPessoa (nome) mas ainda não temos ID (ex.: cliente carregado da API)
+  useEffect(() => {
+    const currentId = formData.refTipoPessoaId;
+    const currentTipo = formData.tipoPessoa;
+
+    if (tiposPessoaOptions.length === 0) {
+      console.log('[DADOS-CADASTRAIS] Aguardando tiposPessoaOptions para sincronizar:', {
+        refId: currentId,
+        tipo: currentTipo
+      });
+      return;
+    }
+
+    console.log('[DADOS-CADASTRAIS] Sincronizando Tipo Pessoa:', {
+      formDataRefId: currentId,
+      formDataNome: currentTipo,
+      optionsCount: tiposPessoaOptions.length
+    });
+
+    // 1. Se já tem ID, verificar se o nome (tipoPessoa) está correto
+    if (currentId != null && !isNaN(Number(currentId))) {
+      const matchId = tiposPessoaOptions.find(t => Number(t.ref_tipo_pessoa_id) === Number(currentId));
+      if (!matchId) {
+        console.warn('[DADOS-CADASTRAIS] ID do tipo de pessoa não encontrado nas opções:', currentId);
+      } else {
+        const nomeCompleto = matchId.nome_completo || matchId.nome;
+        // Se o nome no form estiver diferente do nome na tabela ou for sigla, atualiza
+        if (currentTipo !== nomeCompleto && currentTipo !== matchId.nome) {
+          console.log('[DADOS-CADASTRAIS] Sincronizando nome pelo ID:', currentId, '->', nomeCompleto);
+          updateFormData({ tipoPessoa: nomeCompleto as any });
+        }
+      }
+      return;
+    }
+
+    // 2. Se não tem ID válido mas tem nome, tenta encontrar o ID
+    if (!currentTipo) return;
+
+    const search = String(currentTipo).trim().toLowerCase();
+    const match = tiposPessoaOptions.find(
+      (t) =>
+        (t.nome ?? '').toLowerCase() === search ||
+        (t.nome_completo ?? '').toLowerCase() === search ||
+        (search === 'j' && (t.nome === 'J' || t.nome_completo === 'Pessoa Jurídica')) ||
+        (search === 'f' && (t.nome === 'F' || t.nome_completo === 'Pessoa Física')) ||
+        (search === 'pessoa jurídica' && (t.nome === 'J' || t.nome_completo === 'Pessoa Jurídica')) ||
+        (search === 'pessoa física' && (t.nome === 'F' || t.nome_completo === 'Pessoa Física'))
+    );
+
+    if (match) {
+      console.log('[DADOS-CADASTRAIS] Encontrado ID para tipo pessoa via nome:', match.ref_tipo_pessoa_id, 'para', currentTipo);
+      updateFormData({
+        refTipoPessoaId: match.ref_tipo_pessoa_id,
+        tipoPessoa: (match.nome_completo || match.nome) as any
+      });
+    }
+  }, [tiposPessoaOptions, formData.tipoPessoa, formData.refTipoPessoaId]);
+
   // Carregar bancos da API BrasilAPI
   useEffect(() => {
     const carregarBancos = async () => {
       try {
         console.log('[CUSTOMER-FORM] Buscando bancos da API BrasilAPI...');
         const response = await fetch('https://brasilapi.com.br/api/banks/v1');
-        
+
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const data = await response.json();
         console.log('[CUSTOMER-FORM] Bancos recebidos:', data.length);
-        
+
         // Transformar dados da API para o formato esperado
         const banks = data
           .filter((bank: any) => bank.code !== null && bank.code !== undefined) // Filtrar bancos sem código
@@ -220,7 +302,7 @@ export function CustomerFormDadosCadastrais({
             code: bank.code, // Manter code original para compatibilidade
           }))
           .sort((a: any, b: any) => a.codigo.localeCompare(b.codigo)); // Ordenar por código
-        
+
         console.log('[CUSTOMER-FORM] Bancos processados:', banks.length);
         setMockBanks(banks);
       } catch (error) {
@@ -242,10 +324,10 @@ export function CustomerFormDadosCadastrais({
   useEffect(() => {
     if (gruposRedes.length > 0 && formData.grupoRede) {
       const grupoRedeValue = String(formData.grupoRede).trim();
-      
+
       // Verificar se é UUID (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(grupoRedeValue);
-      
+
       if (!isUUID) {
         // É um nome, buscar o ID correspondente (busca case-insensitive e com trim)
         const grupoEncontrado = gruposRedes.find(g => {
@@ -253,7 +335,7 @@ export function CustomerFormDadosCadastrais({
           const valorBuscado = grupoRedeValue.toLowerCase().trim();
           return nomeGrupo === valorBuscado;
         });
-        
+
         if (grupoEncontrado) {
           console.log('[GRUPOS-REDES] Convertendo nome para ID:', grupoRedeValue, '->', grupoEncontrado.id, grupoEncontrado.nome);
           // Atualizar apenas se o ID for diferente do valor atual
@@ -280,7 +362,7 @@ export function CustomerFormDadosCadastrais({
     if (!Array.isArray(gruposRedes)) {
       return [];
     }
-    
+
     // Deduplicate by ID to avoid duplicate keys
     const uniqueGrupos = gruposRedes.reduce((acc, g) => {
       if (!acc.find(item => item.id === g.id)) {
@@ -288,7 +370,7 @@ export function CustomerFormDadosCadastrais({
       }
       return acc;
     }, [] as typeof gruposRedes);
-    
+
     return uniqueGrupos.map((g) => ({ value: g.id, label: g.nome }));
   }, [gruposRedes]);
 
@@ -370,7 +452,7 @@ export function CustomerFormDadosCadastrais({
     setBuscandoCEP(true);
     try {
       const data = await consultarCEP(cep);
-      
+
       if (data) {
         // Primeiro preenche logradouro, bairro e UF
         updateFormData({
@@ -378,7 +460,7 @@ export function CustomerFormDadosCadastrais({
           bairro: data.bairro || '',
           uf: data.uf || '',
         });
-        
+
         // Aguarda um pouco para a lista de municípios ser recalculada
         // e então preenche o município
         if (data.localidade) {
@@ -404,7 +486,7 @@ export function CustomerFormDadosCadastrais({
     setBuscandoCEPEntrega(true);
     try {
       const data = await consultarCEP(cep);
-      
+
       if (data) {
         // Atualizar TODOS os campos de uma vez para evitar race conditions
         const novoEnderecoEntrega = {
@@ -414,11 +496,11 @@ export function CustomerFormDadosCadastrais({
           uf: data.uf || formData.enderecoEntrega?.uf || '',
           municipio: data.localidade || formData.enderecoEntrega?.municipio || '',
         };
-        
+
         updateFormData({
           enderecoEntrega: novoEnderecoEntrega,
         });
-        
+
         toast.success('CEP consultado com sucesso!');
       }
     } catch (error) {
@@ -440,10 +522,10 @@ export function CustomerFormDadosCadastrais({
     try {
       // Usar consulta completa que busca CNPJ + Inscrição Estadual
       const resultado = await consultarCNPJCompleto(cnpj);
-      
+
       if (resultado?.cnpj) {
         const data = resultado.cnpj;
-        
+
         // Formatar telefone se existir
         let telefoneFormatado = undefined;
         if (data.telefone) {
@@ -485,27 +567,27 @@ export function CustomerFormDadosCadastrais({
         // Atualizar formulário com todos os dados
         console.log('🔍 CNPJ - Dados recebidos:', { uf: data.uf, municipio: data.municipio, cep: cepFormatado });
         updateFormData(dadosAtualizacao);
-        
+
         // WORKAROUND: Buscar CEP automaticamente para preencher município
         // Como a busca de CEP funciona perfeitamente, usamos ela para preencher o município
         if (cepFormatado && cepFormatado.replace(/\D/g, '').length === 8) {
           console.log('🔄 WORKAROUND: Buscando CEP automaticamente para preencher município:', cepFormatado);
-          
+
           // Aguarda 200ms para garantir que o CEP foi atualizado no estado
           setTimeout(async () => {
             try {
               const cepData = await consultarCEP(cepFormatado.replace(/\D/g, ''));
-              
+
               if (cepData?.localidade) {
                 console.log('✅ WORKAROUND: Município obtido via CEP:', cepData.localidade);
-                
+
                 // Preenche UF e outros dados do CEP (caso estejam diferentes)
                 updateFormData({
                   uf: cepData.uf || dadosAtualizacao.uf,
                   logradouro: cepData.logradouro || dadosAtualizacao.logradouro,
                   bairro: cepData.bairro || dadosAtualizacao.bairro,
                 });
-                
+
                 // Aguarda mais 100ms para lista de municípios ser recalculada
                 setTimeout(() => {
                   updateFormData({
@@ -641,6 +723,16 @@ export function CustomerFormDadosCadastrais({
     return labels[tipo] || tipo;
   };
 
+  // Debug render logic
+  console.log('[DADOS-CADASTRAIS] Render Select value check:', {
+    optionsCount: tiposPessoaOptions.length,
+    refId: formData.refTipoPessoaId,
+    tipoPessoa: formData.tipoPessoa,
+    calculatedValue: tiposPessoaOptions.length > 0 && formData.refTipoPessoaId != null && !isNaN(Number(formData.refTipoPessoaId))
+      ? String(formData.refTipoPessoaId)
+      : ((formData.tipoPessoa as any) === 'J' ? 'Pessoa Jurídica' : ((formData.tipoPessoa as any) === 'F' ? 'Pessoa Física' : (formData.tipoPessoa || '')))
+  });
+
   return (
     <div className="space-y-6">
       {/* Seção Identificação */}
@@ -650,18 +742,43 @@ export function CustomerFormDadosCadastrais({
           <div className="space-y-2">
             <Label htmlFor="tipoPessoa">Tipo Pessoa *</Label>
             <Select
-              value={formData.tipoPessoa}
-              onValueChange={(value: TipoPessoa) => {
-                updateFormData({ tipoPessoa: value, cpfCnpj: '' });
+              value={
+                tiposPessoaOptions.length > 0 && formData.refTipoPessoaId != null && !isNaN(Number(formData.refTipoPessoaId))
+                  ? String(formData.refTipoPessoaId)
+                  : ((formData.tipoPessoa as any) === 'J' ? 'Pessoa Jurídica' : ((formData.tipoPessoa as any) === 'F' ? 'Pessoa Física' : (formData.tipoPessoa || '')))
+              }
+              onValueChange={(value: string) => {
+                const isNumeric = !isNaN(Number(value));
+                const id = isNumeric ? Number(value) : undefined;
+                const option = isNumeric ? tiposPessoaOptions.find(t => t.ref_tipo_pessoa_id === id) : undefined;
+                const nome = option?.nome_completo ?? option?.nome ?? (value as TipoPessoa);
+
+                console.log('[DADOS-CADASTRAIS] Select Tipo Pessoa onValueChange:', { value, id, nome });
+
+                updateFormData({
+                  refTipoPessoaId: id,
+                  tipoPessoa: (nome as TipoPessoa) || formData.tipoPessoa,
+                  cpfCnpj: '',
+                });
               }}
-              disabled={readOnly}
+              disabled={readOnly || loadingTiposPessoa}
             >
               <SelectTrigger id="tipoPessoa">
-                <SelectValue />
+                <SelectValue placeholder={loadingTiposPessoa ? 'Carregando...' : 'Selecione o tipo de pessoa'} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Pessoa Física">Pessoa Física</SelectItem>
-                <SelectItem value="Pessoa Jurídica">Pessoa Jurídica</SelectItem>
+                {tiposPessoaOptions.length > 0 ? (
+                  tiposPessoaOptions.map((t) => (
+                    <SelectItem key={t.ref_tipo_pessoa_id} value={String(t.ref_tipo_pessoa_id)}>
+                      {t.nome_completo || t.nome}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <>
+                    <SelectItem value="Pessoa Física">Pessoa Física</SelectItem>
+                    <SelectItem value="Pessoa Jurídica">Pessoa Jurídica</SelectItem>
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -751,7 +868,7 @@ export function CustomerFormDadosCadastrais({
               onValueChange={(value) => {
                 // value é o ID do segmento
                 const segmentoEncontrado = segmentosCompletos.find(s => s.id === value);
-                updateFormData({ 
+                updateFormData({
                   segmentoId: value,
                   segmentoMercado: segmentoEncontrado?.nome || value
                 });
@@ -949,7 +1066,7 @@ export function CustomerFormDadosCadastrais({
                 checked={formData.enderecoEntregaDiferente}
                 onCheckedChange={(checked) => {
                   const updates: Partial<Cliente> = {
-                    enderecoEntregaDiferente: checked as boolean,
+                    enderecoEntregaDiferente: !!checked,
                   };
                   // Inicializar endereço de entrega vazio se marcado
                   if (checked && !formData.enderecoEntrega) {
@@ -981,7 +1098,7 @@ export function CustomerFormDadosCadastrais({
                 <Separator className="my-2" />
                 <h4 className="text-sm font-medium mb-4">Endereço de Entrega</h4>
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="cepEntrega">CEP *</Label>
                 <div className="flex gap-2">

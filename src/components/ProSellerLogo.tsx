@@ -1,4 +1,4 @@
-import logoImage from 'figma:asset/75d88e6ebbed3c5d3883e171899d73a54d97489c.png';
+const LOGO_URL = 'https://xxoiqfraeolsqsmsheue.supabase.co/storage/v1/object/public/file/ProSeller.png';
 
 interface ProSellerLogoProps {
   className?: string;
@@ -14,7 +14,7 @@ export function ProSellerLogo({ className = '', size = 'md' }: ProSellerLogoProp
 
   return (
     <img 
-      src={logoImage} 
+      src={LOGO_URL} 
       alt="ProSeller" 
       className={`${sizeClasses[size]} ${className}`}
     />
