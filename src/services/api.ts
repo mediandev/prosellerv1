@@ -329,6 +329,11 @@ async function callEdgeFunction(
             throw new Error(retryData.error || retryData.message || `HTTP ${retryResponse.status}: ${retryResponse.statusText}`);
           }
 
+          // Algumas Edge Functions retornam HTTP 200 com { success: false, error: ... }.
+          if (retryData && typeof retryData === 'object' && 'success' in retryData && (retryData as any).success === false) {
+            throw new Error((retryData as any).error || (retryData as any).message || 'Erro na Edge Function');
+          }
+
           // Edge Functions retornam { success: true, data: {...} }
           if (retryData.success && retryData.data) {
             return retryData.data;
@@ -344,6 +349,11 @@ async function callEdgeFunction(
 
     if (!response.ok) {
       throw new Error(data.error || data.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    // Algumas Edge Functions retornam HTTP 200 com { success: false, error: ... }.
+    if (data && typeof data === 'object' && 'success' in data && (data as any).success === false) {
+      throw new Error((data as any).error || (data as any).message || 'Erro na Edge Function');
     }
 
     // Edge Functions retornam { success: true, data: {...} }
@@ -1777,6 +1787,14 @@ export const api = {
           createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
           updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
           createdBy: p.createdBy,
+          integracaoERP: p.idTiny
+            ? {
+              erpPedidoId: String(p.idTiny),
+              erpNumero: p.numero ? String(p.numero) : undefined,
+              sincronizacaoAutomatica: true,
+              tentativasSincronizacao: 0,
+            }
+            : undefined,
           itens: [], // Produtos serão carregados separadamente se necessário
           geraReceita: p.geraReceita,
         }));
@@ -1935,6 +1953,14 @@ export const api = {
           createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
           updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
           createdBy: pedidoData.createdBy,
+          integracaoERP: pedidoData.idTiny
+            ? {
+              erpPedidoId: String(pedidoData.idTiny),
+              erpNumero: pedidoData.numero ? String(pedidoData.numero) : undefined,
+              sincronizacaoAutomatica: true,
+              tentativasSincronizacao: 0,
+            }
+            : undefined,
           itens: produtos.map((p: any) => ({
             id: p.id,
             numero: p.numero,
@@ -2442,6 +2468,14 @@ export const api = {
           createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
           updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
           createdBy: pedidoData.createdBy,
+          integracaoERP: pedidoData.idTiny
+            ? {
+              erpPedidoId: String(pedidoData.idTiny),
+              erpNumero: pedidoData.numero ? String(pedidoData.numero) : undefined,
+              sincronizacaoAutomatica: true,
+              tentativasSincronizacao: 0,
+            }
+            : undefined,
           itens: produtos.map((p: any) => ({
             id: p.id,
             numero: p.numero,
@@ -2460,18 +2494,10 @@ export const api = {
           })),
         };
       } catch (error) {
-        console.error('[API] Erro ao criar venda, usando fallback:', error);
-        // Fallback para localStorage em caso de erro
-        const vendas = carregarVendasDoLocalStorage();
-        const novaVenda = {
-          ...data,
-          id: data.id || `VD-${Date.now()}`,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        vendas.push(novaVenda);
-        salvarVendasNoLocalStorage(vendas);
-        return novaVenda;
+        console.error('[API] Erro ao criar venda:', error);
+        // Importante: não fazer fallback silencioso aqui.
+        // O fluxo da UI (ex: SaleFormPage) precisa tratar o erro e não navegar como se tivesse salvo.
+        throw error;
       }
     }
 
@@ -2841,6 +2867,14 @@ export const api = {
           createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
           updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
           createdBy: pedidoData.createdBy,
+          integracaoERP: pedidoData.idTiny
+            ? {
+              erpPedidoId: String(pedidoData.idTiny),
+              erpNumero: pedidoData.numero ? String(pedidoData.numero) : undefined,
+              sincronizacaoAutomatica: true,
+              tentativasSincronizacao: 0,
+            }
+            : undefined,
           itens: produtos.map((p: any) => ({
             id: p.id,
             numero: p.numero,
@@ -2859,21 +2893,10 @@ export const api = {
           })),
         };
       } catch (error) {
-        console.error('[API] Erro ao atualizar venda, usando fallback:', error);
-        // Fallback para localStorage em caso de erro
-        const vendas = carregarVendasDoLocalStorage();
-        const index = vendas.findIndex(v => v.id === id);
-        if (index === -1) {
-          throw new Error(`Venda ${id} não encontrada`);
-        }
-        vendas[index] = {
-          ...vendas[index],
-          ...data,
-          id,
-          updatedAt: new Date(),
-        };
-        salvarVendasNoLocalStorage(vendas);
-        return vendas[index];
+        console.error('[API] Erro ao atualizar venda:', error);
+        // Importante: nao fazer fallback silencioso aqui.
+        // O fluxo da UI precisa tratar o erro e manter o usuario na tela.
+        throw error;
       }
     }
 
@@ -3543,6 +3566,14 @@ export const api = {
           createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
           updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
           createdBy: p.createdBy,
+          integracaoERP: p.idTiny
+            ? {
+              erpPedidoId: String(p.idTiny),
+              erpNumero: p.numero ? String(p.numero) : undefined,
+              sincronizacaoAutomatica: true,
+              tentativasSincronizacao: 0,
+            }
+            : undefined,
           itens: [], // Produtos serão carregados separadamente se necessário
           geraReceita: p.geraReceita,
         }));
@@ -3623,6 +3654,14 @@ export const api = {
           createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
           updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
           createdBy: pedidoData.createdBy,
+          integracaoERP: pedidoData.idTiny
+            ? {
+              erpPedidoId: String(pedidoData.idTiny),
+              erpNumero: pedidoData.numero ? String(pedidoData.numero) : undefined,
+              sincronizacaoAutomatica: true,
+              tentativasSincronizacao: 0,
+            }
+            : undefined,
           itens: produtos.map((p: any) => ({
             id: p.id,
             numero: p.numero,
@@ -3644,6 +3683,18 @@ export const api = {
         console.error('[API] Erro ao buscar venda:', error);
         throw error;
       }
+    },
+
+    enviarAoERP: async (pedidoVendaId: string | number, options?: { dryRun?: boolean }) => {
+      console.log('[API] Enviando pedido ao Tiny ERP via Edge Function tiny-enviar-pedido-venda-v1...', {
+        pedidoVendaId,
+        dryRun: !!options?.dryRun,
+      });
+      const response = await callEdgeFunction('tiny-enviar-pedido-venda-v1', 'POST', {
+        pedido_venda_ID: pedidoVendaId,
+        dry_run: !!options?.dryRun,
+      });
+      return response;
     },
 
     create: async (data: any) => {
@@ -3690,6 +3741,14 @@ export const api = {
           createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
           updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
           createdBy: pedidoData.createdBy,
+          integracaoERP: pedidoData.idTiny
+            ? {
+              erpPedidoId: String(pedidoData.idTiny),
+              erpNumero: pedidoData.numero ? String(pedidoData.numero) : undefined,
+              sincronizacaoAutomatica: true,
+              tentativasSincronizacao: 0,
+            }
+            : undefined,
           itens: produtos.map((p: any) => ({
             id: p.id,
             numero: p.numero,
@@ -3757,6 +3816,14 @@ export const api = {
           createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
           updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
           createdBy: pedidoData.createdBy,
+          integracaoERP: pedidoData.idTiny
+            ? {
+              erpPedidoId: String(pedidoData.idTiny),
+              erpNumero: pedidoData.numero ? String(pedidoData.numero) : undefined,
+              sincronizacaoAutomatica: true,
+              tentativasSincronizacao: 0,
+            }
+            : undefined,
           itens: produtos.map((p: any) => ({
             id: p.id,
             numero: p.numero,
@@ -3860,6 +3927,15 @@ export const api = {
   naturezasOperacao: {
     list: async (filters?: { search?: string; apenasAtivas?: boolean; page?: number; limit?: number }) => {
       try {
+        const cacheKey = getOptionsCacheKey('naturezas-operacao-v2', {
+          search: filters?.search,
+          apenas_ativas: filters?.apenasAtivas ? 'true' : undefined,
+          page: filters?.page,
+          limit: filters?.limit,
+        });
+        const cached = getCachedOptions<any[]>(cacheKey);
+        if (cached) return cached;
+
         console.log('[API] Listando naturezas via Edge Function natureza-operacao-v2...');
         const params = new URLSearchParams();
         if (filters?.search) params.append('search', filters.search);
@@ -3880,6 +3956,7 @@ export const api = {
 
         console.log(`[API] ${naturezas.length} naturezas encontradas`);
 
+        setCachedOptions(cacheKey, naturezas);
         return naturezas;
       } catch (error) {
         console.error('[API] Erro ao listar naturezas, usando mock:', error);
@@ -4123,5 +4200,3 @@ export const api = {
     return { success: true };
   },
 };
-
-

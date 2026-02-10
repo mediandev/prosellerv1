@@ -76,12 +76,18 @@ export function TinyERPPedidosPage() {
     const statusMap: Record<string, { variant: any; label: string }> = {
       'Rascunho': { variant: 'outline', label: 'Rascunho' },
       'Em Análise': { variant: 'secondary', label: 'Em Análise' },
+      'Em aberto': { variant: 'secondary', label: 'Em aberto' },
       'Aprovado': { variant: 'default', label: 'Aprovado' },
-      'Em Separação': { variant: 'secondary', label: 'Em Separação' }, // ✅ NOVO
+      'Preparando envio': { variant: 'secondary', label: 'Preparando envio' },
       'Faturado': { variant: 'default', label: 'Faturado' },
-      'Concluído': { variant: 'default', label: 'Concluído' }, // ✅ NOVO
+      'Pronto para envio': { variant: 'secondary', label: 'Pronto para envio' },
       'Enviado': { variant: 'default', label: 'Enviado' }, // ✅ NOVO
+      'Entregue': { variant: 'default', label: 'Entregue' },
+      'Não Entregue': { variant: 'destructive', label: 'Não Entregue' },
       'Cancelado': { variant: 'destructive', label: 'Cancelado' },
+      // Compat legado
+      'Em Separação': { variant: 'secondary', label: 'Pronto para envio' },
+      'Concluído': { variant: 'default', label: 'Entregue' },
     };
 
     // ✅ CORRIGIDO: Se status não estiver mapeado, usa status direto

@@ -71,12 +71,19 @@ function createHttpSuccessResponse<T>(data: T, status: number = 200, meta?: Reco
 function formatErrorResponse(error: Error | unknown): Response {
     let statusCode = 500
     let errorMessage = 'Internal server error'
-    if (error instanceof Error) {
-        errorMessage = error.message
-        if (error.message.includes('Unauthorized') || error.message.includes('authentication')) statusCode = 401
-        else if (error.message.includes('permission') || error.message.includes('forbidden')) statusCode = 403
-        else if (error.message.includes('not found') || error.message.includes('não encontrado')) statusCode = 404
-        else if (error.message.includes('validation') || error.message.includes('invalid') || error.message.includes('obrigatório')) statusCode = 400
+
+    const msgFromUnknown =
+        typeof error === 'object' && error !== null && 'message' in error
+            ? String((error as { message?: unknown }).message || '')
+            : ''
+
+    if (error instanceof Error || msgFromUnknown) {
+        const msg = error instanceof Error ? error.message : msgFromUnknown
+        errorMessage = msg || errorMessage
+        if (msg.includes('Unauthorized') || msg.includes('authentication')) statusCode = 401
+        else if (msg.includes('permission') || msg.includes('forbidden')) statusCode = 403
+        else if (msg.includes('not found') || msg.includes('não encontrado')) statusCode = 404
+        else if (msg.includes('validation') || msg.includes('invalid') || msg.includes('obrigatório')) statusCode = 400
     }
     console.error('[COMISSOES-V2] Error:', { message: errorMessage, statusCode })
     return new Response(
@@ -84,7 +91,6 @@ function formatErrorResponse(error: Error | unknown): Response {
         { status: statusCode, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 }
-
 serve(async (req) => {
     const startTime = Date.now()
     console.log('[COMISSOES-V2] Request received:', { method: req.method, url: req.url })
@@ -358,8 +364,28 @@ serve(async (req) => {
             let query = supabase.from('vendedor_comissão').select('*').order('vendedor_comissao_id', { ascending: false })
 
             if (periodo) {
-                // Filtra pelo período literal OU (se período for nulo) pela data_inicio correspondente (YYYY-MM)
-                query = query.or(`periodo.eq.${periodo},and(periodo.is.null,data_inicio.gte.${periodo}-01,data_inicio.lte.${periodo}-31)`)
+                // Filtra pelo período literal OU (se período for nulo) pela data_inicio dentro do mês.
+                // Importante: não usar "-31" (datas inválidas quebram Postgres em meses com 28/29/30 dias).
+                if (!/^\d{4}-\d{2}$/.test(periodo)) {
+                    throw new Error('Parâmetro periodo (YYYY-MM) é obrigatório e deve estar no formato correto')
+                }
+
+                const [yearStr, monthStr] = periodo.split('-')
+                const year = Number(yearStr)
+                const month = Number(monthStr) // 1-12
+                if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+                    throw new Error('Parâmetro periodo (YYYY-MM) é obrigatório e deve estar no formato correto')
+                }
+
+                // Usar limite superior exclusivo (primeiro dia do próximo mês) para evitar "último dia do mês".
+                const start = new Date(Date.UTC(year, month - 1, 1))
+                const next = new Date(Date.UTC(year, month, 1))
+                const startIso = start.toISOString().slice(0, 10) // YYYY-MM-DD
+                const nextIso = next.toISOString().slice(0, 10)   // YYYY-MM-DD
+
+                query = query.or(
+                    `periodo.eq.${periodo},and(periodo.is.null,data_inicio.gte.${startIso},data_inicio.lt.${nextIso})`
+                )
             }
             if (vendedorId) query = query.eq('vendedor_uuid', vendedorId)
 

@@ -19,6 +19,7 @@ import {
   filtrarPorPeriodo,
   calculateMetricsWithComparison,
 } from "../services/dashboardDataService";
+import { isStatusConcluido } from "../utils/statusVendaUtils";
 
 interface MetricCardProps {
   title: string;
@@ -550,8 +551,7 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
       }
       // CORRIGIDO: Aceitar todas as variações de status concluído
       if (selectedStatusVendas === "concluidas") {
-        const statusConcluido = ['Faturado', 'Concluído', 'Concluída', 'faturado', 'concluido', 'concluida'].includes(transaction.status || '');
-        if (!statusConcluido) {
+        if (!isStatusConcluido(transaction.status || '')) {
           return false;
         }
       }

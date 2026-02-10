@@ -11,6 +11,7 @@ import { companyService } from "../services/companyService";
 import { Badge } from "./ui/badge";
 import { Combobox } from "./ui/combobox";
 import { api } from "../services/api";
+import { isStatusConcluido } from "../utils/statusVendaUtils";
 
 interface ProductABCFilters {
   dataInicio: string;
@@ -130,8 +131,7 @@ export function ProductABCReportPage({ onBack }: ProductABCReportPageProps) {
 
       // CORRIGIDO: Filtro de Status - aceitar todas as variações de status concluído
       if (filters.statusVendas === "concluidas") {
-        const statusConcluido = ['Faturado', 'Concluído', 'Concluída', 'faturado', 'concluido', 'concluida'].includes(venda.status || '');
-        if (!statusConcluido) {
+        if (!isStatusConcluido(venda.status || '')) {
           return false;
         }
       }

@@ -232,10 +232,47 @@ serve(async (req) => {
       if (!body.vendedorId && !body.vendedor_id) {
         throw new Error('vendedorId é obrigatório')
       }
-      const naturezaOperacaoNome = body.nomeNaturezaOperacao || body.nome_natureza_operacao || body.naturezaOperacao || body.natureza_operacao
-      const nomeTrimmed = naturezaOperacaoNome ? String(naturezaOperacaoNome).trim() : ''
+
+      // Validar vendedor contra a tabela referenciada pelo FK (pedido_venda.vendedor_uuid -> dados_vendedor.user_id).
+      // Isso evita erro 500 por violação de FK e retorna um erro mais claro.
+      const vendedorUuid = body.vendedorId || body.vendedor_id
+      const { data: vendedorDados, error: vendedorDadosError } = await supabase
+        .from('dados_vendedor')
+        .select('user_id')
+        .eq('user_id', vendedorUuid)
+        .is('deleted_at', null)
+        .maybeSingle()
+      if (vendedorDadosError) {
+        throw new Error(`Database operation failed: ${vendedorDadosError.message}`)
+      }
+      if (!vendedorDados) {
+        throw new Error('Vendedor não encontrado (cadastro incompleto em dados_vendedor)')
+      }
+      // Natureza de operação:
+      // O RPC create_pedido_venda_v2 valida natureza por NOME exato, então aqui resolvemos pelo ID quando possível.
+      const naturezaOperacaoIdRaw = body.naturezaOperacaoId || body.natureza_operacao_id
+      let nomeTrimmed = ''
+      if (naturezaOperacaoIdRaw !== undefined && naturezaOperacaoIdRaw !== null && String(naturezaOperacaoIdRaw).trim() !== '') {
+        const naturezaIdNum = parseInt(String(naturezaOperacaoIdRaw), 10)
+        if (isNaN(naturezaIdNum) || naturezaIdNum <= 0) {
+          throw new Error(`naturezaOperacaoId inválido: ${naturezaOperacaoIdRaw}`)
+        }
+        const { data: natureza, error: naturezaError } = await supabase
+          .rpc('get_natureza_operacao_v2', { p_id: naturezaIdNum })
+        if (naturezaError) {
+          throw new Error(`Database operation failed: ${naturezaError.message}`)
+        }
+        if (!natureza || natureza.length === 0) {
+          throw new Error('Natureza de operação não encontrada')
+        }
+        nomeTrimmed = String(natureza[0].nome || '').trim()
+      } else {
+        const naturezaOperacaoNome =
+          body.nomeNaturezaOperacao || body.nome_natureza_operacao || body.naturezaOperacao || body.natureza_operacao
+        nomeTrimmed = naturezaOperacaoNome ? String(naturezaOperacaoNome).trim() : ''
+      }
       if (!nomeTrimmed) {
-        throw new Error('naturezaOperacao é obrigatória (informe nomeNaturezaOperacao ou naturezaOperacao)')
+        throw new Error('naturezaOperacao é obrigatória (informe naturezaOperacaoId ou nomeNaturezaOperacao)')
       }
 
       // Preparar produtos para JSONB (aceita itens ou produtos)
@@ -245,7 +282,8 @@ serve(async (req) => {
         produtosJsonb = produtosPayload.map((p: any) => ({
           produtoId: p.produtoId || p.produto_id,
           numero: p.numero || 1,
-          descricaoProduto: p.descricaoProduto || p.descricao || '',
+          // Accept both camelCase and snake_case payloads.
+          descricaoProduto: p.descricaoProduto || p.descricao || p.descricao_produto || '',
           codigoSku: p.codigoSku || p.codigo_sku || '',
           codigoEan: p.codigoEan || p.codigo_ean || null,
           valorTabela: p.valorTabela || p.valor_tabela || 0,
@@ -262,7 +300,7 @@ serve(async (req) => {
       const { data: rpcData, error: rpcError } = await supabase
         .rpc('create_pedido_venda_v2', {
           p_cliente_id: parseInt(String(body.clienteId || body.cliente_id), 10),
-          p_vendedor_uuid: body.vendedorId || body.vendedor_id,
+          p_vendedor_uuid: vendedorUuid,
           p_natureza_operacao: nomeTrimmed,
           p_numero_pedido: body.numero || body.numeroPedido || null,
           p_empresa_faturamento_id: body.empresaFaturamentoId || body.empresa_faturamento_id ? parseInt(String(body.empresaFaturamentoId || body.empresa_faturamento_id), 10) : null,
@@ -315,6 +353,41 @@ serve(async (req) => {
       
       const body = await req.json().catch(() => ({}))
 
+      const vendedorUuid = body.vendedorId || body.vendedor_id || null
+      if (vendedorUuid) {
+        const { data: vendedorDados, error: vendedorDadosError } = await supabase
+          .from('dados_vendedor')
+          .select('user_id')
+          .eq('user_id', vendedorUuid)
+          .is('deleted_at', null)
+          .maybeSingle()
+        if (vendedorDadosError) {
+          throw new Error(`Database operation failed: ${vendedorDadosError.message}`)
+        }
+        if (!vendedorDados) {
+          throw new Error('Vendedor não encontrado (cadastro incompleto em dados_vendedor)')
+        }
+      }
+
+      // Natureza de operação (resolver por ID quando enviado)
+      let naturezaOperacaoNomeResolved: string | null = null
+      const naturezaOperacaoIdRaw = body.naturezaOperacaoId || body.natureza_operacao_id
+      if (naturezaOperacaoIdRaw !== undefined && naturezaOperacaoIdRaw !== null && String(naturezaOperacaoIdRaw).trim() !== '') {
+        const naturezaIdNum = parseInt(String(naturezaOperacaoIdRaw), 10)
+        if (isNaN(naturezaIdNum) || naturezaIdNum <= 0) {
+          throw new Error(`naturezaOperacaoId inválido: ${naturezaOperacaoIdRaw}`)
+        }
+        const { data: natureza, error: naturezaError } = await supabase
+          .rpc('get_natureza_operacao_v2', { p_id: naturezaIdNum })
+        if (naturezaError) {
+          throw new Error(`Database operation failed: ${naturezaError.message}`)
+        }
+        if (!natureza || natureza.length === 0) {
+          throw new Error('Natureza de operação não encontrada')
+        }
+        naturezaOperacaoNomeResolved = String(natureza[0].nome || '').trim()
+      }
+
       // Preparar produtos para JSONB (aceita itens ou produtos)
       const produtosPayloadPut = body.produtos ?? body.itens
       let produtosJsonb = undefined
@@ -325,7 +398,8 @@ serve(async (req) => {
           produtosJsonb = produtosPayloadPut.map((p: any) => ({
             produtoId: p.produtoId || p.produto_id,
             numero: p.numero || 1,
-            descricaoProduto: p.descricaoProduto || p.descricao || '',
+            // Accept both camelCase and snake_case payloads.
+            descricaoProduto: p.descricaoProduto || p.descricao || p.descricao_produto || '',
             codigoSku: p.codigoSku || p.codigo_sku || '',
             codigoEan: p.codigoEan || p.codigo_ean || null,
             valorTabela: p.valorTabela || p.valor_tabela || 0,
@@ -344,12 +418,15 @@ serve(async (req) => {
         .rpc('update_pedido_venda_v2', {
           p_pedido_id: pedidoIdNum,
           p_cliente_id: body.clienteId || body.cliente_id ? parseInt(String(body.clienteId || body.cliente_id), 10) : null,
-          p_vendedor_uuid: body.vendedorId || body.vendedor_id || null,
+          p_vendedor_uuid: vendedorUuid,
           p_numero_pedido: body.numero || body.numeroPedido || null,
-          p_natureza_operacao: (() => {
-          const nome = body.nomeNaturezaOperacao || body.nome_natureza_operacao || body.naturezaOperacao || body.natureza_operacao
-          return nome ? String(nome).trim() : null
-        })(),
+          p_natureza_operacao:
+            naturezaOperacaoNomeResolved ??
+            (() => {
+              const nome =
+                body.nomeNaturezaOperacao || body.nome_natureza_operacao || body.naturezaOperacao || body.natureza_operacao
+              return nome ? String(nome).trim() : null
+            })(),
           p_empresa_faturamento_id: body.empresaFaturamentoId || body.empresa_faturamento_id ? parseInt(String(body.empresaFaturamentoId || body.empresa_faturamento_id), 10) : null,
           p_lista_preco_id: body.listaPrecoId || body.lista_preco_id ? parseInt(String(body.listaPrecoId || body.lista_preco_id), 10) : null,
           p_percentual_desconto_padrao: body.percentualDescontoPadrao ?? body.percentual_desconto_padrao ?? null,

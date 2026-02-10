@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { Transaction } from '../services/dashboardDataService';
 import { DashboardFilters } from './DashboardMetrics';
 import { buscarMetaVendedor, buscarMetaTotal } from '../services/metasService';
+import { isStatusConcluido } from "../utils/statusVendaUtils";
 import {
   Card,
   CardContent,
@@ -87,7 +88,7 @@ function groupTransactionsByPeriodAndStatus(transactions: Transaction[], groupBy
     }
     
     // Separar por status
-    const statusConcluido = ['Faturado', 'Concluído', 'Concluída', 'faturado', 'concluido', 'concluida'].includes(t.status || '');
+    const statusConcluido = isStatusConcluido(t.status || '');
     const statusPendente = [
       'Pendente', 'pendente',
       'Em Andamento', 'em andamento', 'Em andamento',

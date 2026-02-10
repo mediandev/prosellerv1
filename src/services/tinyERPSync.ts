@@ -466,10 +466,24 @@ class TinyERPSyncService {
           nota_fiscal_id: statusERP.nota_fiscal?.id,
           id_nota_fiscal: statusERP.id_nota_fiscal,
           statusNovo,
-          deveProcessar: notaFiscalIdDisponivel && (statusNovo === 'Aprovado' || statusNovo === 'Faturado' || statusNovo === 'Concluído')
+          deveProcessar: notaFiscalIdDisponivel && (
+            statusNovo === 'Aprovado' ||
+            statusNovo === 'Faturado' ||
+            statusNovo === 'Pronto para envio' ||
+            statusNovo === 'Enviado' ||
+            statusNovo === 'Entregue' ||
+            statusNovo === 'Não Entregue'
+          )
         });
         
-        if (notaFiscalIdDisponivel && (statusNovo === 'Aprovado' || statusNovo === 'Faturado' || statusNovo === 'Concluído')) {
+        if (notaFiscalIdDisponivel && (
+          statusNovo === 'Aprovado' ||
+          statusNovo === 'Faturado' ||
+          statusNovo === 'Pronto para envio' ||
+          statusNovo === 'Enviado' ||
+          statusNovo === 'Entregue' ||
+          statusNovo === 'Não Entregue'
+        )) {
           console.log('[Tiny Sync] 📄 Pedido faturado detectado, buscando dados completos da nota fiscal...');
           
           try {
@@ -899,10 +913,14 @@ class TinyERPSyncService {
     const notificacoesPorStatus: Record<StatusVenda, { tipo: 'success' | 'info' | 'warning'; icone: string }> = {
       'Rascunho': { tipo: 'info', icone: '📝' },
       'Em Análise': { tipo: 'info', icone: '🔍' },
+      'Em aberto': { tipo: 'info', icone: '🕒' },
       'Aprovado': { tipo: 'success', icone: '✅' },
-      'Em Separação': { tipo: 'info', icone: '📦' },
-      'Faturado': { tipo: 'success', icone: '' },
+      'Preparando envio': { tipo: 'info', icone: '📦' },
+      'Faturado': { tipo: 'success', icone: '🧾' },
+      'Pronto para envio': { tipo: 'info', icone: '🚚' },
       'Enviado': { tipo: 'success', icone: '🚚' },
+      'Entregue': { tipo: 'success', icone: '📬' },
+      'Não Entregue': { tipo: 'warning', icone: '⚠️' },
       'Cancelado': { tipo: 'warning', icone: '❌' },
     };
 

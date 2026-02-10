@@ -6,6 +6,7 @@ import { Cliente } from '../types/customer';
 import { Produto } from '../types/produto';
 import { CondicaoPagamento } from '../types/condicaoPagamento';
 import { NaturezaOperacao } from '../types/naturezaOperacao';
+import { isStatusConcluido } from '../utils/statusVendaUtils';
 import { erpAutoSendService } from '../services/erpAutoSendService';
 import { companyService } from '../services/companyService';
 import { api } from '../services/api';
@@ -67,9 +68,16 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency, formatCNPJ, formatCPF } from '../lib/masks';
+import { mockNaturezasOperacao } from '../data/mockNaturezasOperacao';
+import { condicoesPagamentoMock } from '../data/mockCondicoesPagamento';
 
 // Função auxiliar para converter Date para string local (yyyy-mm-dd) sem conversão de fuso horário
 const formatarDataParaInput = (data: Date | string): string => {
+  if (typeof data === 'string') {
+    // Evita problemas de fuso com strings no formato date-only (YYYY-MM-DD).
+    if (/^\d{4}-\d{2}-\d{2}$/.test(data)) return data;
+  }
+
   const dateObj = typeof data === 'string' ? new Date(data) : data;
   const ano = dateObj.getFullYear();
   const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -392,56 +400,27 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     try {
       console.log('[VENDAS] Carregando dados iniciais...');
 
-      // Buscar TODOS os clientes (fazendo múltiplas chamadas paginadas)
-      console.log('[VENDAS] Buscando todos os clientes aprovados...');
-      let todosClientes: any[] = [];
-      let paginaAtual = 1;
-      let temMaisPaginas = true;
-      const limitePorPagina = 100; // Limite máximo da Edge Function
-
-      while (temMaisPaginas) {
-        const clientesResponse = await api.get('clientes', {
-          params: {
-            page: paginaAtual,
-            limit: limitePorPagina,
-            status_aprovacao: 'aprovado' // Apenas clientes aprovados
-          }
-        });
-
-        // Extrair array de clientes da resposta
-        const clientesPagina = Array.isArray(clientesResponse)
-          ? clientesResponse
-          : (clientesResponse?.clientes || []);
-
-        todosClientes = [...todosClientes, ...clientesPagina];
-
-        // Verificar se há mais páginas
-        const pagination = Array.isArray(clientesResponse) ? null : (clientesResponse?.pagination || null);
-        if (pagination) {
-          temMaisPaginas = paginaAtual < pagination.total_pages;
-          paginaAtual++;
-          console.log(`[VENDAS] Carregados ${todosClientes.length} de ${pagination.total} clientes (página ${pagination.page}/${pagination.total_pages})`);
-        } else {
-          // Se não há paginação, assumir que carregou tudo
-          temMaisPaginas = false;
+      // Load only the first page of approved clients (avoid many requests on mount).
+      // Debounced search already queries the API as the user types.
+      console.log('[VENDAS] Buscando clientes aprovados (pagina inicial)...');
+      const clientesResponse = await api.get('clientes', {
+        params: {
+          page: 1,
+          limit: 100,
+          status_aprovacao: 'aprovado'
         }
+      });
 
-        // Proteção contra loop infinito
-        if (paginaAtual > 1000) {
-          console.warn('[VENDAS] Limite de páginas atingido. Parando busca.');
-          temMaisPaginas = false;
-        }
-      }
+      const clientesAPI = Array.isArray(clientesResponse)
+        ? clientesResponse
+        : (clientesResponse?.clientes || []);
 
-      console.log(`[VENDAS] Total de clientes carregados: ${todosClientes.length}`);
-      const clientesAPI = todosClientes;
-
-      const [produtosAPI, naturezasAPI, condicoesAPI, listasPrecoAPI, vendasAPI] = await Promise.all([
+      const [produtosAPI, naturezasAPI, condicoesAPI, listasPrecoAPI, vendaExistenteAPI] = await Promise.all([
         api.get('produtos'),
-        api.get('naturezas-operacao'),
+        api.naturezasOperacao.list({ apenasAtivas: true, page: 1, limit: 100 }),
         api.get('condicoes-pagamento'),
         api.get('listasPreco').catch(() => []),
-        vendaId && modo !== 'criar' ? api.get('vendas') : Promise.resolve([])
+        vendaId && modo !== 'criar' ? api.getById('vendas', vendaId) : Promise.resolve(null)
       ]);
 
       console.log('[VENDAS] Naturezas recebidas da API:', {
@@ -461,8 +440,8 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
       // Se for edição, carregar venda existente
       if (vendaId && modo !== 'criar') {
-        const vendaExistente = vendasAPI.find((v: Venda) => v.id === vendaId);
-        if (vendaExistente) {
+        const vendaExistente = vendaExistenteAPI as Venda | null;
+        if (vendaExistente && vendaExistente.id === vendaId) {
           console.log('[VENDAS] Venda carregada para edição/visualização:', {
             id: vendaExistente.id,
             numero: vendaExistente.numero,
@@ -537,8 +516,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       return;
     }
 
-    const statusPermitidos = ['Faturado', 'Concluído'];
-    if (!statusPermitidos.includes(formData.status || '')) {
+    if (!isStatusConcluido(formData.status || '')) {
       return;
     }
 
@@ -810,7 +788,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     if (formData.id && modoAtual === 'visualizar' && formData.integracaoERP?.erpPedidoId) {
       carregarItensFaturados();
     }
-  }, [formData.id, formData.integracaoERP?.erpPedidoId, modoAtual]);
+  }, [formData.id, formData.integracaoERP?.erpPedidoId, formData.status, formData.empresaFaturamentoId, modoAtual]);
 
   // Carregar dados completos da NFe quando necessário
   const carregarDadosNFe = async () => {
@@ -939,7 +917,14 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       });
       carregarDadosNFe();
     }
-  }, [formData.id, formData.integracaoERP?.notaFiscalId, formData.integracaoERP?.notaFiscalNumero, modoAtual]);
+  }, [
+    formData.id,
+    formData.integracaoERP?.notaFiscalId,
+    formData.integracaoERP?.notaFiscalNumero,
+    formData.integracaoERP?.notaFiscalChave,
+    formData.empresaFaturamentoId,
+    modoAtual
+  ]);
 
   // Log de debug para integração ERP
   useEffect(() => {
@@ -1847,15 +1832,27 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       }
     } catch (error: any) {
       console.error('[VENDAS] Erro ao salvar venda:', error);
-      toast.error(`Erro ao salvar pedido: ${error.message || 'Erro desconhecido'}`);
 
-      // Fallback: salvar no localStorage
-      console.warn('[VENDAS] Salvando no localStorage como fallback...');
-      // Agora os dados são persistidos via API
-      console.log('[SALE-FORM] Venda salva com sucesso:', vendaCompleta.id);
-      const { salvarVendasNoLocalStorage } = await import('../data/mockVendas');
-      salvarVendasNoLocalStorage(mockVendas);
-      return; // Interromper execução em caso de erro
+      const message = error?.message || 'Erro desconhecido';
+      toast.error(`Erro ao salvar pedido: ${message}`);
+
+      // Evitar "falso salvo": salvar localmente apenas em rascunho + erro de rede.
+      const isNetworkError =
+        typeof message === 'string' &&
+        /failed to fetch|networkerror|load failed|fetch/i.test(message);
+
+      if (salvarComoRascunho && isNetworkError) {
+        console.warn('[VENDAS] Erro de rede ao salvar rascunho. Salvando no localStorage como fallback...');
+        toast.warning('Sem conex�o. Rascunho salvo localmente; tente salvar novamente quando a internet voltar.');
+
+        const { carregarVendasDoLocalStorage, salvarVendasNoLocalStorage } = await import('../data/mockVendas');
+        const vendasLocal = carregarVendasDoLocalStorage();
+        const vendasAtualizadas = vendasLocal.filter((v) => v.id !== vendaCompleta.id);
+        vendasAtualizadas.unshift(vendaCompleta);
+        salvarVendasNoLocalStorage(vendasAtualizadas);
+      }
+
+      return; // Interromper execu��o em caso de erro
     }
 
     // Ativar Status Mix automaticamente para os produtos do pedido
@@ -2000,8 +1997,19 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Carregando dados do pedido...
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col min-h-screen bg-background p-6">
+    <div className="flex flex-col min-h-screen bg-background p-4 md:p-6">
       <div className="max-w-7xl mx-auto w-full space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -2347,7 +2355,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           <>
             {/* Dados NFe Vinculada - Apenas em modo visualização e status específicos */}
             {(() => {
-              const statusComNotaFiscal = ['Faturado', 'Enviado', 'Concluído', 'Cancelado'];
+              const statusComNotaFiscal = ['Faturado', 'Pronto para envio', 'Enviado', 'Entregue', 'N�o Entregue', 'Cancelado'];
               const deveExibirNFe = statusComNotaFiscal.includes(formData.status || '');
 
               console.log('[DEBUG NFe] Verificando exibição da seção:', {
@@ -2880,22 +2888,28 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
             {/* Dialog Adicionar Item */}
             <Dialog open={addItemDialogOpen} onOpenChange={setAddItemDialogOpen}>
-              <DialogContent className="max-w-2xl" aria-describedby={undefined}>
+              <DialogContent
+                className="max-w-2xl w-[calc(100vw-2rem)] max-h-[85vh] overflow-y-auto overflow-x-hidden"
+                aria-describedby={undefined}
+              >
                 <DialogHeader>
                   <DialogTitle>Adicionar Item ao Pedido</DialogTitle>
                   <DialogDescription>
                     Selecione um produto e informe a quantidade
                   </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
+                <div className="space-y-4 py-4 overflow-x-hidden">
                   <div className="space-y-2">
                     <Label>Produto *</Label>
                     <Select
                       value={selectedProdutoId}
                       onValueChange={setSelectedProdutoId}
                     >
-                      <SelectTrigger className="w-full flex [&>span]:min-w-0 [&>span]:truncate">
-                        <SelectValue placeholder="Buscar por descrição, SKU ou EAN" />
+                      <SelectTrigger className="w-full min-w-0 overflow-hidden">
+                        <SelectValue
+                          className="min-w-0 flex-1 truncate"
+                          placeholder="Buscar por descrição, SKU ou EAN"
+                        />
                       </SelectTrigger>
                       <SelectContent>
                         {(() => {
@@ -2912,7 +2926,9 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                                   const ean = produtoPreco.codigoEan || '';
                                   return (
                                     <SelectItem key={produtoPreco.produtoId} value={produtoPreco.produtoId}>
-                                      {descricao} {sku ? `- SKU: ${sku}` : ''} {ean ? `- EAN: ${ean}` : ''}
+                                      <span className="block min-w-0 truncate">
+                                        {descricao} {sku ? `- SKU: ${sku}` : ''} {ean ? `- EAN: ${ean}` : ''}
+                                      </span>
                                     </SelectItem>
                                   );
                                 });
@@ -2921,8 +2937,10 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                           // Fallback: usar lista completa de produtos se não houver lista de preços
                           return produtos.filter(p => p.ativo).map(produto => (
                             <SelectItem key={produto.id} value={produto.id}>
-                              {produto.nome} - SKU: {produto.codigo}
-                              {produto.codigoEan ? ` - EAN: ${produto.codigoEan}` : ''}
+                              <span className="block min-w-0 truncate">
+                                {produto.nome} - SKU: {produto.codigo}
+                                {produto.codigoEan ? ` - EAN: ${produto.codigoEan}` : ''}
+                              </span>
                             </SelectItem>
                           ));
                         })()}
@@ -2942,7 +2960,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                   </div>
 
                   {selectedProdutoId && (
-                    <div className="border rounded-lg p-4 bg-muted">
+                    <div className="border rounded-lg p-4 bg-muted overflow-x-hidden">
                       <h4 className="mb-2">Informações do Produto</h4>
                       {(() => {
                         // Buscar produto na lista de preços primeiro
@@ -2997,16 +3015,28 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
                         if (mensagemErro) {
                           return (
-                            <div className="space-y-2">
+                            <div className="space-y-2 overflow-x-hidden">
                               <div className="text-sm text-destructive">
                                 <AlertCircle className="h-4 w-4 inline mr-2" />
                                 {mensagemErro}
                               </div>
                               {(descricao || sku || ean) && (
-                                <div className="text-sm space-y-1">
-                                  {descricao && <div><span className="text-muted-foreground">Descrição:</span> {descricao}</div>}
-                                  {sku && <div><span className="text-muted-foreground">SKU:</span> {sku}</div>}
-                                  {ean && <div><span className="text-muted-foreground">EAN:</span> {ean}</div>}
+                                <div className="text-sm space-y-1 min-w-0 break-words overflow-x-hidden">
+                                  {descricao && (
+                                    <div className="min-w-0 break-words">
+                                      <span className="text-muted-foreground">Descrição:</span> {descricao}
+                                    </div>
+                                  )}
+                                  {sku && (
+                                    <div className="min-w-0 break-words">
+                                      <span className="text-muted-foreground">SKU:</span> {sku}
+                                    </div>
+                                  )}
+                                  {ean && (
+                                    <div className="min-w-0 break-words">
+                                      <span className="text-muted-foreground">EAN:</span> {ean}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -3017,10 +3047,10 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                           <div className="space-y-3">
                             {/* Informações do produto */}
                             {(descricao || sku || ean) && (
-                              <div className="text-sm space-y-1 pb-2 border-b">
-                                {descricao && <div><span className="text-muted-foreground">Descrição:</span> {descricao}</div>}
-                                {sku && <div><span className="text-muted-foreground">SKU:</span> {sku}</div>}
-                                {ean && <div><span className="text-muted-foreground">EAN:</span> {ean}</div>}
+                              <div className="text-sm space-y-1 pb-2 border-b min-w-0 break-words overflow-x-hidden">
+                                {descricao && <div className="min-w-0 break-words"><span className="text-muted-foreground">Descrição:</span> {descricao}</div>}
+                                {sku && <div className="min-w-0 break-words"><span className="text-muted-foreground">SKU:</span> {sku}</div>}
+                                {ean && <div className="min-w-0 break-words"><span className="text-muted-foreground">EAN:</span> {ean}</div>}
                               </div>
                             )}
 
@@ -3063,4 +3093,5 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     </div>
   );
 }
+
 

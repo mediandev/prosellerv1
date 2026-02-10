@@ -9,6 +9,7 @@ import { Download, Filter, X } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { api } from "../services/api";
 import { toast } from "sonner";
+import { isStatusConcluido } from "../utils/statusVendaUtils";
 
 type GroupBy = "none" | "grupo" | "vendedor" | "natureza";
 
@@ -122,8 +123,7 @@ export function CustomerABCReport() {
 
       // CORRIGIDO: Filtro de status - aceitar todas as variações de status concluído
       if (filters.statusVendas === "concluidas") {
-        const statusConcluido = ['Faturado', 'Concluído', 'Concluída', 'faturado', 'concluido', 'concluida'].includes(venda.status || '');
-        if (!statusConcluido) {
+        if (!isStatusConcluido(venda.status || '')) {
           return false;
         }
       }

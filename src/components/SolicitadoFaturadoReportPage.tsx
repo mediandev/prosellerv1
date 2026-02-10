@@ -14,6 +14,7 @@ import { Calendar } from "./ui/calendar";
 import { ptBR } from "date-fns/locale";
 import { format } from "date-fns";
 import { Checkbox } from "./ui/checkbox";
+import { isStatusConcluido } from "../utils/statusVendaUtils";
 
 type GroupBy = "none" | "grupo" | "vendedor" | "natureza";
 
@@ -275,8 +276,7 @@ export function SolicitadoFaturadoReportPage({ onBack }: SolicitadoFaturadoRepor
 
       // Filtro de status
       if (filters.statusVendas === "concluidas") {
-        const statusConcluido = ['Faturado', 'Concluído', 'Concluída', 'faturado', 'concluido', 'concluida'].includes(venda.status || '');
-        if (!statusConcluido) {
+        if (!isStatusConcluido(venda.status || '')) {
           return false;
         }
       }

@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Venda, StatusVenda } from "../types/venda";
 import { NaturezaOperacao } from "../types/naturezaOperacao";
+import { isStatusConcluido } from "../utils/statusVendaUtils";
 import {
   Card,
   CardContent,
@@ -101,8 +102,6 @@ import { toast } from "sonner@2.0.3";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { api } from '../services/api';
 import { tinyERPSyncService } from '../services/tinyERPSync';
-import { erpAutoSendService } from '../services/erpAutoSendService';
-import { companyService } from '../services/companyService';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Sale {
@@ -147,10 +146,27 @@ const convertVendaToSale = (venda: Venda | any): Sale => {
     .substring(0, 2) || 'SV';
 
   // Normalizar status (se vazio ou inválido, usar 'Rascunho')
-  let status: StatusVenda = venda.status || 'Rascunho';
-  if (status === '' || !['Rascunho', 'Em Análise', 'Aprovado', 'Faturado', 'Concluído', 'Cancelado', 'Em Separação', 'Enviado'].includes(status)) {
-    status = 'Rascunho';
-  }
+  const statusFromDb = (venda.status ?? '') as string;
+  let status: StatusVenda = (statusFromDb as StatusVenda) || 'Rascunho';
+
+  // Compat: mapear status antigos para o novo conjunto.
+  if (statusFromDb === 'Em Separação') status = 'Pronto para envio';
+  if (statusFromDb === 'Concluído') status = 'Entregue';
+
+  const allowed: StatusVenda[] = [
+    'Rascunho',
+    'Em Análise',
+    'Em aberto',
+    'Aprovado',
+    'Preparando envio',
+    'Faturado',
+    'Pronto para envio',
+    'Enviado',
+    'Entregue',
+    'Não Entregue',
+    'Cancelado',
+  ];
+  if (statusFromDb === '' || !allowed.includes(status)) status = 'Rascunho';
 
   // Garantir que itens seja um array
   const itens = Array.isArray(venda.itens) ? venda.itens : [];
@@ -192,7 +208,7 @@ const convertVendaToSale = (venda: Venda | any): Sale => {
     naturezaOperacaoId: venda.naturezaOperacaoId || venda.natureza_operacao_id || '',
     status: status,
     data: format(dataPedido, "dd/MM/yyyy", { locale: ptBR }),
-    dataFechamento: (status === 'Faturado' || status === 'Concluído') && venda.updatedAt 
+    dataFechamento: (status === 'Faturado' || status === 'Entregue' || status === 'Não Entregue' || status === 'Cancelado') && venda.updatedAt 
       ? format(venda.updatedAt instanceof Date ? venda.updatedAt : new Date(venda.updatedAt), "dd/MM/yyyy", { locale: ptBR }) 
       : undefined,
     observacoes: venda.observacoesInternas || venda.observacoes || '',
@@ -204,11 +220,14 @@ const convertVendaToSale = (venda: Venda | any): Sale => {
 const statusConfig: Record<StatusVenda, { label: string; variant: "default" | "secondary" | "outline" | "destructive"; color: string }> = {
   'Rascunho': { label: "Rascunho", variant: "outline", color: "text-gray-500" },
   'Em Análise': { label: "Em Análise", variant: "secondary", color: "text-yellow-600" },
+  'Em aberto': { label: "Em aberto", variant: "secondary", color: "text-amber-700" },
   'Aprovado': { label: "Aprovado", variant: "secondary", color: "text-blue-500" },
-  'Em Separação': { label: "Em Separação", variant: "secondary", color: "text-purple-500" },
+  'Preparando envio': { label: "Preparando envio", variant: "secondary", color: "text-purple-500" },
   'Faturado': { label: "Faturado", variant: "default", color: "text-green-600" },
-  'Concluído': { label: "Concluído", variant: "default", color: "text-green-500" },
+  'Pronto para envio': { label: "Pronto para envio", variant: "secondary", color: "text-indigo-600" },
   'Enviado': { label: "Enviado", variant: "default", color: "text-cyan-500" }, // ✅ NOVO
+  'Entregue': { label: "Entregue", variant: "default", color: "text-emerald-600" },
+  'Não Entregue': { label: "Não Entregue", variant: "destructive", color: "text-orange-600" },
   'Cancelado': { label: "Cancelado", variant: "destructive", color: "text-red-500" }
 };
 
@@ -351,7 +370,7 @@ export function SalesPage({
         api.vendas.list({ 
           page: paginaAtual, 
           limit: itensPorPagina,
-          status: statusFilter || undefined,
+          status: statusFilter !== 'all' ? statusFilter : undefined,
           search: searchTerm || undefined,
           dataInicio,
           dataFim,
@@ -753,28 +772,28 @@ export function SalesPage({
       naturezasGeramReceita.has(s.naturezaOperacaoId) && s.status !== 'Cancelado'
     );
     
-    const vendasConcluidas = salesForCounters.filter(s => 
-      naturezasGeramReceita.has(s.naturezaOperacaoId) && s.status === 'Concluído'
+    const vendasConcluidas = salesForCounters.filter(s =>
+      naturezasGeramReceita.has(s.naturezaOperacaoId) && isStatusConcluido(s.status)
     );
     
-    const vendasEmAndamento = salesForCounters.filter(s => 
-      naturezasGeramReceita.has(s.naturezaOperacaoId) && 
-      s.status !== 'Cancelado' && 
-      s.status !== 'Concluído'
+    const vendasEmAndamento = salesForCounters.filter(s =>
+      naturezasGeramReceita.has(s.naturezaOperacaoId) &&
+      s.status !== 'Cancelado' &&
+      !isStatusConcluido(s.status)
     );
     
     const vendasOutrosPedidosNaoCanceladas = salesForCounters.filter(s => 
       !naturezasGeramReceita.has(s.naturezaOperacaoId) && s.status !== 'Cancelado'
     );
     
-    const outrosPedidosConcluidos = salesForCounters.filter(s => 
-      !naturezasGeramReceita.has(s.naturezaOperacaoId) && s.status === 'Concluído'
+    const outrosPedidosConcluidos = salesForCounters.filter(s =>
+      !naturezasGeramReceita.has(s.naturezaOperacaoId) && isStatusConcluido(s.status)
     );
     
-    const outrosPedidosEmAndamento = salesForCounters.filter(s => 
-      !naturezasGeramReceita.has(s.naturezaOperacaoId) && 
-      s.status !== 'Cancelado' && 
-      s.status !== 'Concluído'
+    const outrosPedidosEmAndamento = salesForCounters.filter(s =>
+      !naturezasGeramReceita.has(s.naturezaOperacaoId) &&
+      s.status !== 'Cancelado' &&
+      !isStatusConcluido(s.status)
     );
     
     return {
@@ -914,7 +933,6 @@ export function SalesPage({
       setSincronizandoVenda(null);
     }
   };
-
   // Enviar pedido manualmente ao ERP
   const handleEnviarParaERP = async (saleId: string) => {
     try {
@@ -935,7 +953,7 @@ export function SalesPage({
         numero: vendaCompleta.numero,
         empresaFaturamentoId: vendaCompleta.empresaFaturamentoId,
         status: vendaCompleta.status,
-        temIntegracaoERP: !!vendaCompleta.integracaoERP?.erpPedidoId
+        temIntegracaoERP: !!vendaCompleta.integracaoERP?.erpPedidoId,
       });
       
       // Verificar se já foi enviado
@@ -956,60 +974,29 @@ export function SalesPage({
         return;
       }
       
-      // Buscar empresa
+      // Verificar se empresa está definida (a Edge Function deriva o token pela empresa do pedido)
       if (!vendaCompleta.empresaFaturamentoId) {
         toast.error('Empresa de faturamento não definida para este pedido');
         return;
       }
-      
-      const empresa = await companyService.getById(vendaCompleta.empresaFaturamentoId);
-      
-      if (!empresa) {
-        toast.error('Empresa de faturamento não encontrada');
-        return;
-      }
-      
-      console.log('[SALES-PAGE] Empresa encontrada:', {
-        id: empresa.id,
-        razaoSocial: empresa.razaoSocial,
-        integracoesERP: empresa.integracoesERP
-      });
-      
-      // Verificar se envio automático está habilitado
-      const envioHabilitado = erpAutoSendService.estaHabilitado(empresa);
-      
-      if (!envioHabilitado) {
-        toast.error('Envio ao ERP não está configurado para esta empresa');
-        return;
-      }
-      
-      // Enviar ao ERP
-      const resultado = await erpAutoSendService.enviarVendaComRetry(vendaCompleta, empresa);
-      
-      console.log('[SALES-PAGE] Resultado do envio:', resultado);
-      
-      if (resultado.sucesso && resultado.erpPedidoId) {
-        // Atualizar venda com dados de integração
-        vendaCompleta.integracaoERP = {
-          erpPedidoId: resultado.erpPedidoId,
-          sincronizacaoAutomatica: true,
-          tentativasSincronizacao: 0,
-        };
-        
-        // Salvar no backend
-        await api.update('vendas', vendaCompleta.id, vendaCompleta);
-        
-        // Atualizar lista local
-        const vendaConvertida = convertVendaToSale(vendaCompleta);
-        setSales(prevSales => 
-          prevSales.map(s => s.id === vendaConvertida.id ? vendaConvertida : s)
-        );
-        
-        toast.success(`Pedido enviado ao ERP com sucesso! (ID: ${resultado.erpPedidoId})`);
-      } else {
-        toast.error(`Erro ao enviar ao ERP: ${resultado.erro || 'Erro desconhecido'}`);
-      }
-      
+
+      // Enviar ao ERP (Tiny) via Edge Function (token + natureza por empresa)
+      const resposta = await api.vendas.enviarAoERP(vendaCompleta.id);
+
+      console.log('[SALES-PAGE] Resposta do envio Tiny:', resposta);
+
+      const tinyId = resposta?.tiny?.pedido_id || resposta?.tiny?.pedidoId || null;
+      const tinyNumero = resposta?.tiny?.pedido_numero || resposta?.tiny?.pedidoNumero || null;
+
+      toast.success(
+        tinyId
+          ? `Pedido enviado ao ERP com sucesso! (Tiny ID: ${tinyId}${tinyNumero ? ` / Nº: ${tinyNumero}` : ''})`
+          : 'Pedido enviado ao ERP com sucesso!'
+      );
+
+      // Recarregar lista para refletir id_tiny/idTiny e bloquear novas ações
+      await carregarDados();
+
     } catch (error: any) {
       console.error('[SALES-PAGE] Erro ao enviar pedido ao ERP:', error);
       toast.error(`Erro ao enviar ao ERP: ${error.message || 'Erro desconhecido'}`);
@@ -1406,19 +1393,22 @@ export function SalesPage({
                 <Filter className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Filtrar por status" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os Status</SelectItem>
-                {/* ✅ CORRIGIDO: Listar TODOS os StatusVenda do banco */}
-                <SelectItem value="Rascunho">Rascunho</SelectItem>
-                <SelectItem value="Em Análise">Em Análise</SelectItem>
-                <SelectItem value="Aprovado">Aprovado</SelectItem>
-                <SelectItem value="Em Separação">Em Separação</SelectItem>
-                <SelectItem value="Faturado">Faturado</SelectItem>
-                <SelectItem value="Concluído">Concluído</SelectItem>
-                <SelectItem value="Enviado">Enviado</SelectItem>
-                <SelectItem value="Cancelado">Cancelado</SelectItem>
-              </SelectContent>
-            </Select>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Status</SelectItem>
+                  {/* ✅ CORRIGIDO: Listar TODOS os StatusVenda do banco */}
+                  <SelectItem value="Rascunho">Rascunho</SelectItem>
+                  <SelectItem value="Em Análise">Em Análise</SelectItem>
+                  <SelectItem value="Em aberto">Em aberto</SelectItem>
+                  <SelectItem value="Aprovado">Aprovado</SelectItem>
+                  <SelectItem value="Preparando envio">Preparando envio</SelectItem>
+                  <SelectItem value="Faturado">Faturado</SelectItem>
+                  <SelectItem value="Pronto para envio">Pronto para envio</SelectItem>
+                  <SelectItem value="Enviado">Enviado</SelectItem>
+                  <SelectItem value="Entregue">Entregue</SelectItem>
+                  <SelectItem value="Não Entregue">Não Entregue</SelectItem>
+                  <SelectItem value="Cancelado">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
             <Select 
               value={itensPorPagina.toString()} 
               onValueChange={(value) => {
@@ -1451,20 +1441,29 @@ export function SalesPage({
                 <TabsTrigger value="Em Análise" onClick={() => setStatusFilter("Em Análise")} className="whitespace-nowrap">
                   Em Análise ({salesForCounters.filter(s => s.status === "Em Análise").length})
                 </TabsTrigger>
+                <TabsTrigger value="Em aberto" onClick={() => setStatusFilter("Em aberto")} className="whitespace-nowrap">
+                  Em aberto ({salesForCounters.filter(s => s.status === "Em aberto").length})
+                </TabsTrigger>
                 <TabsTrigger value="Aprovado" onClick={() => setStatusFilter("Aprovado")} className="whitespace-nowrap">
                   Aprovado ({salesForCounters.filter(s => s.status === "Aprovado").length})
                 </TabsTrigger>
-                <TabsTrigger value="Em Separação" onClick={() => setStatusFilter("Em Separaç��o")} className="whitespace-nowrap">
-                  Em Separação ({salesForCounters.filter(s => s.status === "Em Separação").length})
+                <TabsTrigger value="Preparando envio" onClick={() => setStatusFilter("Preparando envio")} className="whitespace-nowrap">
+                  Preparando envio ({salesForCounters.filter(s => s.status === "Preparando envio").length})
                 </TabsTrigger>
                 <TabsTrigger value="Faturado" onClick={() => setStatusFilter("Faturado")} className="whitespace-nowrap">
                   Faturado ({salesForCounters.filter(s => s.status === "Faturado").length})
                 </TabsTrigger>
+                <TabsTrigger value="Pronto para envio" onClick={() => setStatusFilter("Pronto para envio")} className="whitespace-nowrap">
+                  Pronto para envio ({salesForCounters.filter(s => s.status === "Pronto para envio").length})
+                </TabsTrigger>
                 <TabsTrigger value="Enviado" onClick={() => setStatusFilter("Enviado")} className="whitespace-nowrap">
                   Enviado ({salesForCounters.filter(s => s.status === "Enviado").length})
                 </TabsTrigger>
-                <TabsTrigger value="Concluído" onClick={() => setStatusFilter("Concluído")} className="whitespace-nowrap">
-                  Concluído ({salesForCounters.filter(s => s.status === "Concluído").length})
+                <TabsTrigger value="Entregue" onClick={() => setStatusFilter("Entregue")} className="whitespace-nowrap">
+                  Entregue ({salesForCounters.filter(s => s.status === "Entregue").length})
+                </TabsTrigger>
+                <TabsTrigger value="Não Entregue" onClick={() => setStatusFilter("Não Entregue")} className="whitespace-nowrap">
+                  Não Entregue ({salesForCounters.filter(s => s.status === "Não Entregue").length})
                 </TabsTrigger>
                 <TabsTrigger value="Cancelado" onClick={() => setStatusFilter("Cancelado")} className="whitespace-nowrap">
                   Cancelado ({salesForCounters.filter(s => s.status === "Cancelado").length})

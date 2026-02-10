@@ -122,8 +122,24 @@ export async function carregarDadosDashboard(): Promise<Transaction[]> {
         
         // Badge verde (faturado) se:
         // 1. Tem valorFaturado preenchido OU
-        // 2. Status indica que foi faturado (Faturado, Concluído, Concluída)
-        const statusFaturado = ['Faturado', 'Concluído', 'Concluída', 'faturado', 'concluida'].includes(venda.status);
+        // 2. Status indica que já passou pelo faturamento (Faturado e etapas posteriores)
+        const statusNorm = (venda.status || '')
+          .toString()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .trim();
+        const statusFaturadoSet = new Set([
+          'faturado',
+          'pronto para envio',
+          'enviado',
+          'entregue',
+          'nao entregue',
+          // Compat legado
+          'concluido',
+          'concluida',
+        ]);
+        const statusFaturado = statusFaturadoSet.has(statusNorm);
         const ehFaturado = (venda.valorFaturado !== undefined && venda.valorFaturado !== null) || statusFaturado;
         
         // Log detalhado para debug do sinalizador de faturamento

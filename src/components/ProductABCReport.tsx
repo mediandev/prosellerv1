@@ -8,6 +8,7 @@ import { Download, Filter, X } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { api } from "../services/api";
 import { toast } from "sonner@2.0.3";
+import { isStatusConcluido } from "../utils/statusVendaUtils";
 
 interface ProductABCFilters {
   dataInicio: string;
@@ -67,8 +68,7 @@ export function ProductABCReport() {
 
       // CORRIGIDO: Filtro de status - aceitar todas as variações de status concluído
       if (filters.statusVendas === "concluidas") {
-        const statusConcluido = ['Faturado', 'Concluído', 'Concluída', 'faturado', 'concluido', 'concluida'].includes(venda.status || '');
-        if (!statusConcluido) {
+        if (!isStatusConcluido(venda.status || '')) {
           return false;
         }
       }

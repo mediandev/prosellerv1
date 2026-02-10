@@ -387,7 +387,7 @@ export function ImportSalesData() {
             <li>Selecione o arquivo para visualizar um preview dos dados</li>
             <li>Revise os dados e confirme a importação</li>
             <li>Você pode adicionar até 3 produtos por venda na planilha</li>
-            <li>Status disponíveis: Rascunho, Em Análise, Aprovado, Faturado, Cancelado, Em Separação, Enviado</li>
+            <li>Status disponíveis: Rascunho, Em Análise, Em aberto, Aprovado, Preparando envio, Faturado, Pronto para envio, Enviado, Entregue, Não Entregue, Cancelado</li>
           </ol>
         </div>
       </CardContent>

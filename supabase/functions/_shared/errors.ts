@@ -5,7 +5,7 @@
  * de erros de forma consistente em todas as Edge Functions.
  */
 
-import { corsHeaders } from './types'
+import { corsHeaders } from './types.ts'
 
 /**
  * Tipos de erro do sistema

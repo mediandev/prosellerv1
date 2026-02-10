@@ -1,19 +1,32 @@
 // Tipos para o sistema de vendas/pedidos
 
-export type StatusVenda = 'Rascunho' | 'Em Análise' | 'Aprovado' | 'Faturado' | 'Concluído' | 'Cancelado' | 'Em Separação' | 'Enviado';
+// Status exibido na UI e persistido no banco.
+// Mantemos os rótulos em PT-BR para evitar mapeamentos adicionais no frontend.
+export type StatusVenda =
+  | 'Rascunho'
+  | 'Em Análise'
+  | 'Em aberto'
+  | 'Aprovado'
+  | 'Preparando envio'
+  | 'Faturado'
+  | 'Pronto para envio'
+  | 'Enviado'
+  | 'Entregue'
+  | 'Não Entregue'
+  | 'Cancelado';
 
 export type TinyERPStatus = 'aberto' | 'em_aberto' | 'aprovado' | 'preparando_envio' | 'faturado' | 'pronto_envio' | 'enviado' | 'entregue' | 'cancelado' | 'nao_aprovado';
 
 // Mapeamento de status do Tiny ERP para status internos
 export const MAPEAMENTO_STATUS_TINY: Record<TinyERPStatus, StatusVenda> = {
-  'aberto': 'Em Análise',
-  'em_aberto': 'Em Análise', // Status alternativo do Tiny ERP
+  'aberto': 'Em aberto',
+  'em_aberto': 'Em aberto', // Status alternativo do Tiny ERP
   'aprovado': 'Aprovado',
-  'preparando_envio': 'Aprovado', // Preparando Envio = Aprovado (Em Andamento na UI)
-  'faturado': 'Concluído', // Faturado no Tiny = Concluído no sistema
-  'pronto_envio': 'Em Separação',
+  'preparando_envio': 'Preparando envio',
+  'faturado': 'Faturado',
+  'pronto_envio': 'Pronto para envio',
   'enviado': 'Enviado',
-  'entregue': 'Enviado',
+  'entregue': 'Entregue',
   'cancelado': 'Cancelado',
   'nao_aprovado': 'Cancelado',
 };

@@ -1,5 +1,17 @@
 # Edge Function: Integração com Tiny ERP
 
+## Atualização (Edge Function v2 - Token por Empresa + Natureza por Empresa)
+
+Para o fluxo **"Enviar ao ERP"** usamos a Edge Function:
+
+`tiny-enviar-pedido-venda-v1`
+
+Principais diferenças em relação a abordagens antigas:
+
+- O **token do Tiny** não vem mais no request. Ele é derivado do pedido via `pedido_venda.empresa_faturamento_id` → `ref_empresas_subsidiarias.chave_api`.
+- A **Natureza de Operação enviada ao Tiny** (`<natureza_operacao>...</natureza_operacao>`) é resolvida por empresa via tabela **`tiny_empresa_natureza_operacao`**.
+- O envio ao Tiny é feito com **XML + FormData** (não `JSON.stringify`).
+
 ## Visão Geral
 
 Esta Edge Function realiza a integração entre o sistema ProSeller e o Tiny ERP, enviando pedidos de venda criados no Supabase para o Tiny e atualizando o registro local com o ID e número do pedido gerado no Tiny.
@@ -38,16 +50,17 @@ A função espera receber um JSON com:
 
 ```typescript
 {
-  API_Code: string;           // Token da API do Tiny
   pedido_venda_ID: number;    // ID do pedido no Supabase
-  id_vendedor?: string;        // (Opcional) ID do vendedor no Tiny
-  nome_vendedor?: string;      // (Opcional) Nome do vendedor no Tiny
+  dry_run?: boolean;          // (Opcional) Se true, gera XMLs e não chama o Tiny
 }
 ```
 
 **Validações:**
-- `API_Code` e `pedido_venda_ID` são obrigatórios
+- `pedido_venda_ID` é obrigatório
 - `pedido_venda_ID` deve ser numérico
+- O pedido deve ter `empresa_faturamento_id` preenchido
+- A empresa deve ter `ref_empresas_subsidiarias.chave_api` configurada (token do Tiny)
+- Deve existir mapeamento em `tiny_empresa_natureza_operacao` para a natureza do pedido e a empresa
 
 ### 4. **Busca de Dados do Pedido**
 
@@ -132,7 +145,19 @@ Cada parcela contém:
 
 ### 10. **Montagem do Payload para Tiny**
 
-A função monta um objeto JSON no formato esperado pela API do Tiny:
+O Tiny recebe **XML** enviado via **POST + FormData**. A função gera:
+
+- XML do **contato** (`<contato>...</contato>`), enviado para `contato.incluir.php`
+- XML do **produto** (`<produto>...</produto>`) para cada SKU/código, enviado para `produto.incluir.php`
+- XML do **pedido** (`<pedido>...</pedido>`), enviado para `pedido.incluir.php`
+
+O campo **Natureza de Operação no Tiny** é enviado como:
+
+```xml
+<natureza_operacao>...</natureza_operacao>
+```
+
+E o valor é obtido de `tiny_empresa_natureza_operacao.tiny_valor` (por empresa).
 
 ```typescript
 {
@@ -184,13 +209,15 @@ A função monta um objeto JSON no formato esperado pela API do Tiny:
 
 ### 11. **Envio para API do Tiny**
 
-Envia o payload via POST para a API do Tiny:
+Envia os XMLs via POST para a API do Tiny (FormData):
 
 ```
-POST https://api.tiny.com.br/api2/pedido.incluir.php?token={API_Code}&formato=json
-Content-Type: application/x-www-form-urlencoded
+POST https://api.tiny.com.br/api2/pedido.incluir.php
 
-pedido={JSON.stringify(pedidoTiny)}
+FormData:
+- token = <ref_empresas_subsidiarias.chave_api>
+- formato = json
+- pedido = <XML do pedido>
 ```
 
 ### 12. **Processamento da Resposta do Tiny**
@@ -346,15 +373,13 @@ Todos os erros são logados com o `traceId` e retornam uma resposta JSON com `su
 ### Request
 
 ```bash
-POST https://<seu-projeto>.supabase.co/functions/v1/<sua-funcao>
+POST https://<seu-projeto>.supabase.co/functions/v1/tiny-enviar-pedido-venda-v1
 Content-Type: application/json
 Authorization: Bearer <token>
 
 {
-  "API_Code": "seu-token-tiny",
   "pedido_venda_ID": 123,
-  "id_vendedor": "456",
-  "nome_vendedor": "João Silva"
+  "dry_run": false
 }
 ```
 
@@ -365,17 +390,11 @@ Authorization: Bearer <token>
   "success": true,
   "trace_id": "550e8400-e29b-41d4-a716-446655440000",
   "data": {
-    "pedido_id": 123,
-    "tiny_response": {
-      "retorno": {
-        "status": "OK",
-        "registros": {
-          "registro": {
-            "id": "789",
-            "numero": "001234"
-          }
-        }
-      }
+    "pedido_venda_ID": 123,
+    "empresa_id": 10,
+    "tiny": {
+      "pedido_id": "789",
+      "pedido_numero": "001234"
     }
   }
 }
@@ -407,7 +426,7 @@ Authorization: Bearer <token>
 
 ## Observações Importantes
 
-1. **API Token do Tiny**: Deve ser fornecido em cada requisição via `API_Code`
+1. **API Token do Tiny**: É obtido da empresa do pedido (`ref_empresas_subsidiarias.chave_api`)
 2. **Formato de Data**: A data do pedido é convertida para formato brasileiro (DD/MM/YYYY)
 3. **Valores Monetários**: Todos os valores são formatados com 2 casas decimais
 4. **SKU Fallback**: Se o produto não tiver SKU, usa o `produto_id` como código
