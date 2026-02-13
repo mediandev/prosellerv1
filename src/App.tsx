@@ -625,26 +625,37 @@ function AppContent() {
   const getPeriodLabel = () => {
     // Dashboard
     if (currentPage === "dashboard") {
-      // Formato: YYYY-MM
-      if (!dashboardPeriod || !dashboardPeriod.includes('-')) {
-        return "Novembro 2025";
+      switch (dashboardPeriod) {
+        case "7":
+          return "Últimos 7 dias";
+        case "30":
+          return "Últimos 30 dias";
+        case "current_month":
+          return `Mês Atual (${format(new Date(), "MMMM yyyy", { locale: ptBR }).replace(/^./, str => str.toUpperCase())})`;
+        case "90":
+          return "Últimos 90 dias";
+        case "365":
+          return "Último Ano";
+        case "custom":
+          if (dashboardCustomDateRange.from && dashboardCustomDateRange.to) {
+            return `${format(dashboardCustomDateRange.from, "dd/MMM", { locale: ptBR })} - ${format(dashboardCustomDateRange.to, "dd/MMM/yyyy", { locale: ptBR })}`;
+          }
+          return "Período Personalizado";
+        default:
+          if (dashboardPeriod && dashboardPeriod.includes('-')) {
+            const [year, month] = dashboardPeriod.split('-');
+            const monthIndex = parseInt(month) - 1;
+            const mesesNomes = [
+              "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+              "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+            ];
+            if (monthIndex >= 0 && monthIndex < 12) {
+              return `${mesesNomes[monthIndex]} ${year}`;
+            }
+          }
+          return `Mês Atual (${format(new Date(), "MMMM yyyy", { locale: ptBR }).replace(/^./, str => str.toUpperCase())})`;
       }
-      
-      const [year, month] = dashboardPeriod.split('-');
-      const monthIndex = parseInt(month) - 1;
-      
-      const mesesNomes = [
-        "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-      ];
-      
-      if (monthIndex >= 0 && monthIndex < 12) {
-        return `${mesesNomes[monthIndex]} ${year}`;
-      }
-      
-      return "Novembro 2025";
     }
-
     // Vendas
     if (currentPage === "vendas") {
       switch (salesPeriod) {

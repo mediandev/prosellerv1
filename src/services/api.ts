@@ -4163,6 +4163,49 @@ export const api = {
     console.log('[API] postCustom (mockado):', endpoint);
     return { success: true };
   },
+  importLogs: {
+    list: async (tipo?: string, limit: number = 200) => {
+      try {
+        const params: Record<string, string> = {
+          action: 'list_import_logs',
+          limit: String(limit),
+        };
+
+        if (tipo && tipo !== 'todos') {
+          params.tipo = tipo;
+        }
+
+        const response = await callEdgeFunction('produtos-v2', 'GET', undefined, undefined, params);
+        return Array.isArray(response) ? response : [];
+      } catch (error) {
+        console.error('[API] Erro ao listar logs de importação:', error);
+        return [];
+      }
+    },
+
+    create: async (payload: {
+      tipo: string;
+      nomeArquivo: string;
+      totalLinhas: number;
+      sucessos: number;
+      erros: number;
+      status: 'sucesso' | 'sucesso_parcial' | 'erro';
+      detalhesErros?: Array<{ row: number; message: string }>;
+      usuarioNome?: string;
+    }) => {
+      try {
+        const response = await callEdgeFunction('produtos-v2', 'POST', {
+          action: 'register_import_log',
+          ...payload,
+        });
+
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao registrar log de importação:', error);
+        return null;
+      }
+    },
+  },
 
   statusMix: {
     ativarPorPedido: async (clienteId: string, produtoIds: string[]) => {
@@ -4200,3 +4243,4 @@ export const api = {
     return { success: true };
   },
 };
+

@@ -437,6 +437,16 @@ export function ImportProductsData() {
         toast.warning(`${errors.length - preview.validationErrors.length} ${errors.length - preview.validationErrors.length === 1 ? 'erro' : 'erros'} durante a importação`);
       }
 
+      await api.importLogs.create({
+        tipo: 'produtos',
+        nomeArquivo: preview.fileName,
+        totalLinhas: preview.data.length,
+        sucessos: successCount,
+        erros: errors.length,
+        status: errors.length === 0 ? 'sucesso' : (successCount > 0 ? 'sucesso_parcial' : 'erro'),
+        detalhesErros: errors,
+      });
+
       setResult({ 
         success: successCount, 
         errors: errors 
@@ -447,6 +457,17 @@ export function ImportProductsData() {
     } catch (error: any) {
       console.error('[IMPORT-PRODUTOS] Erro geral:', error);
       toast.error(`Erro ao importar produtos: ${error.message || 'Erro desconhecido'}`);
+      if (preview) {
+        await api.importLogs.create({
+          tipo: 'produtos',
+          nomeArquivo: preview.fileName,
+          totalLinhas: preview.data.length,
+          sucessos: 0,
+          erros: 1,
+          status: 'erro',
+          detalhesErros: [{ row: 0, message: 'Erro ao importar: ' + (error.message || 'Erro desconhecido') }],
+        });
+      }
       setResult({ 
         success: 0, 
         errors: [{ row: 0, message: 'Erro ao importar: ' + (error.message || 'Erro desconhecido') }] 

@@ -703,6 +703,86 @@ serve(async (req) => {
         )
       }
 
+
+      case 'register_import_log': {
+        console.log('[PRODUTOS-V2] Registering import log...')
+
+        const detalhesErros = Array.isArray(body?.detalhesErros) ? body.detalhesErros : []
+        const status = body?.status || (Number(body?.erros || 0) === 0 ? 'sucesso' : (Number(body?.sucessos || 0) > 0 ? 'sucesso_parcial' : 'erro'))
+
+        if (!body?.tipo) {
+          throw new Error('Tipo de importaÁ„o È obrigatÛrio')
+        }
+
+        const { data: inserted, error: insertError } = await supabase
+          .from('importacao_log')
+          .insert({
+            tipo: body.tipo,
+            nome_arquivo: body.nomeArquivo || 'arquivo_nao_informado',
+            total_linhas: Number(body.totalLinhas || 0),
+            sucessos: Number(body.sucessos || 0),
+            erros: Number(body.erros || 0),
+            status,
+            detalhes_erros: detalhesErros,
+            usuario_uuid: user.id,
+            usuario_nome: body.usuarioNome || user.email || 'Usu·rio',
+            can_undo: false,
+          })
+          .select('*')
+          .single()
+
+        if (insertError) {
+          console.error('[PRODUTOS-V2] Error registering import log:', insertError)
+          throw new Error(`Database operation failed: ${insertError.message}`)
+        }
+
+        return createHttpSuccessResponse(inserted, 201, { userId: user.id })
+      }
+
+      case 'list_import_logs': {
+        console.log('[PRODUTOS-V2] Listing import logs...')
+
+        const url = new URL(req.url)
+        const tipo = url.searchParams.get('tipo') || null
+        const limitRaw = Number(url.searchParams.get('limit') || 200)
+        const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 1000) : 200
+
+        let query = supabase
+          .from('importacao_log')
+          .select('*')
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .limit(limit)
+
+        if (tipo) {
+          query = query.eq('tipo', tipo)
+        }
+
+        const { data: logs, error: logsError } = await query
+
+        if (logsError) {
+          console.error('[PRODUTOS-V2] Error listing import logs:', logsError)
+          throw new Error(`Database operation failed: ${logsError.message}`)
+        }
+
+        const formattedLogs = (logs || []).map((log: any) => ({
+          id: log.id,
+          tipo: log.tipo,
+          nomeArquivo: log.nome_arquivo,
+          totalLinhas: Number(log.total_linhas || 0),
+          sucessos: Number(log.sucessos || 0),
+          erros: Number(log.erros || 0),
+          status: log.status,
+          detalhesErros: Array.isArray(log.detalhes_erros) ? log.detalhes_erros : [],
+          usuarioId: log.usuario_uuid || '',
+          usuarioNome: log.usuario_nome || 'Usu·rio',
+          dataImportacao: log.created_at,
+          canUndo: Boolean(log.can_undo),
+        }))
+
+        return createHttpSuccessResponse(formattedLogs)
+      }
+
       default:
         throw new Error(`A√ß√£o inv√°lida: ${action}. Use: list, get, create, update ou delete`)
     }

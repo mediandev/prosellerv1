@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Alert, AlertDescription } from './ui/alert';
 import { ImportHistory, TipoImportacao } from '../types/importHistory';
 import { importService } from '../services/importService';
+import { api } from '../services/api';
 import { History, CheckCircle2, AlertCircle, XCircle, FileSpreadsheet, Eye, Undo2, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -50,6 +51,36 @@ export function ImportHistoryView() {
   const [importToUndo, setImportToUndo] = useState<ImportHistory | null>(null);
   const [undoing, setUndoing] = useState(false);
   const [importHistory, setImportHistory] = useState<ImportHistory[]>([]);
+  useEffect(() => {
+    loadImportHistory();
+  }, []);
+
+  const loadImportHistory = async () => {
+    try {
+      const logs = await api.importLogs.list();
+      const mapped: ImportHistory[] = (Array.isArray(logs) ? logs : []).map((item: any) => ({
+        id: String(item.id),
+        tipo: item.tipo,
+        dataImportacao: new Date(item.dataImportacao || item.createdAt || item.created_at || Date.now()),
+        usuarioId: String(item.usuarioId || item.usuario_uuid || ''),
+        usuarioNome: item.usuarioNome || item.usuario_nome || 'Usuário',
+        nomeArquivo: item.nomeArquivo || item.nome_arquivo || '-',
+        totalLinhas: Number(item.totalLinhas || item.total_linhas || 0),
+        sucessos: Number(item.sucessos || 0),
+        erros: Number(item.erros || 0),
+        detalhesErros: Array.isArray(item.detalhesErros || item.detalhes_erros)
+          ? (item.detalhesErros || item.detalhes_erros)
+          : [],
+        status: item.status || 'sucesso',
+        canUndo: Boolean(item.canUndo || item.can_undo),
+      }));
+
+      setImportHistory(mapped);
+    } catch (error) {
+      console.error('[IMPORT-HISTORY] Erro ao carregar histórico:', error);
+      setImportHistory([]);
+    }
+  };
 
   const handleViewDetails = (importItem: ImportHistory) => {
     setSelectedImport(importItem);
@@ -148,7 +179,7 @@ export function ImportHistoryView() {
                 <TableBody>
                   {sortedHistory.map((item) => {
                     const StatusIcon = statusConfig[item.status].icon;
-                    const canUndo = importService.canUndo(item.id);
+                    const canUndo = (item as any).canUndo ?? importService.canUndo(item.id);
                     
                     return (
                       <TableRow key={item.id}>

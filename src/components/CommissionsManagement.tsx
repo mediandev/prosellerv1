@@ -254,14 +254,18 @@ export function CommissionsManagement({
       // Mapear Vendas
       const vendasMapeadas = Array.isArray(comissoesVendasAPI) ? comissoesVendasAPI.map((v: any) => ({
         id: String(v.vendedor_comissao_id || v.id),
+        vendaId: String(v.pedido_id || v.venda_id || v.id || ''),
         vendedorId: v.vendedor_uuid,
         periodo: v.periodo,
-        dataVenda: v.criado_em || v.data_inicio, // Usando criado_em como data da venda/registro
-        valorTotalVenda: Number(v.valor_total),
-        valorComissao: Number(v.valor_comissao),
-        percentualComissao: Number(v.percentual_comissao),
-        pedidoId: v.pedido_id,
-        clienteNome: v.cliente_nome
+        ocCliente: v.oc_cliente || v.ocCliente || '',
+        clienteId: String(v.cliente_id || ''),
+        clienteNome: v.cliente_nome || v.clienteNome || '',
+        dataVenda: v.data_inicio || v.criado_em || new Date().toISOString(),
+        valorTotalVenda: Number(v.valor_total || 0),
+        percentualComissao: Number(v.percentual_comissao || 0),
+        valorComissao: Number(v.valor_comissao || 0),
+        regraAplicada: 'lista_preco_fixa',
+        criadoEm: v.criado_em || new Date().toISOString(),
       })) : [];
 
       setRelatorios(relatoriosMapeados);
@@ -1731,3 +1735,4 @@ export function CommissionsManagement({
     </div>
   );
 }
+

@@ -17,4 +17,6 @@ export interface ImportHistory {
   erros: number;
   detalhesErros?: ImportHistoryError[];
   status: 'sucesso' | 'sucesso_parcial' | 'erro';
+  canUndo?: boolean;
 }
+

@@ -10,6 +10,64 @@ interface CustomerIndicatorsTabProps {
   clienteId: string;
 }
 
+const createEmptyIndicators = (clienteId: string): CustomerIndicators => ({
+  clienteId,
+  roi: {
+    investimento: 0,
+    receita: 0,
+    percentual: 0,
+  },
+  mix: {
+    totalDisponivel: 0,
+    totalAtivo: 0,
+    percentual: 0,
+    variacaoMesAnterior: 0,
+  },
+  ltv: {
+    totalReceita: 0,
+    totalPedidos: 0,
+  },
+  performance: {
+    monthlyData: [],
+    quarterlyData: [],
+    averageLast12Months: 0,
+  },
+});
+
+const normalizeIndicators = (payload: any, clienteId: string): CustomerIndicators => {
+  const base = createEmptyIndicators(clienteId);
+
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return base;
+  }
+
+  return {
+    clienteId: String(payload.clienteId || clienteId),
+    roi: {
+      investimento: Number(payload?.roi?.investimento || 0),
+      receita: Number(payload?.roi?.receita || 0),
+      percentual: Number(payload?.roi?.percentual || 0),
+    },
+    mix: {
+      totalDisponivel: Number(payload?.mix?.totalDisponivel || 0),
+      totalAtivo: Number(payload?.mix?.totalAtivo || 0),
+      percentual: Number(payload?.mix?.percentual || 0),
+      variacaoMesAnterior: Number(payload?.mix?.variacaoMesAnterior || 0),
+    },
+    ltv: {
+      totalReceita: Number(payload?.ltv?.totalReceita || 0),
+      totalPedidos: Number(payload?.ltv?.totalPedidos || 0),
+      primeiroPedido: payload?.ltv?.primeiroPedido,
+      ultimoPedido: payload?.ltv?.ultimoPedido,
+    },
+    performance: {
+      monthlyData: Array.isArray(payload?.performance?.monthlyData) ? payload.performance.monthlyData : [],
+      quarterlyData: Array.isArray(payload?.performance?.quarterlyData) ? payload.performance.quarterlyData : [],
+      averageLast12Months: Number(payload?.performance?.averageLast12Months || 0),
+    },
+  };
+};
+
 export function CustomerIndicatorsTab({ clienteId }: CustomerIndicatorsTabProps) {
   const [indicators, setIndicators] = useState<CustomerIndicators | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,7 +167,8 @@ export function CustomerIndicatorsTab({ clienteId }: CustomerIndicatorsTabProps)
         }
       }
       
-      setIndicators(data);
+      const normalizedData = normalizeIndicators(data, clienteId);
+      setIndicators(normalizedData);
       console.log('[INDICADORES] ✅ Estado atualizado com sucesso');
     } catch (error) {
       console.error('[INDICADORES] ❌ Erro ao carregar indicadores:', error);
@@ -372,3 +431,5 @@ export function CustomerIndicatorsTab({ clienteId }: CustomerIndicatorsTabProps)
     </div>
   );
 }
+
+

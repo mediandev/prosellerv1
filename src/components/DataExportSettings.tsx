@@ -23,6 +23,41 @@ interface ExportResult {
 export function DataExportSettings() {
   const [exporting, setExporting] = useState<string | null>(null);
   const [lastExport, setLastExport] = useState<ExportResult | null>(null);
+  const fetchAllVendas = async (pageSize: number = 100) => {
+    const all: any[] = [];
+    let page = 1;
+    let totalPages = 1;
+
+    do {
+      const response = await api.vendas.list({ page, limit: pageSize });
+      const pageItems = Array.isArray(response?.vendas) ? response.vendas : [];
+      all.push(...pageItems);
+
+      const pagination = response?.pagination || {};
+      totalPages = Number(pagination.total_pages || pagination.totalPages || 1);
+      page += 1;
+    } while (page <= totalPages);
+
+    return all;
+  };
+
+  const fetchAllClientes = async (pageSize: number = 100) => {
+    const all: any[] = [];
+    let page = 1;
+    let totalPages = 1;
+
+    do {
+      const response = await api.get('clientes', { params: { page, limit: pageSize } }) as any;
+      const pageItems = Array.isArray(response?.clientes) ? response.clientes : [];
+      all.push(...pageItems);
+
+      const pagination = response?.pagination || {};
+      totalPages = Number(pagination.total_pages || pagination.totalPages || 1);
+      page += 1;
+    } while (page <= totalPages);
+
+    return all;
+  };
 
   const handleExport = async (tipo: 'vendas' | 'clientes' | 'produtos' | 'vendedores' | 'todos') => {
     setExporting(tipo);
@@ -33,14 +68,12 @@ export function DataExportSettings() {
 
       switch (tipo) {
         case 'vendas': {
-          const vendas = await api.get('vendas');
-          const list = Array.isArray(vendas) ? vendas : [];
+          const list = await fetchAllVendas();
           result = exportService.exportVendas(list);
           break;
         }
         case 'clientes': {
-          const clientes = await api.get('clientes');
-          const list = Array.isArray(clientes) ? clientes : [];
+          const list = await fetchAllClientes();
           result = exportService.exportClientes(list);
           break;
         }
@@ -58,8 +91,8 @@ export function DataExportSettings() {
         }
         case 'todos': {
           const [vendas, clientes, produtos, vendedores] = await Promise.all([
-            api.get('vendas'),
-            api.get('clientes'),
+            fetchAllVendas(),
+            fetchAllClientes(),
             api.get('produtos'),
             api.get('vendedores'),
           ]);
@@ -301,3 +334,4 @@ export function DataExportSettings() {
     </div>
   );
 }
+
