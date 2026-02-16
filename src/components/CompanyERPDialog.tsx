@@ -11,6 +11,8 @@ import { CheckCircle, XCircle, RefreshCw, AlertTriangle, Loader2 } from 'lucide-
 import { toast } from 'sonner@2.0.3';
 import { api } from '../services/api';
 import { Company } from '../types/company';
+import { NaturezaOperacao } from '../types/naturezaOperacao';
+import { tinyNaturezaOperacaoService } from '../services/tinyNaturezaOperacaoService';
 
 interface CompanyERPDialogProps {
   open: boolean;
@@ -24,6 +26,9 @@ export function CompanyERPDialog({ open, onOpenChange, company, onSuccess }: Com
   const [testando, setTestando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [testeResultado, setTesteResultado] = useState<'sucesso' | 'erro' | null>(null);
+  const [naturezas, setNaturezas] = useState<NaturezaOperacao[]>([]);
+  const [loadingNaturezas, setLoadingNaturezas] = useState(false);
+  const [tinyNaturezaMap, setTinyNaturezaMap] = useState<Record<string, string>>({});
   
   const [config, setConfig] = useState({
     tipo: 'tiny',
@@ -55,8 +60,54 @@ export function CompanyERPDialog({ open, onOpenChange, company, onSuccess }: Com
   useEffect(() => {
     if (open && company) {
       carregarConfiguracao();
+      carregarMapeamentoNaturezas();
     }
   }, [open, company]);
+
+  const carregarMapeamentoNaturezas = async () => {
+    if (!company) return;
+
+    setLoadingNaturezas(true);
+    try {
+      const [naturezasResult, mapeamentosResult] = await Promise.allSettled([
+        api.naturezasOperacao.list({ apenasAtivas: true }),
+        tinyNaturezaOperacaoService.listByEmpresa(company.id),
+      ]);
+
+      const naturezasData =
+        naturezasResult.status === 'fulfilled' && Array.isArray(naturezasResult.value)
+          ? naturezasResult.value
+          : [];
+      setNaturezas(naturezasData);
+
+      if (mapeamentosResult.status === 'rejected') {
+        console.error(
+          '[CompanyERPDialog] Erro ao carregar mapeamento da empresa. Mantendo apenas naturezas ativas:',
+          mapeamentosResult.reason
+        );
+      }
+
+      const mapeamentosData =
+        mapeamentosResult.status === 'fulfilled' && Array.isArray(mapeamentosResult.value)
+          ? mapeamentosResult.value
+          : [];
+
+      const mapped = mapeamentosData.reduce(
+        (acc: Record<string, string>, item: any) => {
+          acc[String(item.naturezaOperacaoId)] = String(item.tinyValor || '');
+          return acc;
+        },
+        {}
+      );
+
+      setTinyNaturezaMap(mapped);
+    } catch (error) {
+      console.error('[CompanyERPDialog] Erro ao carregar mapeamento de naturezas:', error);
+      setTinyNaturezaMap({});
+    } finally {
+      setLoadingNaturezas(false);
+    }
+  };
 
   const carregarConfiguracao = async () => {
     if (!company) return;
@@ -128,6 +179,17 @@ export function CompanyERPDialog({ open, onOpenChange, company, onSuccess }: Com
 
     try {
       await api.saveERPConfig(company.id, config);
+
+      if (naturezas.length > 0) {
+        await tinyNaturezaOperacaoService.saveBulk(
+          company.id,
+          naturezas.map((natureza) => ({
+            naturezaOperacaoId: natureza.id,
+            tinyValor: (tinyNaturezaMap[natureza.id] || '').trim(),
+            ativo: true,
+          }))
+        );
+      }
       
       toast.success('Configuração do ERP salva com sucesso!');
       
@@ -370,6 +432,44 @@ export function CompanyERPDialog({ open, onOpenChange, company, onSuccess }: Com
                   }
                 />
               </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-medium mb-2">Mapeamento Natureza de Operação (Tiny por Empresa)</h4>
+                <p className="text-sm text-muted-foreground">
+                  Configure o valor de <code>natureza_operacao</code> do Tiny para cada natureza do ProSeller desta empresa.
+                </p>
+              </div>
+
+              {loadingNaturezas ? (
+                <p className="text-sm text-muted-foreground">Carregando naturezas...</p>
+              ) : naturezas.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhuma natureza ativa encontrada.</p>
+              ) : (
+                <div className="space-y-3">
+                  {naturezas.map((natureza) => (
+                    <div key={natureza.id} className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
+                      <div>
+                        <p className="text-sm font-medium">{natureza.nome}</p>
+                        <p className="text-xs text-muted-foreground">Natureza ID {natureza.id}</p>
+                      </div>
+                      <Input
+                        value={tinyNaturezaMap[natureza.id] || ''}
+                        onChange={(e) =>
+                          setTinyNaturezaMap((prev) => ({
+                            ...prev,
+                            [natureza.id]: e.target.value,
+                          }))
+                        }
+                        placeholder="Ex: 5102 ou código da natureza no Tiny"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Funcionalidades */}

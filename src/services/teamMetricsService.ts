@@ -26,9 +26,26 @@ export async function calcularMetricasVendedores(
     console.log('[TEAM-METRICS] Calculando métricas para período:', periodo);
     console.log('[TEAM-METRICS] Vendedores:', vendedores.length);
     
+    const [ano, mes] = periodo.split('-');
+    const anoNum = parseInt(ano, 10);
+    const mesNum = parseInt(mes, 10);
+
     // Buscar todas as vendas
     const vendas: Venda[] = await api.get('vendas');
     console.log('[TEAM-METRICS] Total de vendas carregadas:', vendas.length);
+
+    // Buscar metas reais do período (fonte oficial)
+    const metasPeriodo = await api.metas.buscarTodas(anoNum, mesNum);
+    console.log('[TEAM-METRICS] Metas do período carregadas:', metasPeriodo.length);
+
+    const metasPorVendedorId = new Map<string, number>();
+    metasPeriodo.forEach((meta: any) => {
+      const vendedorIdMeta = String(meta.vendedorId ?? meta.vendedor_id ?? '').trim();
+      const metaValor = Number(meta.metaMensal ?? meta.meta_mensal ?? meta.meta_valor ?? 0);
+
+      if (!vendedorIdMeta || Number.isNaN(metaValor)) return;
+      metasPorVendedorId.set(vendedorIdMeta, metaValor);
+    });
     
     // Buscar naturezas de operação para filtrar apenas as que geram receita
     const naturezas = await api.naturezasOperacao.list();
@@ -37,7 +54,6 @@ export async function calcularMetricasVendedores(
     );
     
     // Filtrar vendas do período e que geram receita
-    const [ano, mes] = periodo.split('-');
     const vendasDoPeriodo = vendas.filter(venda => {
       const dataVenda = venda.dataPedido instanceof Date 
         ? venda.dataPedido 
@@ -65,12 +81,12 @@ export async function calcularMetricasVendedores(
     
     // Inicializar métricas para cada vendedor
     vendedores.forEach(vendedor => {
-      // Buscar meta do período
-      const anoNum = parseInt(ano);
-      const mesNum = parseInt(mes);
+      // Meta oficial da API; fallback para metasAnuais quando necessário
+      const metaAPI = metasPorVendedorId.get(String(vendedor.id));
       const metaAno = vendedor.metasAnuais?.find(m => m.ano === anoNum);
       const metaMes = metaAno?.metas.find(m => m.mes === mesNum);
-      const metaValor = metaMes?.valor || 0;
+      const metaLocal = metaMes?.valor || 0;
+      const metaValor = metaAPI ?? metaLocal;
       
       metricsMap.set(vendedor.id, {
         vendedorId: vendedor.id,

@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ajustes Realizados</title>
+  <style>
+    :root {
+      --bg: #fff;
+      --text: #2f3437;
+      --muted: #6b6f76;
+      --line: #e8eaed;
+      --check: #2383e2;
+      --unchecked: #bfc5cd;
+      --code-bg: #f5f6f8;
+      --maxw: 820px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.6 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+
+    main {
+      max-width: var(--maxw);
+      margin: 0 auto;
+      padding: 42px 24px 80px;
+    }
+
+    h1 { font-size: 40px; line-height: 1.2; margin: 0 0 20px; letter-spacing: -0.02em; }
+    h2 { font-size: 28px; line-height: 1.25; margin: 28px 0 12px; letter-spacing: -0.015em; }
+    h3 { font-size: 20px; line-height: 1.35; margin: 22px 0 10px; letter-spacing: -0.01em; }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0 24px; }
+
+    .todo-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    .todo-item {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      column-gap: 10px;
+      align-items: start;
+    }
+
+    .box {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      user-select: none;
+    }
+
+    .done .box {
+      background: var(--check);
+      color: #fff;
+    }
+
+    .open .box {
+      border: 1.5px solid var(--unchecked);
+      color: transparent;
+    }
+
+    .todo-content p { margin: 0; }
+    .todo-content strong { font-weight: 700; }
+    .todo-content ul { margin: 5px 0 0 20px; padding: 0; }
+    .todo-content li { margin: 2px 0; }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      background: var(--code-bg);
+      border: 1px solid #eceef1;
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-size: 0.92em;
+    }
+
+    .section { margin-bottom: 18px; }
+    .meta { color: var(--muted); font-size: 14px; margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <main>
+
+    <h2>Concluídos</h2>
+    <hr />
+    <ul class="todo-list section">
+      <li class="todo-item done">
+        <span class="box">✓</span>
+        <div class="todo-content">
+          <p><strong>Produtos -> Novo Produto / Editar Produto</strong></p>
+          <ul>
+            <li>Correção de scroll duplo lateral, mantendo apenas 1 scroll como nas demais telas.</li>
+            <li>Arquivo alterado: <code>src/components/ProductFormPage.tsx</code></li>
+            <li>Ajuste aplicado: <code>className="space-y-6 min-h-0"</code> -> <code>className="relative space-y-6 min-h-0"</code></li>
+            <li>Validação: testado via Playwright nas telas de novo e edição de produto.</li>
+          </ul>
+        </div>
+      </li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p><strong>Configurações -> Importar dados -> Exportação</strong></p><ul><li>Editar função para não ter limite de dados.</li></ul></div></li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p><strong>Tela de Editar Cliente -> Aba Indicações</strong></p><ul><li>Corrigir erro ao clicar na aba indicações (erro da imagem enviada no chat).</li></ul></div></li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p><strong>Dashboard (header à direita)</strong></p><ul><li>Corrigir período exibido (usar tela de pedidos como referência de comportamento correto).</li></ul></div></li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p><strong>Comissões -> Lista de vendedores -> Ver detalhes</strong></p><ul><li>Na tabela de vendas por período, exibir: ID da venda, OC Cliente e Nome do cliente.</li></ul></div></li>
+    </ul>
+
+    <h2>Observações do Cliente - Revisão 2</h2>
+
+    <h3>Layout e rolagem</h3>
+    <ul class="todo-list section">
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Quebra visual no menu lateral esquerdo em determinado ponto da rolagem.</p></div></li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Barra de rolagem dupla em páginas do sistema.</p></div></li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Validar comportamento esperado de rolagem única no conteúdo da página, com menu lateral fixo sem rolagem.</p></div></li>
+    </ul>
+
+    <h3>Clientes</h3>
+    <ul class="todo-list section">
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Diferença na formatação de CNPJ entre clientes (marcado como resolvido no documento do cliente).</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Validar se todos os CNPJs estão corretos no banco e se há divergência entre registros.</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Confirmar se a formatação do CNPJ é aplicada apenas no front-end ou também influenciada por dados de origem.</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Bug de cliente duplicado (Farma Conde / BABABA), incluindo divergência de CNPJ e dados distribuídos entre cadastros.</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Página de detalhes do cliente: aba Condição Comercial com carregamento mais lento que as demais.</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Página de detalhes do cliente: clientes sem vendedor indicado na aba Condição Comercial.</p></div></li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Página de detalhes do cliente: aba Indicadores trava o sistema (opção temporária sugerida: ocultar a aba até estabilizar).</p></div></li>
+    </ul>
+
+    <h3>Pedidos, dashboard e vínculo de vendas</h3>
+    <ul class="todo-list section">
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Indicação de vendas para vendedores sem pedido correspondente.</p></div></li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Vendas do Donato e Median refletem em Dashboard/Comissões/Equipe, mas pedidos do Donato não aparecem em Pedidos.</p></div></li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Pedido do Donato aparece em Vendas Recentes do Dashboard, porém ao clicar gera erro e exige recarregar.</p></div></li>
+    </ul>
+
+    <h3>Período exibido no cabeçalho</h3>
+    <ul class="todo-list section">
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Dashboards com divergência no período.</p></div></li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Pedidos com período correto (OK).</p></div></li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Clientes/Produtos/Equipe/Metas/Conta Corrente não utilizam esse indicador (OK).</p></div></li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Comissões com divergência no período.</p></div></li>
+    </ul>
+
+    <h3>Comissões</h3>
+    <ul class="todo-list section">
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Criar mecanismo de proteção para evitar comissão indevida quando operação for classificada incorretamente (venda vs bonificação), incluindo avaliação de sincronismo automático com Tiny.</p></div></li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Colunas em branco no relatório de comissões, inclusive percentual de comissão.</p></div></li>
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Valores "fantasmas" em 02/2026: lista de vendedores mostra valores, mas relatório do período abre zerado.</p></div></li>
+    </ul>
+
+    <h3>Natureza de Operação x ERP (multiempresa / multi-integrações)</h3>
+    <ul class="todo-list section">
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Ajustar modelo atual, pois IDs de natureza variam por empresa no Tiny.</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Remover campo Tiny ID da tela de Natureza de Operação e manter apenas campos funcionais.</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Inserir aviso na configuração: mapeamento com ERP deve ocorrer em <code>Configurações &gt; Integrações</code>.</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Em cada integração ERP, permitir mapear cada natureza do ProSeller para o ID correspondente no ERP daquela empresa.</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Renomear opção de menu <code>Tiny ERP</code> para <code>ERP</code> ou <code>Integração ERP</code>.</p></div></li>
+    </ul>
+
+    <h3>Configurações &gt; Empresas</h3>
+    <ul class="todo-list section">
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Empresas sem dados completos (CNPJ, inscrição estadual, endereço, etc.) apesar de já existirem no banco.</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Status da integração Tiny aparece desativado, apesar do fluxo ativo de dados.</p></div></li>
+    </ul>
+
+    <h3>Configurações &gt; Condições de Pagamento</h3>
+    <ul class="todo-list section">
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Condições parceladas (ex.: 10/20/30) aparecendo como "à vista" na coluna Prazo.</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Primeira condição da lista com nomenclatura fora do padrão (ordem incorreta dos termos).</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Não há opção de edição de condições já criadas (somente exclusão).</p></div></li>
+    </ul>
+
+    <h3>Equipe</h3>
+    <ul class="todo-list section">
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Card do vendedor na página Equipe não reflete corretamente atingimento de meta (ex.: Donato com meta 10k em 02/2026 e vendas de 5.5k exibindo 0%).</p></div></li>
+    </ul>
+
+    <h3>Configurações &gt; Listas de Preços</h3>
+    <ul class="todo-list section">
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Ao abrir lista de preços, itens aparecem inicialmente como "Produto não encontrado".</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Após um tempo, nomes carregam, porém alguns itens permanecem sem correspondência.</p></div></li>
+    </ul>
+
+    <h3>Exportação de Dados &gt; Clientes</h3>
+    <ul class="todo-list section">
+      <li class="todo-item done"><span class="box">✓</span><div class="todo-content"><p>Exportação retorna apenas 10 clientes, enquanto o total cadastrado é ~850.</p></div></li>
+      <li class="todo-item open"><span class="box">✓</span><div class="todo-content"><p>Ajuste necessário para suportar atualização completa da base de clientes no início da operação.</p></div></li>
+    </ul>
+
+    <p class="meta">HTML sincronizado com <code>docs/registros de ajustes/AJUSTES_REALIZADOS.md</code>.</p>
+  </main>
+</body>
+</html>

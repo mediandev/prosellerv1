@@ -276,7 +276,16 @@ export function SettingsPage({
   const [addFormaPagamentoOpen, setAddFormaPagamentoOpen] = useState(false);
   const [addCondicaoPagamentoOpen, setAddCondicaoPagamentoOpen] = useState(false);
   const [editFormaPagamentoOpen, setEditFormaPagamentoOpen] = useState(false);
+  const [editCondicaoPagamentoOpen, setEditCondicaoPagamentoOpen] = useState(false);
   const [editingFormaPagamento, setEditingFormaPagamento] = useState<FormaPagamento | null>(null);
+  const [editingCondicaoPagamento, setEditingCondicaoPagamento] = useState<{
+    id: string;
+    nome: string;
+    formaPagamentoId: string;
+    prazoPagamento: string;
+    descontoExtra: number;
+    valorPedidoMinimo: number;
+  } | null>(null);
   
   const [newNatureza, setNewNatureza] = useState({ nome: "", descricao: "" });
   const [newSegmento, setNewSegmento] = useState({ nome: "", descricao: "" });
@@ -519,6 +528,21 @@ export function SettingsPage({
     };
   };
 
+  const getPrazoCondicaoLabel = (condicao: any): string => {
+    if (Array.isArray(condicao?.intervaloParcela) && condicao.intervaloParcela.length > 0) {
+      return `${condicao.intervaloParcela.join('/')} dias`;
+    }
+
+    if (condicao?.parcelas > 1 && Number(condicao?.prazo || 0) === 0) {
+      const nome = String(condicao?.nome || '');
+      const match = nome.match(/(\d{1,3}(?:\/\d{1,3})+)/);
+      if (match?.[1]) return `${match[1]} dias`;
+      return 'Parcelado';
+    }
+
+    return Number(condicao?.prazo || 0) === 0 ? 'À vista' : `${condicao.prazo} dias`;
+  };
+
   const gerarNomeCondicaoPagamento = (
     formaPagamentoId: string,
     prazoPagamento: string,
@@ -600,6 +624,66 @@ export function SettingsPage({
     } catch (error: any) {
       console.error('Erro ao remover condição:', error);
       toast.error(error.message || "Erro ao remover condição de pagamento");
+    }
+  };
+
+  const handleEditCondicaoPagamento = (condicao: any) => {
+    const intervalo = Array.isArray(condicao?.intervaloParcela) ? condicao.intervaloParcela : [];
+    const prazoPagamento =
+      intervalo.length > 0
+        ? intervalo.join('/')
+        : condicao?.prazoPagamento && String(condicao.prazoPagamento).trim() !== ''
+        ? String(condicao.prazoPagamento)
+        : String(condicao?.prazo ?? 0);
+
+    setEditingCondicaoPagamento({
+      id: String(condicao.id),
+      nome: String(condicao.nome || ''),
+      formaPagamentoId: String(condicao.formaPagamentoId || ''),
+      prazoPagamento,
+      descontoExtra: Number(condicao.descontoExtra || 0),
+      valorPedidoMinimo: Number(condicao.valorMinimo || condicao.valorPedidoMinimo || 0),
+    });
+    setEditCondicaoPagamentoOpen(true);
+  };
+
+  const handleSaveCondicaoPagamento = async () => {
+    if (!editingCondicaoPagamento) return;
+
+    if (!editingCondicaoPagamento.formaPagamentoId) {
+      toast.error("Selecione uma forma de pagamento");
+      return;
+    }
+
+    if (!editingCondicaoPagamento.prazoPagamento || editingCondicaoPagamento.prazoPagamento.trim() === '') {
+      toast.error("O prazo de pagamento é obrigatório");
+      return;
+    }
+
+    try {
+      const condicaoAtualizada = await api.post('condicoes-pagamento', {
+        action: 'update',
+        id: editingCondicaoPagamento.id,
+        formaPagamentoId: editingCondicaoPagamento.formaPagamentoId,
+        prazoPagamento: editingCondicaoPagamento.prazoPagamento,
+        descontoExtra: editingCondicaoPagamento.descontoExtra,
+        valorMinimo: editingCondicaoPagamento.valorPedidoMinimo,
+      });
+
+      setCondicoesPagamento((prev) =>
+        prev.map((condicao) =>
+          String(condicao.id) === String(editingCondicaoPagamento.id)
+            ? { ...condicao, ...condicaoAtualizada }
+            : condicao
+        )
+      );
+
+      setEditCondicaoPagamentoOpen(false);
+      setEditingCondicaoPagamento(null);
+      toast.success("Condição de pagamento atualizada com sucesso!");
+    } catch (error: any) {
+      console.error('Erro ao atualizar condição:', error);
+      toast.error(error?.message || "Erro ao atualizar condição de pagamento");
     }
   };
 
@@ -1075,7 +1159,7 @@ export function SettingsPage({
                     <TableHead>Parcelas</TableHead>
                     <TableHead>Desconto</TableHead>
                     <TableHead>Valor Mínimo</TableHead>
-                    <TableHead className="w-[80px]">Ações</TableHead>
+                    <TableHead className="w-[120px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1085,7 +1169,7 @@ export function SettingsPage({
                         <TableCell className="font-medium">{condicao.nome}</TableCell>
                         <TableCell>{condicao.formaPagamento || "N/A"}</TableCell>
                         <TableCell>
-                          {condicao.prazo === 0 ? 'À vista' : `${condicao.prazo} dias`}
+                          {getPrazoCondicaoLabel(condicao)}
                         </TableCell>
                         <TableCell>
                           {condicao.parcelas}x
@@ -1113,20 +1197,29 @@ export function SettingsPage({
                           )}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setDeleteConfirm({
-                                open: true,
-                                type: "condicaoPagamento",
-                                id: condicao.id,
-                                name: condicao.nome,
-                              });
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditCondicaoPagamento(condicao)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setDeleteConfirm({
+                                  open: true,
+                                  type: "condicaoPagamento",
+                                  id: condicao.id,
+                                  name: condicao.nome,
+                                });
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -1466,6 +1559,139 @@ export function SettingsPage({
             : "condição de pagamento"
         }
       />
+
+      {/* Edit Condicao Pagamento Dialog */}
+      <Dialog open={editCondicaoPagamentoOpen} onOpenChange={setEditCondicaoPagamentoOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar Condição de Pagamento</DialogTitle>
+            <DialogDescription>
+              Atualize as informações da condição de pagamento
+            </DialogDescription>
+          </DialogHeader>
+          {editingCondicaoPagamento && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-condicao-forma">Forma de Pagamento</Label>
+                  <select
+                    id="edit-condicao-forma"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={editingCondicaoPagamento.formaPagamentoId}
+                    onChange={(e) =>
+                      setEditingCondicaoPagamento({
+                        ...editingCondicaoPagamento,
+                        formaPagamentoId: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="">Selecione...</option>
+                    {formasPagamento
+                      .filter((f) => f.usarEmCondicoesPagamento)
+                      .map((forma) => (
+                        <option key={forma.id} value={forma.id}>
+                          {forma.nome}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-condicao-prazo">
+                    Prazo de Pagamento
+                    <span className="text-xs text-muted-foreground ml-2">
+                      (Ex: 10/20/30/40)
+                    </span>
+                  </Label>
+                  <Input
+                    id="edit-condicao-prazo"
+                    value={editingCondicaoPagamento.prazoPagamento}
+                    onChange={(e) => {
+                      const numbers = e.target.value.replace(/\D/g, '');
+                      const formatted = formatarPrazoInput(numbers);
+                      setEditingCondicaoPagamento({
+                        ...editingCondicaoPagamento,
+                        prazoPagamento: formatted,
+                      });
+                    }}
+                    placeholder="10/20/30/40"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-condicao-desconto">Desconto Extra (%)</Label>
+                  <Input
+                    id="edit-condicao-desconto"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={editingCondicaoPagamento.descontoExtra}
+                    onChange={(e) =>
+                      setEditingCondicaoPagamento({
+                        ...editingCondicaoPagamento,
+                        descontoExtra: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-condicao-valor-minimo">Valor Mínimo do Pedido</Label>
+                  <Input
+                    id="edit-condicao-valor-minimo"
+                    value={
+                      editingCondicaoPagamento.valorPedidoMinimo > 0
+                        ? `R$ ${maskCurrencyInput((Math.round(editingCondicaoPagamento.valorPedidoMinimo * 100)).toString())}`
+                        : ''
+                    }
+                    onChange={(e) => {
+                      const numericValue = unmaskCurrency(e.target.value);
+                      setEditingCondicaoPagamento({
+                        ...editingCondicaoPagamento,
+                        valorPedidoMinimo: numericValue,
+                      });
+                    }}
+                    placeholder="R$ 0,00"
+                  />
+                </div>
+              </div>
+
+              {gerarNomeCondicaoPagamento(
+                editingCondicaoPagamento.formaPagamentoId,
+                editingCondicaoPagamento.prazoPagamento,
+                editingCondicaoPagamento.descontoExtra
+              ) && (
+                <div className="p-3 bg-muted rounded-lg">
+                  <Label className="text-sm text-muted-foreground">Nome Gerado:</Label>
+                  <p className="font-medium mt-1">
+                    {gerarNomeCondicaoPagamento(
+                      editingCondicaoPagamento.formaPagamentoId,
+                      editingCondicaoPagamento.prazoPagamento,
+                      editingCondicaoPagamento.descontoExtra
+                    )}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditCondicaoPagamentoOpen(false);
+                setEditingCondicaoPagamento(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveCondicaoPagamento}>
+              <Save className="h-4 w-4 mr-2" />
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Forma Pagamento Dialog */}
       <Dialog open={editFormaPagamentoOpen} onOpenChange={setEditFormaPagamentoOpen}>

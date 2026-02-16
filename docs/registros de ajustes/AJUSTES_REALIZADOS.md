@@ -34,7 +34,7 @@
 - [x] Diferença na formatação de CNPJ entre clientes (marcado como resolvido no documento do cliente).
 - [ ] Validar se todos os CNPJs estão corretos no banco e se há divergência entre registros.
 - [ ] Confirmar se a formatação do CNPJ é aplicada apenas no front-end ou também influenciada por dados de origem.
-- [ ] Bug de cliente duplicado (Farma Conde / BABABA), incluindo divergência de CNPJ e dados distribuídos entre cadastros.
+- [x] Bug de cliente duplicado (Farma Conde / BABABA), incluindo divergência de CNPJ e dados distribuídos entre cadastros.
 - [ ] Página de detalhes do cliente: aba Condição Comercial com carregamento mais lento que as demais.
 - [ ] Página de detalhes do cliente: clientes sem vendedor indicado na aba Condição Comercial.
 - [x] Página de detalhes do cliente: aba Indicadores trava o sistema (opção temporária sugerida: ocultar a aba até estabilizar).
@@ -60,11 +60,11 @@
 
 ### Natureza de Operação x ERP (multiempresa / multi-integrações)
 
-- [ ] Ajustar modelo atual, pois IDs de natureza variam por empresa no Tiny.
-- [ ] Remover campo Tiny ID da tela de Natureza de Operação e manter apenas campos funcionais.
-- [ ] Inserir aviso na configuração: mapeamento com ERP deve ocorrer em `Configurações > Integrações`.
-- [ ] Em cada integração ERP, permitir mapear cada natureza do ProSeller para o ID correspondente no ERP daquela empresa.
-- [ ] Renomear opção de menu `Tiny ERP` para `ERP` ou `Integração ERP`.
+- [x] Ajustar modelo atual, pois IDs de natureza variam por empresa no Tiny.
+- [x] Remover campo Tiny ID da tela de Natureza de Operação e manter apenas campos funcionais.
+- [x] Inserir aviso na configuração: mapeamento com ERP deve ocorrer em `Configurações > Integrações`.
+- [x] Em cada integração ERP, permitir mapear cada natureza do ProSeller para o ID correspondente no ERP daquela empresa.
+- [x] Renomear opção de menu `Tiny ERP` para `ERP` ou `Integração ERP`.
 
 ### Configurações > Empresas
 
@@ -73,9 +73,9 @@
 
 ### Configurações > Condições de Pagamento
 
-- [ ] Condições parceladas (ex.: 10/20/30) aparecendo como "à vista" na coluna Prazo.
-- [ ] Primeira condição da lista com nomenclatura fora do padrão (ordem incorreta dos termos).
-- [ ] Não há opção de edição de condições já criadas (somente exclusão).
+- [x] Condições parceladas (ex.: 10/20/30) aparecendo como "à vista" na coluna Prazo.
+- [x] Primeira condição da lista com nomenclatura fora do padrão (ordem incorreta dos termos).
+- [x] Não há opção de edição de condições já criadas (somente exclusão).
 
 ### Equipe
 
@@ -83,10 +83,10 @@
 
 ### Configurações > Listas de Preços
 
-- [ ] Ao abrir lista de preços, itens aparecem inicialmente como "Produto não encontrado".
-- [ ] Após um tempo, nomes carregam, porém alguns itens permanecem sem correspondência.
+- [x] Ao abrir lista de preços, itens aparecem inicialmente como "Produto não encontrado".
+- [x] Após um tempo, nomes carregam, porém alguns itens permanecem sem correspondência.
 
 ### Exportação de Dados > Clientes
 
 - [x] Exportação retorna apenas 10 clientes, enquanto o total cadastrado é ~850.
-- [ ] Ajuste necessário para suportar atualização completa da base de clientes no início da operação.
+- [X] Ajuste necessário para suportar atualização completa da base de clientes no início da operação.

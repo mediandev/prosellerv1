@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Tag, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -15,21 +15,30 @@ import {
   DialogTitle,
   DialogTrigger,
 } from './ui/dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from './ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
+import { Alert, AlertDescription } from './ui/alert';
 import { toast } from 'sonner@2.0.3';
 
 import { NaturezaOperacao } from '../types/naturezaOperacao';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { api } from '../services/api';
-import { useEffect } from 'react';
+
+type NaturezaFormData = {
+  nome: string;
+  codigo: string;
+  descricao: string;
+  geraComissao: boolean;
+  geraReceita: boolean;
+};
+
+const EMPTY_FORM: NaturezaFormData = {
+  nome: '',
+  codigo: '',
+  descricao: '',
+  geraComissao: true,
+  geraReceita: true,
+};
 
 export function NaturezaOperacaoManagement() {
   const [naturezas, setNaturezas] = useState<NaturezaOperacao[]>([]);
@@ -38,28 +47,18 @@ export function NaturezaOperacaoManagement() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedNatureza, setSelectedNatureza] = useState<NaturezaOperacao | null>(null);
-  const [formData, setFormData] = useState({
-    nome: '',
-    codigo: '',
-    descricao: '',
-    geraComissao: true,
-    geraReceita: true,
-    tiny_id: '',
-  });
+  const [formData, setFormData] = useState<NaturezaFormData>(EMPTY_FORM);
 
-  // Carregar naturezas
   useEffect(() => {
     carregarNaturezas();
   }, []);
 
   const carregarNaturezas = async () => {
     try {
-      console.log('[NATUREZAS] Carregando naturezas da API...');
       const naturezasAPI = await api.naturezasOperacao.list();
       setNaturezas(Array.isArray(naturezasAPI) ? naturezasAPI : []);
-      console.log('[NATUREZAS] Naturezas carregadas:', naturezasAPI?.length || 0);
     } catch (error) {
-      console.error('[NATUREZAS] Erro ao carregar naturezas:', error);
+      console.error('[NATUREZAS] erro ao carregar:', error);
       setNaturezas([]);
       toast.error('Erro ao carregar naturezas da API.');
     } finally {
@@ -67,41 +66,29 @@ export function NaturezaOperacaoManagement() {
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      nome: '',
-      codigo: '',
-      descricao: '',
-      geraComissao: true,
-      geraReceita: true,
-      tiny_id: '',
-    });
-  };
+  const resetForm = () => setFormData(EMPTY_FORM);
 
   const handleAdd = async () => {
     if (!formData.nome.trim()) {
-      toast.error('Nome da natureza é obrigatório');
+      toast.error('Nome da natureza e obrigatorio');
       return;
     }
 
     try {
-      // Aguardar resposta da API antes de atualizar o estado
       const newNatureza = await api.naturezasOperacao.create({
         nome: formData.nome,
         codigo: formData.codigo,
         descricao: formData.descricao,
         geraComissao: formData.geraComissao,
         geraReceita: formData.geraReceita,
-        tiny_id: formData.tiny_id || undefined,
       });
-      
-      // Só atualizar estado e mostrar sucesso após resposta bem-sucedida
-      setNaturezas([...naturezas, newNatureza]);
-      toast.success('Natureza de operação cadastrada com sucesso');
+
+      setNaturezas((prev) => [...prev, newNatureza]);
+      toast.success('Natureza de operacao cadastrada com sucesso');
       setAddDialogOpen(false);
       resetForm();
     } catch (error: any) {
-      console.error('[NATUREZAS] Erro ao criar natureza:', error);
+      console.error('[NATUREZAS] erro ao criar:', error);
       toast.error(`Erro ao criar natureza: ${error.message || 'Erro desconhecido'}`);
     }
   };
@@ -114,19 +101,17 @@ export function NaturezaOperacaoManagement() {
       descricao: natureza.descricao || '',
       geraComissao: natureza.geraComissao,
       geraReceita: natureza.geraReceita,
-      tiny_id: natureza.tiny_id || '',
     });
     setEditDialogOpen(true);
   };
 
   const handleUpdate = async () => {
     if (!formData.nome.trim() || !selectedNatureza) {
-      toast.error('Nome da natureza é obrigatório');
+      toast.error('Nome da natureza e obrigatorio');
       return;
     }
 
     try {
-      // Aguardar resposta da API antes de atualizar o estado
       const naturezaAtualizada = await api.naturezasOperacao.update(selectedNatureza.id, {
         nome: formData.nome,
         codigo: formData.codigo,
@@ -134,21 +119,17 @@ export function NaturezaOperacaoManagement() {
         geraComissao: formData.geraComissao,
         geraReceita: formData.geraReceita,
         ativo: selectedNatureza.ativo,
-        tiny_id: formData.tiny_id || undefined,
       });
-      
-      // Só atualizar estado e mostrar sucesso após resposta bem-sucedida
-      setNaturezas(
-        naturezas.map((nat) =>
-          nat.id === selectedNatureza.id ? naturezaAtualizada : nat
-        )
+
+      setNaturezas((prev) =>
+        prev.map((nat) => (nat.id === selectedNatureza.id ? naturezaAtualizada : nat))
       );
-      toast.success('Natureza de operação atualizada com sucesso');
+      toast.success('Natureza de operacao atualizada com sucesso');
       setEditDialogOpen(false);
       setSelectedNatureza(null);
       resetForm();
     } catch (error: any) {
-      console.error('[NATUREZAS] Erro ao atualizar natureza:', error);
+      console.error('[NATUREZAS] erro ao atualizar:', error);
       toast.error(`Erro ao atualizar natureza: ${error.message || 'Erro desconhecido'}`);
     }
   };
@@ -158,12 +139,12 @@ export function NaturezaOperacaoManagement() {
 
     try {
       await api.naturezasOperacao.delete(selectedNatureza.id);
-      setNaturezas(naturezas.filter((nat) => nat.id !== selectedNatureza.id));
-      toast.success('Natureza de operação excluída com sucesso');
+      setNaturezas((prev) => prev.filter((nat) => nat.id !== selectedNatureza.id));
+      toast.success('Natureza de operacao excluida com sucesso');
       setDeleteDialogOpen(false);
       setSelectedNatureza(null);
     } catch (error: any) {
-      console.error('[NATUREZAS] Erro ao excluir natureza:', error);
+      console.error('[NATUREZAS] erro ao excluir:', error);
       toast.error(`Erro ao excluir natureza: ${error.message || 'Erro desconhecido'}`);
     }
   };
@@ -173,6 +154,30 @@ export function NaturezaOperacaoManagement() {
     setDeleteDialogOpen(true);
   };
 
+  const mappingNotice = (
+    <Alert>
+      <AlertDescription className="text-sm">
+        Atencao: o mapeamento da Natureza de Operacao com o ERP deve ser feito em
+        <strong> Configuracoes {'>'} Integracoes</strong>, por empresa, usando a tabela
+        <code> tiny_empresa_natureza_operacao</code>.
+      </AlertDescription>
+    </Alert>
+  );
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Tag className="h-5 w-5" />
+            Naturezas de Operacao
+          </CardTitle>
+          <CardDescription>Carregando...</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -180,10 +185,10 @@ export function NaturezaOperacaoManagement() {
           <div>
             <CardTitle className="flex items-center gap-2">
               <Tag className="h-5 w-5" />
-              Naturezas de Operação
+              Naturezas de Operacao
             </CardTitle>
             <CardDescription className="mt-2">
-              Configure as naturezas de operação disponíveis para as vendas
+              Configure as naturezas de operacao disponiveis para as vendas.
             </CardDescription>
           </div>
           <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
@@ -195,12 +200,13 @@ export function NaturezaOperacaoManagement() {
             </DialogTrigger>
             <DialogContent className="max-w-2xl" aria-describedby={undefined}>
               <DialogHeader>
-                <DialogTitle>Adicionar Natureza de Operação</DialogTitle>
+                <DialogTitle>Adicionar Natureza de Operacao</DialogTitle>
                 <DialogDescription>
-                  Cadastre uma nova natureza de operação para ser usada nas vendas
+                  Cadastre uma nova natureza de operacao para ser usada nas vendas.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
+                {mappingNotice}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Nome da Natureza *</Label>
@@ -211,7 +217,7 @@ export function NaturezaOperacaoManagement() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Código (CFOP)</Label>
+                    <Label>Codigo (CFOP)</Label>
                     <Input
                       placeholder="Ex: 5102"
                       value={formData.codigo}
@@ -220,20 +226,9 @@ export function NaturezaOperacaoManagement() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Tiny ID</Label>
-                  <Input
-                    placeholder="ID da natureza no Tiny ERP"
-                    value={formData.tiny_id}
-                    onChange={(e) => setFormData({ ...formData, tiny_id: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    ID correspondente no sistema Tiny ERP para integração
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Descrição</Label>
+                  <Label>Descricao</Label>
                   <Textarea
-                    placeholder="Descrição da natureza de operação..."
+                    placeholder="Descricao da natureza de operacao..."
                     value={formData.descricao}
                     onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                     rows={3}
@@ -242,9 +237,9 @@ export function NaturezaOperacaoManagement() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="space-y-0.5">
-                      <Label>Gera Comissão</Label>
+                      <Label>Gera Comissao</Label>
                       <p className="text-sm text-muted-foreground">
-                        Vendas com esta natureza geram comissão para o vendedor
+                        Vendas com esta natureza geram comissao para o vendedor.
                       </p>
                     </div>
                     <Switch
@@ -258,7 +253,7 @@ export function NaturezaOperacaoManagement() {
                     <div className="space-y-0.5">
                       <Label>Gera Receita</Label>
                       <p className="text-sm text-muted-foreground">
-                        Vendas com esta natureza são contabilizadas como receita
+                        Vendas com esta natureza sao contabilizadas como receita.
                       </p>
                     </div>
                     <Switch
@@ -280,24 +275,25 @@ export function NaturezaOperacaoManagement() {
           </Dialog>
         </div>
       </CardHeader>
+
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
-              <TableHead>Código</TableHead>
-              <TableHead>Descrição</TableHead>
-              <TableHead className="text-center">Gera Comissão</TableHead>
+              <TableHead>Codigo</TableHead>
+              <TableHead>Descricao</TableHead>
+              <TableHead className="text-center">Gera Comissao</TableHead>
               <TableHead className="text-center">Gera Receita</TableHead>
               <TableHead className="text-center">Status</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+              <TableHead className="text-right">Acoes</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {naturezas.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center text-muted-foreground">
-                  Nenhuma natureza de operação cadastrada
+                  Nenhuma natureza de operacao cadastrada.
                 </TableCell>
               </TableRow>
             ) : (
@@ -305,9 +301,7 @@ export function NaturezaOperacaoManagement() {
                 <TableRow key={natureza.id}>
                   <TableCell>{natureza.nome}</TableCell>
                   <TableCell>{natureza.codigo || '-'}</TableCell>
-                  <TableCell className="max-w-xs truncate">
-                    {natureza.descricao || '-'}
-                  </TableCell>
+                  <TableCell className="max-w-xs truncate">{natureza.descricao || '-'}</TableCell>
                   <TableCell className="text-center">
                     {natureza.geraComissao ? (
                       <CheckCircle className="h-4 w-4 text-green-600 inline" />
@@ -329,18 +323,10 @@ export function NaturezaOperacaoManagement() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(natureza)}
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(natureza)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openDeleteDialog(natureza)}
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => openDeleteDialog(natureza)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -352,16 +338,14 @@ export function NaturezaOperacaoManagement() {
         </Table>
       </CardContent>
 
-      {/* Dialog de Edição */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-2xl" aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Editar Natureza de Operação</DialogTitle>
-            <DialogDescription>
-              Atualize as informações da natureza de operação
-            </DialogDescription>
+            <DialogTitle>Editar Natureza de Operacao</DialogTitle>
+            <DialogDescription>Atualize as informacoes da natureza de operacao.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {mappingNotice}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Nome da Natureza *</Label>
@@ -372,7 +356,7 @@ export function NaturezaOperacaoManagement() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Código (CFOP)</Label>
+                <Label>Codigo (CFOP)</Label>
                 <Input
                   placeholder="Ex: 5102"
                   value={formData.codigo}
@@ -381,20 +365,9 @@ export function NaturezaOperacaoManagement() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Tiny ID</Label>
-              <Input
-                placeholder="ID da natureza no Tiny ERP"
-                value={formData.tiny_id}
-                onChange={(e) => setFormData({ ...formData, tiny_id: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                ID correspondente no sistema Tiny ERP para integração
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>Descrição</Label>
+              <Label>Descricao</Label>
               <Textarea
-                placeholder="Descrição da natureza de operação..."
+                placeholder="Descricao da natureza de operacao..."
                 value={formData.descricao}
                 onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                 rows={3}
@@ -403,30 +376,26 @@ export function NaturezaOperacaoManagement() {
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="space-y-0.5">
-                  <Label>Gera Comissão</Label>
+                  <Label>Gera Comissao</Label>
                   <p className="text-sm text-muted-foreground">
-                    Vendas com esta natureza geram comissão para o vendedor
+                    Vendas com esta natureza geram comissao para o vendedor.
                   </p>
                 </div>
                 <Switch
                   checked={formData.geraComissao}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, geraComissao: checked })
-                  }
+                  onCheckedChange={(checked) => setFormData({ ...formData, geraComissao: checked })}
                 />
               </div>
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="space-y-0.5">
                   <Label>Gera Receita</Label>
                   <p className="text-sm text-muted-foreground">
-                    Vendas com esta natureza são contabilizadas como receita
+                    Vendas com esta natureza sao contabilizadas como receita.
                   </p>
                 </div>
                 <Switch
                   checked={formData.geraReceita}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, geraReceita: checked })
-                  }
+                  onCheckedChange={(checked) => setFormData({ ...formData, geraReceita: checked })}
                 />
               </div>
             </div>
@@ -435,18 +404,17 @@ export function NaturezaOperacaoManagement() {
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleUpdate}>Salvar Alterações</Button>
+            <Button onClick={handleUpdate}>Salvar Alteracoes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Exclusão */}
       <DeleteConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleDelete}
-        title="Excluir Natureza de Operação"
-        description={`Tem certeza que deseja excluir a natureza "${selectedNatureza?.nome}"? Esta ação não pode ser desfeita.`}
+        title="Excluir Natureza de Operacao"
+        description={`Tem certeza que deseja excluir a natureza "${selectedNatureza?.nome}"? Esta acao nao pode ser desfeita.`}
       />
     </Card>
   );

@@ -115,6 +115,16 @@ export function PriceListFormPage({ lista, modo, onVoltar, onSalvar }: PriceList
               preco: Number(
                 p.preco ?? p.valor ?? p.price ?? p.preco_unitario ?? p.valor_unitario ?? 0
               ),
+              descricao: p.descricao ?? p.descricao_produto ?? null,
+              codigoSku: p.codigoSku ?? p.codigo_sku ?? p.sku ?? null,
+              codigoEan: p.codigoEan ?? p.codigo_ean ?? p.ean ?? p.gtin ?? null,
+              ncm: p.ncm ?? null,
+              cest: p.cest ?? null,
+              pesoLiquido: p.pesoLiquido ?? p.peso_liquido ?? null,
+              pesoBruto: p.pesoBruto ?? p.peso_bruto ?? null,
+              situacao: p.situacao ?? null,
+              ativo: p.ativo ?? true,
+              disponivel: p.disponivel ?? true,
             }))
           : [];
         setProdutosPreco(produtosNorm);
@@ -239,9 +249,23 @@ export function PriceListFormPage({ lista, modo, onVoltar, onSalvar }: PriceList
     );
   };
 
-  const getProdutoNome = (produtoId: string) => {
+  const getProdutoNome = (produtoId: string, produtoPreco?: ProdutoPreco) => {
+    if (produtoPreco?.descricao) {
+      return produtoPreco.codigoSku
+        ? `${produtoPreco.codigoSku} - ${produtoPreco.descricao}`
+        : produtoPreco.descricao;
+    }
+
     const produto = produtos.find((p) => p.id === produtoId);
-    return produto ? `${produto.codigoSku} - ${produto.descricao}` : 'Produto não encontrado';
+    if (produto) {
+      return `${produto.codigoSku} - ${produto.descricao}`;
+    }
+
+    if (loadingProdutos) {
+      return 'Carregando produto...';
+    }
+
+    return `Produto não encontrado (ID: ${produtoId})`;
   };
 
   const formatCurrency = (value: number) => {
@@ -548,7 +572,7 @@ function ProdutoPrecoForm({
   produtosPreco: ProdutoPreco[];
   onAdd: (produtoId: string, preco: string) => void;
   onRemove: (produtoId: string) => void;
-  getProdutoNome: (produtoId: string) => string;
+  getProdutoNome: (produtoId: string, produtoPreco?: ProdutoPreco) => string;
   formatCurrency: (value: number) => string;
   disabled?: boolean;
 }) {
@@ -622,7 +646,7 @@ function ProdutoPrecoForm({
           <div className="divide-y">
             {produtosPreco.map((pp) => (
               <div key={pp.produtoId} className="px-4 py-3 flex items-center gap-4">
-                <div className="flex-1 text-sm">{getProdutoNome(pp.produtoId)}</div>
+                <div className="flex-1 text-sm">{getProdutoNome(pp.produtoId, pp)}</div>
                 <div className="w-32 text-right">{formatCurrency(pp.preco)}</div>
                 <div className="w-20 flex justify-end">
                   {!disabled && (

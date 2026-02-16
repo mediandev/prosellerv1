@@ -101,6 +101,7 @@ export function MetasManagement() {
   const carregarDados = async () => {
     setLoading(true);
     try {
+      let vendedoresAtivos: Usuario[] = [];
       // Carregar vendedores via Edge Function list-users-v2 usando api.usuarios.list()
       console.log('[METAS MANAGEMENT] Carregando vendedores via api.usuarios.list()...');
       try {
@@ -143,6 +144,7 @@ export function MetasManagement() {
         
         console.log('[METAS MANAGEMENT] Vendedores filtrados e mapeados:', vendedores);
         console.log('[METAS MANAGEMENT] IDs dos vendedores:', vendedores.map(v => ({ id: v.id, nome: v.nome })));
+        vendedoresAtivos = vendedores;
         
         if (vendedores.length === 0) {
           console.warn('[METAS MANAGEMENT] Nenhum vendedor ativo encontrado!');
@@ -159,21 +161,67 @@ export function MetasManagement() {
       // Carregar metas filtradas por período
       console.log('[METAS MANAGEMENT] Carregando metas para período:', { selectedYear, selectedMonth });
       const metasData = await buscarTodasMetas(selectedYear, selectedMonth);
+      const vendasPeriodo = await api.get('vendas');
+      const naturezas = await api.naturezasOperacao.list();
+      const naturezasReceitaIds = new Set(
+        (naturezas || []).filter((n: any) => n.geraReceita).map((n: any) => String(n.id))
+      );
+
+      const vendidoPorVendedor = new Map<string, number>();
+      (vendasPeriodo || []).forEach((venda: any) => {
+        const dataVenda = venda.dataPedido instanceof Date
+          ? venda.dataPedido
+          : new Date(venda.dataPedido);
+
+        if (Number.isNaN(dataVenda.getTime())) return;
+
+        const mesmoAno = dataVenda.getFullYear() === selectedYear;
+        const mesmoMes = dataVenda.getMonth() + 1 === selectedMonth;
+        const naoCancelada = !['Cancelado', 'cancelado', 'Cancelada', 'cancelada'].includes(venda.status);
+        const geraReceita = naturezasReceitaIds.has(String(venda.naturezaOperacaoId));
+
+        if (!mesmoAno || !mesmoMes || !naoCancelada || !geraReceita) return;
+
+        const vendedorId = String(venda.vendedorId || '').trim();
+        if (!vendedorId) return;
+
+        const valorVenda = Number(
+          venda.valorFaturado ??
+          venda.total ??
+          venda.valorPedido ??
+          venda.valorTotalProdutos ??
+          0
+        );
+
+        const acumulado = vendidoPorVendedor.get(vendedorId) || 0;
+        vendidoPorVendedor.set(vendedorId, acumulado + (Number.isNaN(valorVenda) ? 0 : valorVenda));
+      });
+
+      const metasDataComVendido = metasData.map((meta) => {
+        const vendedorId = String(meta.vendedorId || '').trim();
+        const vendidoCalculado = vendidoPorVendedor.get(vendedorId) || 0;
+        const vendidoAPI = Number(meta.vendidoMes || 0);
+        return {
+          ...meta,
+          vendidoMes: Math.max(vendidoAPI, vendidoCalculado),
+        };
+      });
       
-      console.log('[METAS MANAGEMENT] Dados recebidos do buscarTodasMetas:', metasData);
-      console.log('[METAS MANAGEMENT] Tipo:', typeof metasData);
-      console.log('[METAS MANAGEMENT] É array?', Array.isArray(metasData));
-      console.log('[METAS MANAGEMENT] Total de metas encontradas:', metasData.length);
+      console.log('[METAS MANAGEMENT] Dados recebidos do buscarTodasMetas:', metasDataComVendido);
+      console.log('[METAS MANAGEMENT] Tipo:', typeof metasDataComVendido);
+      console.log('[METAS MANAGEMENT] É array?', Array.isArray(metasDataComVendido));
+      console.log('[METAS MANAGEMENT] Total de metas encontradas:', metasDataComVendido.length);
       
-      if (metasData.length > 0) {
-        console.log('[METAS MANAGEMENT] Primeira meta:', metasData[0]);
-        console.log('[METAS MANAGEMENT] IDs das metas (vendedorId):', metasData.map(m => ({ 
+      if (metasDataComVendido.length > 0) {
+        console.log('[METAS MANAGEMENT] Primeira meta:', metasDataComVendido[0]);
+        console.log('[METAS MANAGEMENT] IDs das metas (vendedorId):', metasDataComVendido.map(m => ({ 
           metaId: m.id, 
           vendedorId: m.vendedorId, 
           vendedorNome: m.vendedorNome, 
           ano: m.ano, 
           mes: m.mes,
-          metaMensal: m.metaMensal
+          metaMensal: m.metaMensal,
+          vendidoMes: m.vendidoMes
         })));
       } else {
         console.warn('[METAS MANAGEMENT] Nenhuma meta encontrada para o período:', { selectedYear, selectedMonth });
@@ -181,24 +229,25 @@ export function MetasManagement() {
       }
       
       // O metasService já faz o mapeamento, então podemos usar diretamente
-      setMetas(metasData);
+      setMetas(metasDataComVendido);
       
       // Log de comparação de IDs (após setUsuarios)
-      if (usuarios.length > 0 && metasData.length > 0) {
+      if (usuarios.length > 0 && metasDataComVendido.length > 0) {
         console.log('[METAS MANAGEMENT] Comparando IDs:');
         console.log('[METAS MANAGEMENT] IDs dos vendedores:', usuarios.map(v => v.id));
-        console.log('[METAS MANAGEMENT] IDs das metas (vendedorId):', metasData.map(m => m.vendedorId));
+        console.log('[METAS MANAGEMENT] IDs das metas (vendedorId):', metasDataComVendido.map(m => m.vendedorId));
         
         // Verificar correspondências
         const correspondencias = usuarios.map(v => {
-          const meta = metasData.find(m => String(m.vendedorId) === String(v.id));
+          const meta = metasDataComVendido.find(m => String(m.vendedorId) === String(v.id));
           return {
             vendedorId: v.id,
             vendedorNome: v.nome,
             temMeta: !!meta,
             metaVendedorId: meta?.vendedorId,
             metaVendedorNome: meta?.vendedorNome,
-            metaMensal: meta?.metaMensal
+            metaMensal: meta?.metaMensal,
+            vendidoMes: meta?.vendidoMes
           };
         });
         console.log('[METAS MANAGEMENT] Correspondências vendedor-meta:', correspondencias);
@@ -211,13 +260,13 @@ export function MetasManagement() {
       // Se o total não foi retornado, calcular localmente
       const totalCalculado = typeof total === 'number' && total > 0 
         ? total 
-        : metasData.reduce((sum, m) => sum + (m.metaMensal || 0), 0);
+        : metasDataComVendido.reduce((sum, m) => sum + (m.metaMensal || 0), 0);
       
       setMetaTotal(totalCalculado);
 
       console.log('[METAS] Dados carregados:', {
         vendedores: usuarios.length,
-        metasEncontradas: metasData.length,
+        metasEncontradas: metasDataComVendido.length,
         totalCalculado,
         periodo: { ano: selectedYear, mes: selectedMonth }
       });

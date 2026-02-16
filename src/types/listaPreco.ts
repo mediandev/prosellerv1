@@ -1,6 +1,16 @@
 export interface ProdutoPreco {
   produtoId: string;
   preco: number;
+  descricao?: string | null;
+  codigoSku?: string | null;
+  codigoEan?: string | null;
+  ncm?: string | null;
+  cest?: string | null;
+  pesoLiquido?: number | null;
+  pesoBruto?: number | null;
+  situacao?: string | null;
+  ativo?: boolean;
+  disponivel?: boolean;
 }
 
 export interface FaixaDesconto {
