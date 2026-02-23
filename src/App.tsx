@@ -128,6 +128,7 @@ function Sidebar({ currentPage, onPageChange }: SidebarProps) {
 
 function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
   const { usuario, logout } = useAuth();
+  const systemVersion = "V 1.10.0";
   
   if (!usuario) return null;
   
@@ -161,6 +162,10 @@ function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
           </div>
         </div>
       </Button>
+
+      <div className="gap-3 p-3 rounded-lg w-full">
+        <p className="flex items-center justify-center text-[11px] text-muted-foreground ">Versão {systemVersion}</p>
+      </div>
       
       <Button
         variant="outline"

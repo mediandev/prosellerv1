@@ -26,6 +26,17 @@ interface VendaComissao {
   valorComissao: number;
 }
 
+interface ResumoComissaoVendedor {
+  periodo: string;
+  totalVendas: number;
+  totalComissao: number;
+  totalCreditos: number;
+  totalDebitos: number;
+  totalPagos: number;
+  saldoFinal: number;
+  status: string;
+}
+
 const meses = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
@@ -66,6 +77,7 @@ export function SellerCommissionsPage({
   const [periodInput, setPeriodInput] = useState(formatPeriodInput(normalizedPeriod));
   const [loading, setLoading] = useState(false);
   const [vendas, setVendas] = useState<VendaComissao[]>([]);
+  const [resumo, setResumo] = useState<ResumoComissaoVendedor | null>(null);
 
   useEffect(() => {
     if (period !== normalizedPeriod) {
@@ -79,6 +91,7 @@ export function SellerCommissionsPage({
     const carregarComissoes = async () => {
       if (!usuario?.id) {
         setVendas([]);
+        setResumo(null);
         return;
       }
 
@@ -92,6 +105,21 @@ export function SellerCommissionsPage({
         const relatorioRow = Array.isArray(relatorioApi)
           ? relatorioApi.find((r: any) => String(r.vendedor_id || r.vendedorId) === usuario.id)
           : null;
+
+        setResumo(
+          relatorioRow
+            ? {
+                periodo: String(relatorioRow.periodo || normalizedPeriod),
+                totalVendas: toSafeNumber(relatorioRow.total_vendas ?? relatorioRow.totalVendas, 0),
+                totalComissao: toSafeNumber(relatorioRow.total_comissao ?? relatorioRow.totalComissao, 0),
+                totalCreditos: toSafeNumber(relatorioRow.total_creditos ?? relatorioRow.totalCreditos, 0),
+                totalDebitos: toSafeNumber(relatorioRow.total_debitos ?? relatorioRow.totalDebitos, 0),
+                totalPagos: toSafeNumber(relatorioRow.total_pagos ?? relatorioRow.totalPagos, 0),
+                saldoFinal: toSafeNumber(relatorioRow.saldo_final ?? relatorioRow.saldoFinal, 0),
+                status: String(relatorioRow.status || "aberto"),
+              }
+            : null
+        );
 
         const mapped = (Array.isArray(vendasApi) ? vendasApi : [])
           .filter((v: any) => String(v.vendedor_uuid || v.vendedorId || "") === usuario.id)
@@ -121,6 +149,7 @@ export function SellerCommissionsPage({
       } catch (error) {
         console.error("[SELLER-COMISSOES] Erro ao carregar comissões:", error);
         setVendas([]);
+        setResumo(null);
       } finally {
         setLoading(false);
       }
@@ -130,18 +159,29 @@ export function SellerCommissionsPage({
   }, [normalizedPeriod, usuario?.id]);
 
   const totais = useMemo(() => {
-    const totalComissoes = vendas.reduce((acc, item) => acc + toSafeNumber(item.valorComissao, 0), 0);
-    const totalVendas = vendas.reduce((acc, item) => acc + toSafeNumber(item.valorTotalVenda, 0), 0);
-    const percentualMedio = vendas.length
+    const totalComissoesVendas = vendas.reduce((acc, item) => acc + toSafeNumber(item.valorComissao, 0), 0);
+    const totalVendasLista = vendas.reduce((acc, item) => acc + toSafeNumber(item.valorTotalVenda, 0), 0);
+    const percentualMedioLista = vendas.length
       ? vendas.reduce((acc, item) => acc + toSafeNumber(item.percentualComissao, 0), 0) / vendas.length
       : 0;
+
+    const totalComissoes = resumo ? toSafeNumber(resumo.totalComissao, totalComissoesVendas) : totalComissoesVendas;
+    const totalVendas = resumo ? toSafeNumber(resumo.totalVendas, totalVendasLista) : totalVendasLista;
+    const percentualMedio = totalVendas > 0
+      ? (totalComissoes / totalVendas) * 100
+      : percentualMedioLista;
 
     return {
       totalComissoes,
       totalVendas,
       percentualMedio,
+      totalCreditos: toSafeNumber(resumo?.totalCreditos, 0),
+      totalDebitos: toSafeNumber(resumo?.totalDebitos, 0),
+      totalPagos: toSafeNumber(resumo?.totalPagos, 0),
+      saldoFinal: toSafeNumber(resumo?.saldoFinal, 0),
+      status: resumo?.status || "aberto",
     };
-  }, [vendas]);
+  }, [vendas, resumo]);
 
   const periodLabel = useMemo(() => {
     const [year, month] = normalizedPeriod.split("-").map(Number);
@@ -260,6 +300,33 @@ export function SellerCommissionsPage({
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+            <div>
+              <p className="text-xs text-muted-foreground">Créditos</p>
+              <p className="font-semibold">{formatCurrencyBRL(totais.totalCreditos)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Débitos</p>
+              <p className="font-semibold">{formatCurrencyBRL(totais.totalDebitos)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Pagos</p>
+              <p className="font-semibold">{formatCurrencyBRL(totais.totalPagos)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Saldo Final</p>
+              <p className="font-semibold">{formatCurrencyBRL(totais.saldoFinal)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Status</p>
+              <p className="font-semibold capitalize">{totais.status}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
