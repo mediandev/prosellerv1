@@ -251,6 +251,11 @@ serve(async (req) => {
       bairro: body.bairro ? sanitizeInput(body.bairro).trim() : null,
       cidade: body.cidade ? sanitizeInput(body.cidade).trim() : null,
       uf: body.uf ? sanitizeInput(body.uf).toUpperCase().trim() : null,
+      codigo_origem: body.codigo_origem ? sanitizeInput(body.codigo_origem).trim() : null,
+      codigo_tiny_sistema: body.codigo_tiny_sistema ? sanitizeInput(body.codigo_tiny_sistema).trim() : null,
+      codigo_tiny_id_externo: body.codigo_tiny_id_externo ? sanitizeInput(body.codigo_tiny_id_externo).trim() : null,
+      codigo_tiny_integration_ref: body.codigo_tiny_integration_ref ? sanitizeInput(body.codigo_tiny_integration_ref).trim() : null,
+      codigo_gerado_em: body.codigo_gerado_em || null,
     }
 
     console.log('[CREATE-CLIENTE-V2] Step 4: Calling RPC function...', { p_criado_por: user.id })
@@ -285,6 +290,37 @@ serve(async (req) => {
     if (rpcError) {
       console.error('[CREATE-CLIENTE-V2] RPC Error:', { message: rpcError.message, details: rpcError.details, code: rpcError.code })
       throw new Error(`Database operation failed: ${rpcError.message}`)
+    }
+
+    const clienteIdCriado = rpcData?.[0]?.cliente_id
+    if (clienteIdCriado && (
+      sanitizedData.codigo_origem ||
+      sanitizedData.codigo_tiny_sistema ||
+      sanitizedData.codigo_tiny_id_externo ||
+      sanitizedData.codigo_tiny_integration_ref ||
+      sanitizedData.codigo_gerado_em
+    )) {
+      const { error: metadataError } = await supabase
+        .from('cliente')
+        .update({
+          codigo_origem: sanitizedData.codigo_origem,
+          codigo_tiny_sistema: sanitizedData.codigo_tiny_sistema,
+          codigo_tiny_id_externo: sanitizedData.codigo_tiny_id_externo,
+          codigo_tiny_integration_ref: sanitizedData.codigo_tiny_integration_ref,
+          codigo_gerado_em: sanitizedData.codigo_gerado_em,
+        })
+        .eq('cliente_id', clienteIdCriado)
+
+      if (metadataError) {
+        console.error('[CREATE-CLIENTE-V2] Metadata update error:', metadataError)
+        throw new Error(`Database operation failed: ${metadataError.message}`)
+      }
+
+      rpcData[0].codigo_origem = sanitizedData.codigo_origem
+      rpcData[0].codigo_tiny_sistema = sanitizedData.codigo_tiny_sistema
+      rpcData[0].codigo_tiny_id_externo = sanitizedData.codigo_tiny_id_externo
+      rpcData[0].codigo_tiny_integration_ref = sanitizedData.codigo_tiny_integration_ref
+      rpcData[0].codigo_gerado_em = sanitizedData.codigo_gerado_em
     }
 
     console.log('[CREATE-CLIENTE-V2] RPC call successful:', { clienteId: rpcData?.[0]?.cliente_id })

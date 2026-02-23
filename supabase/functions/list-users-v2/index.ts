@@ -1,4 +1,4 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+﻿import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -152,6 +152,21 @@ serve(async (req) => {
       total: rpcData?.total || 0,
       usersCount: rpcData?.users?.length || 0
     })
+    const userIds = (rpcData?.users || []).map((u: any) => u.user_id).filter(Boolean)
+    if (userIds.length > 0) {
+      const { data: permsRows, error: permsError } = await supabase
+        .from('user')
+        .select('user_id, permissoes')
+        .in('user_id', userIds)
+
+      if (permsError) {
+        console.error('[LIST-USERS-V2] Error loading permissions:', permsError)
+        throw new Error(`Database operation failed: ${permsError.message}`)
+      }
+
+      const permsMap = new Map((permsRows || []).map((row: any) => [row.user_id, Array.isArray(row.permissoes) ? row.permissoes : []]))
+      rpcData.users = (rpcData.users || []).map((u: any) => ({ ...u, permissoes: permsMap.get(u.user_id) || [] }))
+    }
 
     const duration = Date.now() - startTime
     console.log(`[LIST-USERS-V2] SUCCESS: Users listed by ${user.id} (${duration}ms)`)
@@ -179,3 +194,4 @@ serve(async (req) => {
     return formatErrorResponse(error)
   }
 })
+

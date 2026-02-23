@@ -1,4 +1,4 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+﻿import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -20,9 +20,10 @@ interface CreateUserBody {
   ref_user_role_id?: number
   user_login?: string
   auth_user_id?: string
+  permissoes?: string[]
 }
 
-// Helper: Valida JWT e retorna usuário autenticado
+// Helper: Valida JWT e retorna usuÃ¡rio autenticado
 async function validateJWT(
   req: Request,
   supabaseUrl: string,
@@ -144,7 +145,7 @@ async function validateJWT(
   }
 }
 
-// Helper: Cria resposta de erro de autenticação
+// Helper: Cria resposta de erro de autenticaÃ§Ã£o
 function createAuthErrorResponse(message: string, statusCode: number = 401): Response {
   return new Response(
     JSON.stringify({ 
@@ -158,7 +159,7 @@ function createAuthErrorResponse(message: string, statusCode: number = 401): Res
   )
 }
 
-// Helper: Cria resposta de erro de permissão
+// Helper: Cria resposta de erro de permissÃ£o
 function createPermissionErrorResponse(message: string = 'Insufficient permissions'): Response {
   return new Response(
     JSON.stringify({ 
@@ -208,7 +209,7 @@ function formatErrorResponse(error: Error | unknown): Response {
       statusCode = 403
     } else if (error.message.includes('not found')) {
       statusCode = 404
-    } else if (error.message.includes('validation') || error.message.includes('invalid') || error.message.includes('obrigatório')) {
+    } else if (error.message.includes('validation') || error.message.includes('invalid') || error.message.includes('obrigatÃ³rio')) {
       statusCode = 400
     }
   }
@@ -244,17 +245,17 @@ function sanitizeInput(input: string): string {
   return input.trim().replace(/[<>]/g, '').replace(/javascript:/gi, '').replace(/on\w+=/gi, '')
 }
 
-// Helper: Valida não vazio
+// Helper: Valida nÃ£o vazio
 function validateNotEmpty(value: string | null | undefined): boolean {
   return value !== null && value !== undefined && value.trim().length > 0
 }
 
-// Helper: Valida comprimento mínimo
+// Helper: Valida comprimento mÃ­nimo
 function validateMinLength(value: string, minLength: number): boolean {
   return value && value.trim().length >= minLength
 }
 
-// Helper: Cria erro de validação
+// Helper: Cria erro de validaÃ§Ã£o
 class ValidationError extends Error {
   constructor(message: string) {
     super(message)
@@ -276,7 +277,7 @@ serve(async (req) => {
   }
 
   try {
-    // 1. AUTENTICAÇÃO
+    // 1. AUTENTICAÃ‡ÃƒO
     console.log('[CREATE-USER-V2] Step 1: Starting authentication...')
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -303,19 +304,19 @@ serve(async (req) => {
       tipo: user.tipo
     })
 
-    // 2. VERIFICAR PERMISSÕES
+    // 2. VERIFICAR PERMISSÃ•ES
     console.log('[CREATE-USER-V2] Step 2: Checking permissions...')
     if (user.tipo !== 'backoffice') {
       console.error('[CREATE-USER-V2] Permission denied:', {
         userTipo: user.tipo,
         required: 'backoffice'
       })
-      return createPermissionErrorResponse('Apenas usuários backoffice podem criar usuários')
+      return createPermissionErrorResponse('Apenas usuÃ¡rios backoffice podem criar usuÃ¡rios')
     }
 
     console.log('[CREATE-USER-V2] Permission check passed')
 
-    // 3. VALIDAÇÃO DE INPUT
+    // 3. VALIDAÃ‡ÃƒO DE INPUT
     console.log('[CREATE-USER-V2] Step 3: Validating input...')
     const body: CreateUserBody = await req.json()
     console.log('[CREATE-USER-V2] Request body received:', {
@@ -327,12 +328,12 @@ serve(async (req) => {
 
     if (!validateNotEmpty(body.email)) {
       console.error('[CREATE-USER-V2] Validation error: Email is required')
-      throw new ValidationError('Email é obrigatório')
+      throw new ValidationError('Email Ã© obrigatÃ³rio')
     }
 
     if (!validateNotEmpty(body.nome)) {
       console.error('[CREATE-USER-V2] Validation error: Nome is required')
-      throw new ValidationError('Nome é obrigatório')
+      throw new ValidationError('Nome Ã© obrigatÃ³rio')
     }
 
     if (!validateMinLength(body.nome, 2)) {
@@ -347,12 +348,12 @@ serve(async (req) => {
 
     if (!validateEmail(body.email)) {
       console.error('[CREATE-USER-V2] Validation error: Invalid email format')
-      throw new ValidationError('Formato de email inválido')
+      throw new ValidationError('Formato de email invÃ¡lido')
     }
 
     console.log('[CREATE-USER-V2] Input validation passed')
 
-    // 4. SANITIZAÇÃO
+    // 4. SANITIZAÃ‡ÃƒO
     console.log('[CREATE-USER-V2] Step 4: Sanitizing data...')
     const sanitizedData = {
       email: sanitizeInput(body.email).toLowerCase().trim(),
@@ -361,6 +362,12 @@ serve(async (req) => {
       ref_user_role_id: body.ref_user_role_id || null,
       user_login: body.user_login ? sanitizeInput(body.user_login).trim() : null,
       auth_user_id: body.auth_user_id || null,
+      permissoes: Array.isArray(body.permissoes)
+        ? body.permissoes
+          .filter((p) => typeof p === 'string')
+          .map((p) => sanitizeInput(p).trim())
+          .filter((p) => p.length > 0)
+        : null,
     }
 
     console.log('[CREATE-USER-V2] Data sanitized')
@@ -409,6 +416,19 @@ serve(async (req) => {
       console.error('[CREATE-USER-V2] ERROR: RPC returned empty data')
       throw new Error('Failed to create user')
     }
+    if (sanitizedData.permissoes) {
+      const { error: permsError } = await supabase
+        .from('user')
+        .update({ permissoes: sanitizedData.permissoes })
+        .eq('user_id', rpcData[0].user_id)
+
+      if (permsError) {
+        console.error('[CREATE-USER-V2] ERROR updating user permissions:', permsError)
+        throw new Error(`Database operation failed: ${permsError.message}`)
+      }
+
+      rpcData[0].permissoes = sanitizedData.permissoes
+    }
 
     // 6. RESPOSTA
     const duration = Date.now() - startTime
@@ -417,7 +437,7 @@ serve(async (req) => {
     return createHttpSuccessResponse(
       {
         user: rpcData[0],
-        message: 'Usuário criado com sucesso',
+        message: 'UsuÃ¡rio criado com sucesso',
       },
       201,
       {
@@ -435,3 +455,4 @@ serve(async (req) => {
     return formatErrorResponse(error)
   }
 })
+

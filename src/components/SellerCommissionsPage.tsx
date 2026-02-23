@@ -1,18 +1,13 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import { Calendar } from "./ui/calendar";
+import { Input } from "./ui/input";
+import { api } from "../services/api";
 import { format } from "date-fns@4.1.0";
-import { ptBR } from "date-fns@4.1.0/locale";
-import { Calendar as CalendarIcon, Download, DollarSign, TrendingUp, Wallet, CheckCircle2, AlertCircle } from "lucide-react";
-import { mockComissoesVendas } from "../data/mockComissoes";
-import { ComissaoVenda } from "../types/comissao";
-import { cn } from "./ui/utils";
+import { ChevronLeft, ChevronRight, Download, DollarSign, TrendingUp, Wallet } from "lucide-react";
+import { toSafeNumber, formatCurrencyBRL } from "../utils/number";
 
 interface SellerCommissionsPageProps {
   period: string;
@@ -21,128 +16,203 @@ interface SellerCommissionsPageProps {
   onCustomDateRangeChange: (range: { from: Date | undefined; to: Date | undefined }) => void;
 }
 
+interface VendaComissao {
+  id: string;
+  dataVenda: string;
+  ocCliente: string;
+  clienteNome: string;
+  valorTotalVenda: number;
+  percentualComissao: number;
+  valorComissao: number;
+}
+
+const meses = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+
+const getCurrentPeriod = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+};
+
+const normalizePeriod = (period: string) => {
+  if (/^\d{4}-\d{2}$/.test(period)) return period;
+  return getCurrentPeriod();
+};
+
+const parsePeriodInput = (value: string): string | null => {
+  const normalized = value.trim();
+  const match = normalized.match(/^(\d{2})\/(\d{4})$/);
+  if (!match) return null;
+  const month = Number(match[1]);
+  const year = Number(match[2]);
+  if (month < 1 || month > 12 || year < 2000 || year > 2100) return null;
+  return `${year}-${String(month).padStart(2, "0")}`;
+};
+
+const formatPeriodInput = (period: string) => {
+  const [year, month] = period.split("-");
+  if (!year || !month) return "";
+  return `${month}/${year}`;
+};
+
 export function SellerCommissionsPage({
   period,
   onPeriodChange,
-  customDateRange,
-  onCustomDateRangeChange,
 }: SellerCommissionsPageProps) {
   const { usuario } = useAuth();
+  const normalizedPeriod = normalizePeriod(period);
+  const [periodInput, setPeriodInput] = useState(formatPeriodInput(normalizedPeriod));
+  const [loading, setLoading] = useState(false);
+  const [vendas, setVendas] = useState<VendaComissao[]>([]);
 
-  // Filtrar comissões do vendedor logado
-  const minhasComissoes = useMemo(() => {
-    if (!usuario) return [];
-    return mockComissoesVendas.filter(c => c.vendedorId === usuario.id);
-  }, [usuario]);
+  useEffect(() => {
+    if (period !== normalizedPeriod) {
+      onPeriodChange(normalizedPeriod);
+      return;
+    }
+    setPeriodInput(formatPeriodInput(normalizedPeriod));
+  }, [period, normalizedPeriod, onPeriodChange]);
 
-  // Filtrar por status - Como ComissaoVenda não tem status, filtrar por todas
-  const comissoesFiltradas = useMemo(() => {
-    return minhasComissoes;
-  }, [minhasComissoes]);
+  useEffect(() => {
+    const carregarComissoes = async () => {
+      if (!usuario?.id) {
+        setVendas([]);
+        return;
+      }
 
-  // Calcular totais - Para vendedor, todas as comissões são consideradas aprovadas
-  const totais = useMemo(() => {
-    const total = minhasComissoes.reduce((acc, c) => acc + c.valorComissao, 0);
-    
-    return { 
-      total, 
-      aprovadas: total, // Todas aprovadas por padrão
-      pendentes: 0, 
-      pagas: 0 
+      setLoading(true);
+      try {
+        const [vendasApi, relatorioApi] = await Promise.all([
+          api.comissoes.getVendas(normalizedPeriod, usuario.id),
+          api.comissoes.getRelatorio(normalizedPeriod, usuario.id),
+        ]);
+
+        const relatorioRow = Array.isArray(relatorioApi)
+          ? relatorioApi.find((r: any) => String(r.vendedor_id || r.vendedorId) === usuario.id)
+          : null;
+
+        const mapped = (Array.isArray(vendasApi) ? vendasApi : [])
+          .filter((v: any) => String(v.vendedor_uuid || v.vendedorId || "") === usuario.id)
+          .map((v: any) => {
+            const valorTotalVenda = toSafeNumber(v.valor_total ?? v.valorTotalVenda, 0);
+            const percentualComissao = toSafeNumber(v.percentual_comissao ?? v.percentualComissao, 0);
+            const valorComissao =
+              toSafeNumber(v.valor_comissao ?? v.valorComissao, NaN) ||
+              Number(((valorTotalVenda * percentualComissao) / 100).toFixed(2));
+
+            return {
+              id: String(v.vendedor_comissao_id || v.id || crypto.randomUUID()),
+              dataVenda: String(v.data_inicio || v.dataVenda || new Date().toISOString()),
+              ocCliente: String(v.oc_cliente || v.ocCliente || ""),
+              clienteNome: String(v.cliente_nome || v.clienteNome || "Cliente não informado"),
+              valorTotalVenda,
+              percentualComissao,
+              valorComissao,
+            };
+          });
+
+        if (mapped.length === 0 && relatorioRow) {
+          setVendas([]);
+        } else {
+          setVendas(mapped);
+        }
+      } catch (error) {
+        console.error("[SELLER-COMISSOES] Erro ao carregar comissões:", error);
+        setVendas([]);
+      } finally {
+        setLoading(false);
+      }
     };
-  }, [minhasComissoes]);
+
+    carregarComissoes();
+  }, [normalizedPeriod, usuario?.id]);
+
+  const totais = useMemo(() => {
+    const totalComissoes = vendas.reduce((acc, item) => acc + toSafeNumber(item.valorComissao, 0), 0);
+    const totalVendas = vendas.reduce((acc, item) => acc + toSafeNumber(item.valorTotalVenda, 0), 0);
+    const percentualMedio = vendas.length
+      ? vendas.reduce((acc, item) => acc + toSafeNumber(item.percentualComissao, 0), 0) / vendas.length
+      : 0;
+
+    return {
+      totalComissoes,
+      totalVendas,
+      percentualMedio,
+    };
+  }, [vendas]);
+
+  const periodLabel = useMemo(() => {
+    const [year, month] = normalizedPeriod.split("-").map(Number);
+    const monthName = meses[(month || 1) - 1];
+    return `${monthName}/${year}`;
+  }, [normalizedPeriod]);
+
+  const alterarMes = (delta: number) => {
+    const [year, month] = normalizedPeriod.split("-").map(Number);
+    const base = new Date(year, (month || 1) - 1, 1);
+    base.setMonth(base.getMonth() + delta);
+    const next = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}`;
+    onPeriodChange(next);
+  };
+
+  const aplicarPeriodoDigitado = () => {
+    const parsed = parsePeriodInput(periodInput);
+    if (!parsed) {
+      setPeriodInput(formatPeriodInput(normalizedPeriod));
+      return;
+    }
+    onPeriodChange(parsed);
+  };
 
   const exportarCSV = () => {
     const headers = ["Data Venda", "OC Cliente", "Cliente", "Valor Venda", "% Comissão", "Valor Comissão"];
-    const rows = comissoesFiltradas.map(c => [
-      format(new Date(c.dataVenda), "dd/MM/yyyy"),
-      c.ocCliente,
-      c.clienteNome,
-      c.valorTotalVenda.toFixed(2),
-      c.percentualComissao.toFixed(2),
-      c.valorComissao.toFixed(2)
+    const rows = vendas.map((venda) => [
+      format(new Date(venda.dataVenda), "dd/MM/yyyy"),
+      venda.ocCliente,
+      venda.clienteNome,
+      venda.valorTotalVenda.toFixed(2),
+      venda.percentualComissao.toFixed(2),
+      venda.valorComissao.toFixed(2),
     ]);
 
-    const csvContent = [
-      headers.join(","),
-      ...rows.map(row => row.join(","))
-    ].join("\n");
-
+    const csvContent = [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `minhas-comissoes-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    link.download = `minhas-comissoes-${normalizedPeriod}.csv`;
     link.click();
   };
 
   return (
     <div className="space-y-6">
-      {/* Filtros */}
-      <div className="flex flex-wrap gap-4 items-end">
-        <div className="flex-1 min-w-[200px]">
-          <label className="text-sm font-medium mb-2 block">Período</label>
-          <Select value={period} onValueChange={onPeriodChange}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="current_month">Mês Atual</SelectItem>
-              <SelectItem value="last_month">Mês Anterior</SelectItem>
-              <SelectItem value="current_quarter">Trimestre Atual</SelectItem>
-              <SelectItem value="current_year">Ano Atual</SelectItem>
-              <SelectItem value="30">Últimos 30 dias</SelectItem>
-              <SelectItem value="90">Últimos 90 dias</SelectItem>
-              <SelectItem value="365">Último Ano</SelectItem>
-              <SelectItem value="custom">Período Personalizado</SelectItem>
-            </SelectContent>
-          </Select>
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Período</label>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="icon" onClick={() => alterarMes(-1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Input
+              value={periodInput}
+              onChange={(e) => setPeriodInput(e.target.value)}
+              onBlur={aplicarPeriodoDigitado}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  aplicarPeriodoDigitado();
+                }
+              }}
+              className="w-32 text-center"
+              placeholder="MM/AAAA"
+            />
+            <Button type="button" variant="outline" size="icon" onClick={() => alterarMes(1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">{periodLabel}</p>
         </div>
-
-        {period === "custom" && (
-          <>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Data Início</label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("justify-start text-left font-normal", !customDateRange.from && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {customDateRange.from ? format(customDateRange.from, "dd/MM/yyyy") : "Selecione"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={customDateRange.from}
-                    onSelect={(date) => onCustomDateRangeChange({ ...customDateRange, from: date })}
-                    initialFocus
-                    locale={ptBR}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Data Fim</label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("justify-start text-left font-normal", !customDateRange.to && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {customDateRange.to ? format(customDateRange.to, "dd/MM/yyyy") : "Selecione"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={customDateRange.to}
-                    onSelect={(date) => onCustomDateRangeChange({ ...customDateRange, to: date })}
-                    initialFocus
-                    locale={ptBR}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-          </>
-        )}
 
         <Button onClick={exportarCSV} variant="outline" className="gap-2 ml-auto">
           <Download className="h-4 w-4" />
@@ -150,7 +220,6 @@ export function SellerCommissionsPage({
         </Button>
       </div>
 
-      {/* Cards de Resumo */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-3">
@@ -159,13 +228,9 @@ export function SellerCommissionsPage({
           <CardContent>
             <div className="flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-primary" />
-              <span className="text-2xl font-bold">
-                {totais.total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-              </span>
+              <span className="text-2xl font-bold">{formatCurrencyBRL(totais.totalComissoes)}</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {minhasComissoes.length} vendas no período
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">{vendas.length} vendas no período</p>
           </CardContent>
         </Card>
 
@@ -176,13 +241,9 @@ export function SellerCommissionsPage({
           <CardContent>
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-blue-500" />
-              <span className="text-2xl font-bold text-blue-600">
-                {minhasComissoes.reduce((acc, c) => acc + c.valorTotalVenda, 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-              </span>
+              <span className="text-2xl font-bold text-blue-600">{formatCurrencyBRL(totais.totalVendas)}</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Total de vendas realizadas
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">Total de vendas realizadas</p>
           </CardContent>
         </Card>
 
@@ -193,26 +254,17 @@ export function SellerCommissionsPage({
           <CardContent>
             <div className="flex items-center gap-2">
               <Wallet className="h-4 w-4 text-green-500" />
-              <span className="text-2xl font-bold text-green-600">
-                {minhasComissoes.length > 0 
-                  ? (minhasComissoes.reduce((acc, c) => acc + c.percentualComissao, 0) / minhasComissoes.length).toFixed(2)
-                  : 0}%
-              </span>
+              <span className="text-2xl font-bold text-green-600">{totais.percentualMedio.toFixed(2)}%</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Percentual médio de comissão
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">Percentual médio de comissão</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Tabela de Comissões */}
       <Card>
         <CardHeader>
           <CardTitle>Minhas Comissões</CardTitle>
-          <CardDescription>
-            Acompanhe todas as suas comissões por venda realizada
-          </CardDescription>
+          <CardDescription>Acompanhe todas as suas comissões por venda realizada</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border">
@@ -228,25 +280,27 @@ export function SellerCommissionsPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {comissoesFiltradas.length === 0 ? (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      Carregando comissões...
+                    </TableCell>
+                  </TableRow>
+                ) : vendas.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                       Nenhuma comissão encontrada para o período selecionado
                     </TableCell>
                   </TableRow>
                 ) : (
-                  comissoesFiltradas.map((comissao) => (
+                  vendas.map((comissao) => (
                     <TableRow key={comissao.id}>
                       <TableCell>{format(new Date(comissao.dataVenda), "dd/MM/yyyy")}</TableCell>
                       <TableCell className="font-medium">{comissao.ocCliente}</TableCell>
                       <TableCell>{comissao.clienteNome}</TableCell>
-                      <TableCell className="text-right">
-                        {comissao.valorTotalVenda.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                      </TableCell>
+                      <TableCell className="text-right">{formatCurrencyBRL(comissao.valorTotalVenda)}</TableCell>
                       <TableCell className="text-right">{comissao.percentualComissao.toFixed(2)}%</TableCell>
-                      <TableCell className="text-right font-medium">
-                        {comissao.valorComissao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                      </TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrencyBRL(comissao.valorComissao)}</TableCell>
                     </TableRow>
                   ))
                 )}

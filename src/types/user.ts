@@ -6,7 +6,7 @@ export interface Permissao {
   id: string;
   nome: string;
   descricao: string;
-  categoria: 'clientes' | 'vendas' | 'relatorios' | 'configuracoes' | 'usuarios' | 'contacorrente';
+  categoria: 'clientes' | 'vendas' | 'relatorios' | 'configuracoes' | 'usuarios' | 'contacorrente' | 'produtos' | 'comissoes';
 }
 
 export interface Usuario {
@@ -61,4 +61,15 @@ export const PERMISSOES_DISPONIVEIS: Permissao[] = [
   { id: 'contacorrente.criar', nome: 'Criar Lançamentos', descricao: 'Permite criar novos lançamentos de conta corrente', categoria: 'contacorrente' },
   { id: 'contacorrente.editar', nome: 'Editar Lançamentos', descricao: 'Permite editar lançamentos de conta corrente', categoria: 'contacorrente' },
   { id: 'contacorrente.excluir', nome: 'Excluir Lançamentos', descricao: 'Permite excluir lançamentos de conta corrente', categoria: 'contacorrente' },
+
+  // Produtos
+  { id: 'produtos.visualizar', nome: 'Visualizar Produtos', descricao: 'Permite visualizar produtos', categoria: 'produtos' },
+  { id: 'produtos.criar', nome: 'Criar Produtos', descricao: 'Permite cadastrar produtos', categoria: 'produtos' },
+  { id: 'produtos.editar', nome: 'Editar Produtos', descricao: 'Permite editar produtos', categoria: 'produtos' },
+  { id: 'produtos.excluir', nome: 'Excluir Produtos', descricao: 'Permite excluir produtos', categoria: 'produtos' },
+
+  // Comissões
+  { id: 'comissoes.visualizar', nome: 'Visualizar Comissões', descricao: 'Permite visualizar comissões', categoria: 'comissoes' },
+  { id: 'comissoes.lancamentos.editar', nome: 'Editar Lançamentos de Comissão', descricao: 'Permite editar lançamentos de comissão', categoria: 'comissoes' },
+  { id: 'comissoes.lancamentos.excluir', nome: 'Excluir Lançamentos de Comissão', descricao: 'Permite excluir lançamentos de comissão', categoria: 'comissoes' },
 ];

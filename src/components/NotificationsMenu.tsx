@@ -102,10 +102,7 @@ export function NotificationsMenu({ onNavigate }: NotificationsMenuProps) {
   const marcarComoLida = async (id: string) => {
     try {
       const dataLeitura = new Date().toISOString();
-      await api.update('notificacoes', id, {
-        status: 'lida' as StatusNotificacao,
-        dataLeitura,
-      });
+      await api.notificacoes.marcarComoLida(id);
       
       // Atualizar estado local
       setNotificacoes(prev =>
@@ -144,9 +141,7 @@ export function NotificationsMenu({ onNavigate }: NotificationsMenuProps) {
 
   const arquivarNotificacao = async (id: string) => {
     try {
-      await api.update('notificacoes', id, {
-        status: 'arquivada' as StatusNotificacao,
-      });
+      await api.notificacoes.arquivar(id);
       
       // Atualizar estado local
       setNotificacoes(prev =>

@@ -71,8 +71,8 @@ function formatErrorResponse(error: unknown): Response {
     errorMessage = error.message
     if (error.message.includes('Unauthorized') || error.message.includes('authentication')) statusCode = 401
     else if (error.message.includes('permission') || error.message.includes('forbidden')) statusCode = 403
-    else if (error.message.includes('not found') || error.message.includes('não encontrado')) statusCode = 404
-    else if (error.message.includes('validation') || error.message.includes('invalid') || error.message.includes('obrigatório')) statusCode = 400
+    else if (error.message.includes('not found') || error.message.includes('nao encontrado')) statusCode = 404
+    else if (error.message.includes('validation') || error.message.includes('invalid') || error.message.includes('obrigatorio')) statusCode = 400
   }
   console.error('[CLIENTES-V2] Error:', { message: errorMessage, statusCode })
   return new Response(
@@ -84,10 +84,10 @@ function formatErrorResponse(error: unknown): Response {
 function mapClienteListItem(row: Record<string, unknown>): Record<string, unknown> {
   const id = row.cliente_id ?? row.id
   const statusAprovacao = row.status_aprovacao ?? row.statusAprovacao ?? 'pendente'
-  let situacao = (row as any).situacao ?? 'Análise'
+  let situacao = (row as any).situacao ?? 'Analise'
   if (statusAprovacao === 'aprovado') situacao = 'Ativo'
   else if (statusAprovacao === 'rejeitado') situacao = 'Reprovado'
-  else if (statusAprovacao === 'pendente') situacao = 'Análise'
+  else if (statusAprovacao === 'pendente') situacao = 'Analise'
   return {
     id: id != null ? String(id) : '',
     razaoSocial: row.nome ?? row.razaoSocial ?? '',
@@ -116,11 +116,11 @@ function mapClienteCompleto(rpc: {
   const c = rpc.cliente ?? {}
   const statusAprovacao = (c as any).status_aprovacao ?? (c as any).statusAprovacao ?? 'pendente'
   // Priorizar situacao_nome do RPC, depois situacao, depois inferir de statusAprovacao
-  let situacao = (c as any).situacao_nome ?? (c as any).situacao ?? 'Análise'
-  if (!situacao || situacao === 'Análise') {
+  let situacao = (c as any).situacao_nome ?? (c as any).situacao ?? 'Analise'
+  if (!situacao || situacao === 'Analise') {
     if (statusAprovacao === 'aprovado') situacao = 'Ativo'
     else if (statusAprovacao === 'rejeitado') situacao = 'Reprovado'
-    else if (statusAprovacao === 'pendente') situacao = 'Análise'
+    else if (statusAprovacao === 'pendente') situacao = 'Analise'
   }
 
   const contato = rpc.contato ?? {}
@@ -136,7 +136,7 @@ function mapClienteCompleto(rpc: {
     codigo: (c as any).codigo ?? '',
     inscricaoEstadual: (c as any).inscricao_estadual ?? (c as any).inscricaoEstadual ?? '',
     refTipoPessoaId: (c as any).ref_tipo_pessoa_id_FK != null ? Number((c as any).ref_tipo_pessoa_id_FK) : undefined,
-    tipoPessoa: (c as any).tipo_pessoa_nome ?? (c as any).tipoPessoa ?? (String((c as any).cpf_cnpj ?? '').replace(/\D/g, '').length === 11 ? 'Pessoa Física' : 'Pessoa Jurídica'),
+    tipoPessoa: (c as any).tipo_pessoa_nome ?? (c as any).tipoPessoa ?? (String((c as any).cpf_cnpj ?? '').replace(/\D/g, '').length === 11 ? 'Pessoa Fisica' : 'Pessoa Juridica'),
     statusAprovacao,
     situacao,
     segmentoId: (c as any).segmento_id != null ? String((c as any).segmento_id) : undefined,
@@ -151,7 +151,7 @@ function mapClienteCompleto(rpc: {
     condicoesPagamentoAssociadas: Array.isArray((c as any).condicoesdisponiveis)
       ? (c as any).condicoesdisponiveis.map((x: unknown) => String(x))
       : Array.isArray(rpc.condicoes_cliente)
-        ? rpc.condicoes_cliente.map((cond: any) => String(cond.ID_condições ?? cond.id_condicao ?? cond.condicao_id ?? cond.id))
+        ? rpc.condicoes_cliente.map((cond: any) => String(cond.ID_condicoes ?? cond.id_condicao ?? cond.condicao_id ?? cond.id))
         : [],
     empresaFaturamento: (c as any).empresaFaturamento != null ? String((c as any).empresaFaturamento) : undefined,
     vendedoresAtribuidos: vendedores.map((v: any) => ({ id: v.user_id ?? v.id, nome: v.nome ?? '', email: v.email ?? '' })),
@@ -163,7 +163,7 @@ function mapClienteCompleto(rpc: {
       telefoneCelularPrincipal: (contato as any).telefone_adicional ?? '',
       site: (contato as any).website ?? '',
     },
-    // Também mapear campos de contato no nível raiz para compatibilidade
+    // Tambem mapear campos de contato no nivel raiz para compatibilidade
     emailPrincipal: (contato as any).email ?? '',
     emailNFe: (contato as any).email_nf ?? '',
     telefoneFixoPrincipal: (contato as any).telefone ?? '',
@@ -178,7 +178,7 @@ function mapClienteCompleto(rpc: {
       uf: (endereco as any).uf ?? '',
       municipio: (endereco as any).cidade ?? (endereco as any).municipio ?? '',
     },
-    // Também mapear campos de endereço no nível raiz para compatibilidade
+    // Tambem mapear campos de endereco no nivel raiz para compatibilidade
     cep: (endereco as any).cep ?? '',
     logradouro: (endereco as any).rua ?? (endereco as any).logradouro ?? '',
     numero: (endereco as any).numero ?? '',
@@ -223,13 +223,13 @@ serve(async (req) => {
     if (req.method === 'GET') {
       if (clienteId) {
         const idNum = parseInt(clienteId, 10)
-        if (isNaN(idNum) || idNum <= 0) throw new Error('ID inválido')
+        if (isNaN(idNum) || idNum <= 0) throw new Error('ID invalido')
         const { data: rpcData, error: rpcError } = await supabase.rpc('get_cliente_completo_v2', {
           p_cliente_id: idNum,
           p_requesting_user_id: user.id,
         })
         if (rpcError) throw new Error(rpcError.message)
-        if (!rpcData) throw new Error('Cliente não encontrado')
+        if (!rpcData) throw new Error('Cliente nao encontrado')
         const mapped = mapClienteCompleto(rpcData as any)
         const duration = Date.now() - startTime
         return createHttpSuccessResponse(mapped, 200, { userId: user.id, duration: `${duration}ms` })
@@ -276,7 +276,7 @@ serve(async (req) => {
       let grupoId: string | null = null
       if (body.grupoRede || body.grupo_rede || body.grupoId || body.grupo_id) {
         const grupoValue = body.grupoId ?? body.grupo_id ?? body.grupoRede ?? body.grupo_rede
-        // Verificar se é UUID (ID)
+        // Verificar se e UUID (ID)
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(grupoValue))
         if (isUUID) {
           grupoId = String(grupoValue)
@@ -300,7 +300,7 @@ serve(async (req) => {
           // Objeto com ref_tipo_pessoa_id ou id
           refTipoPessoaId = Number(body.tipoPessoa.ref_tipo_pessoa_id ?? body.tipoPessoa.id ?? body.tipoPessoa.tipoPessoaId ?? null)
         } else if (typeof body.tipoPessoa === 'string' && body.tipoPessoa.trim() !== '') {
-          // Se for string não vazia, converter para número
+          // Se for string nao vazia, converter para numero
           refTipoPessoaId = Number(body.tipoPessoa)
         } else if (typeof body.tipoPessoa === 'number') {
           refTipoPessoaId = body.tipoPessoa
@@ -309,10 +309,12 @@ serve(async (req) => {
         refTipoPessoaId = Number(body.tipoPessoaId ?? body.ref_tipo_pessoa_id_FK ?? body.ref_tipo_pessoa_id)
       }
 
+      const cpfCnpj = body.cpfCnpj ?? body.cpf_cnpj ?? null
+
       const p = {
         p_nome: String(nome).trim(),
         p_nome_fantasia: body.nomeFantasia ?? body.nome_fantasia ?? null,
-        p_cpf_cnpj: body.cpfCnpj ?? body.cpf_cnpj ?? null,
+        p_cpf_cnpj: cpfCnpj,
         p_ref_tipo_pessoa_id_fk: refTipoPessoaId,
         p_inscricao_estadual: body.inscricaoEstadual ?? body.inscricao_estadual ?? null,
         p_codigo: body.codigo ?? null,
@@ -344,9 +346,9 @@ serve(async (req) => {
     if (req.method === 'PUT') {
       const body = await req.json().catch(() => ({}))
       const id = clienteId ?? body.id
-      if (!id) throw new Error('ID é obrigatório para atualização')
+      if (!id) throw new Error('ID e obrigatorio para atualizacao')
       const idNum = parseInt(String(id), 10)
-      if (isNaN(idNum) || idNum <= 0) throw new Error('ID inválido')
+      if (isNaN(idNum) || idNum <= 0) throw new Error('ID invalido')
       const nome = body.nome ?? body.razaoSocial ?? ''
       if (!nome || String(nome).trim().length < 2) throw new Error('Nome deve ter pelo menos 2 caracteres')
 
@@ -354,7 +356,7 @@ serve(async (req) => {
       let grupoId: string | null = null
       if (body.grupoRede || body.grupo_rede || body.grupoId || body.grupo_id) {
         const grupoValue = body.grupoId ?? body.grupo_id ?? body.grupoRede ?? body.grupo_rede
-        // Verificar se é UUID (ID)
+        // Verificar se e UUID (ID)
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(grupoValue))
         if (isUUID) {
           grupoId = String(grupoValue)
@@ -371,7 +373,7 @@ serve(async (req) => {
         }
       }
 
-      // Converter situacao para ref_situacao_id se necessário
+      // Converter situacao para ref_situacao_id se necessario
       let refSituacaoId: number | null = null
       if (body.situacao) {
         const { data: situacaoData, error: situacaoError } = await supabase
@@ -395,7 +397,7 @@ serve(async (req) => {
           vendedoresAtribuidosArray = body.vendedoresAtribuidos.map((v: any) => String(v))
         }
       } else if (body.vendedorAtribuido?.id) {
-        // Fallback: se vier vendedorAtribuido como objeto único ou se vendedoresAtribuidos estiver vazio
+        // Fallback: se vier vendedorAtribuido como objeto unico ou se vendedoresAtribuidos estiver vazio
         vendedoresAtribuidosArray = [String(body.vendedorAtribuido.id)]
       }
 
@@ -410,7 +412,7 @@ serve(async (req) => {
                 Number(c.id || c.condicao_id || c.condicaoId || c)
               )
             } else {
-              // Se for array de IDs (números ou strings)
+              // Se for array de IDs (numeros ou strings)
               condicoesPagamentoIds = body.condicoesPagamentoAssociadas.map((c: any) => Number(c))
             }
           }
@@ -423,7 +425,7 @@ serve(async (req) => {
         if (typeof body.empresaFaturamento === 'object' && body.empresaFaturamento.id) {
           empresaFaturamentoId = Number(body.empresaFaturamento.id)
         } else if (typeof body.empresaFaturamento === 'string' && body.empresaFaturamento.trim() !== '') {
-          // Se for string não vazia, converter para número
+          // Se for string nao vazia, converter para numero
           empresaFaturamentoId = Number(body.empresaFaturamento)
         } else if (typeof body.empresaFaturamento === 'number') {
           empresaFaturamentoId = body.empresaFaturamento
@@ -439,7 +441,7 @@ serve(async (req) => {
           // Objeto com ref_tipo_pessoa_id ou id
           refTipoPessoaId = Number(body.tipoPessoa.ref_tipo_pessoa_id ?? body.tipoPessoa.id ?? body.tipoPessoa.tipoPessoaId ?? null)
         } else if (typeof body.tipoPessoa === 'string' && body.tipoPessoa.trim() !== '') {
-          // Se for string não vazia, converter para número
+          // Se for string nao vazia, converter para numero
           refTipoPessoaId = Number(body.tipoPessoa)
         } else if (typeof body.tipoPessoa === 'number') {
           refTipoPessoaId = body.tipoPessoa
@@ -461,11 +463,13 @@ serve(async (req) => {
         condicoesPagamentoIds,
       })
 
+      const cpfCnpj = body.cpfCnpj ?? body.cpf_cnpj ?? null
+
       const { data: rpcData, error: rpcError } = await supabase.rpc('update_cliente_v2', {
         p_cliente_id: idNum,
         p_nome: String(nome).trim(),
         p_nome_fantasia: body.nomeFantasia ?? body.nome_fantasia ?? null,
-        p_cpf_cnpj: body.cpfCnpj ?? body.cpf_cnpj ?? null,
+        p_cpf_cnpj: cpfCnpj,
         p_ref_tipo_pessoa_id_fk: refTipoPessoaId,
         p_inscricao_estadual: body.inscricaoEstadual ?? body.inscricao_estadual ?? null,
         p_codigo: body.codigo ?? null,
@@ -490,16 +494,16 @@ serve(async (req) => {
 
     if (req.method === 'DELETE') {
       const id = clienteId ?? url.searchParams.get('id')
-      if (!id) throw new Error('ID é obrigatório para exclusão')
+      if (!id) throw new Error('ID e obrigatorio para exclusao')
       const idNum = parseInt(String(id), 10)
-      if (isNaN(idNum) || idNum <= 0) throw new Error('ID inválido')
+      if (isNaN(idNum) || idNum <= 0) throw new Error('ID invalido')
       const { error: rpcError } = await supabase.rpc('delete_cliente_v2', {
         p_cliente_id: idNum,
         p_deleted_by: user.id,
       })
       if (rpcError) throw new Error(rpcError.message)
       const duration = Date.now() - startTime
-      return createHttpSuccessResponse({ success: true, message: 'Cliente excluído com sucesso' }, 200, { userId: user.id, duration: `${duration}ms` })
+      return createHttpSuccessResponse({ success: true, message: 'Cliente excluido com sucesso' }, 200, { userId: user.id, duration: `${duration}ms` })
     }
 
     return new Response(

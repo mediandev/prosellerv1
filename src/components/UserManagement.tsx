@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { api } from "../services/api";
 import { Button } from "./ui/button";
@@ -71,33 +71,33 @@ export function UserManagement() {
   const [sortField, setSortField] = useState<keyof Usuario | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
-  // Carregar usuários
+  // Carregar usuÃ¡rios
   useEffect(() => {
     carregarUsuarios();
   }, []);
 
   const carregarUsuarios = async () => {
     try {
-      console.log('[USERS] Carregando usuários via Edge Functions...');
+      console.log('[USERS] Carregando usuÃ¡rios via Edge Functions...');
       const usuariosAPI = await api.usuarios.list();
-      // Garantir que todos os usuários tenham campos obrigatórios inicializados
+      // Garantir que todos os usuÃ¡rios tenham campos obrigatÃ³rios inicializados
       const usuariosNormalizados = usuariosAPI.map((u: Usuario) => ({
         ...u,
         permissoes: u.permissoes || [],
         dataCadastro: u.dataCadastro || new Date().toISOString()
       }));
       setUsuarios(usuariosNormalizados);
-      console.log('[USERS] Usuários carregados:', usuariosNormalizados.length);
+      console.log('[USERS] UsuÃ¡rios carregados:', usuariosNormalizados.length);
     } catch (error) {
-      console.error('[USERS] Erro ao carregar usuários:', error);
-      toast.error('Erro ao carregar usuários. Verifique sua conexão.');
+      console.error('[USERS] Erro ao carregar usuÃ¡rios:', error);
+      toast.error('Erro ao carregar usuÃ¡rios. Verifique sua conexÃ£o.');
       setUsuarios([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Função para ordenar
+  // FunÃ§Ã£o para ordenar
   const handleSort = (field: keyof Usuario) => {
     if (sortField === field) {
       if (sortDirection === "asc") {
@@ -112,12 +112,14 @@ export function UserManagement() {
     }
   };
 
-  const usuariosFiltrados = usuarios.filter((usuario) =>
-    usuario.nome.toLowerCase().includes(busca.toLowerCase()) ||
-    usuario.email.toLowerCase().includes(busca.toLowerCase())
-  );
+  const buscaNormalizada = busca.toLowerCase();
+  const usuariosFiltrados = usuarios.filter((usuario) => {
+    const nome = (usuario.nome || "").toLowerCase();
+    const email = (usuario.email || "").toLowerCase();
+    return nome.includes(buscaNormalizada) || email.includes(buscaNormalizada);
+  });
 
-  // Aplicar ordenação
+  // Aplicar ordenaÃ§Ã£o
   const usuariosOrdenados = [...usuariosFiltrados].sort((a, b) => {
     if (!sortField) return 0;
 
@@ -181,19 +183,19 @@ export function UserManagement() {
 
   const handleSalvarUsuario = () => {
     if (!formulario.nome.trim()) {
-      toast.error("O nome do usuário é obrigatório");
+      toast.error("O nome do usuÃ¡rio Ã© obrigatÃ³rio");
       return;
     }
 
     if (!formulario.email.trim()) {
-      toast.error("O email é obrigatório");
+      toast.error("O email Ã© obrigatÃ³rio");
       return;
     }
 
     // Validar email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formulario.email)) {
-      toast.error("Email inválido");
+      toast.error("Email invÃ¡lido");
       return;
     }
 
@@ -205,53 +207,55 @@ export function UserManagement() {
           email: formulario.email,
           tipo: usuarioAtualizado.tipo, // Manter tipo existente
           ativo: formulario.ativo,
+          permissoes: formulario.permissoes,
         })
           .then((usuarioAtualizado) => {
-            // Manter permissões (não são atualizadas via Edge Function ainda)
+            // Manter permissÃµes (nÃ£o sÃ£o atualizadas via Edge Function ainda)
             const usuarioComPermissoes = {
               ...usuarioAtualizado,
               permissoes: formulario.permissoes,
             };
             setUsuarios(usuarios.map((u) => u.id === usuarioEditando ? usuarioComPermissoes : u));
-            toast.success("Usuário atualizado com sucesso!");
+            toast.success("UsuÃ¡rio atualizado com sucesso!");
             setDialogAberto(false);
             setFormulario(formularioInicial);
-            carregarUsuarios(); // Recarregar para garantir sincronização
+            carregarUsuarios(); // Recarregar para garantir sincronizaÃ§Ã£o
           })
           .catch((error: any) => {
-            console.error('[USERS] Erro ao atualizar usuário:', error);
-            toast.error(`Erro ao atualizar usuário: ${error.message || 'Erro desconhecido'}`);
+            console.error('[USERS] Erro ao atualizar usuÃ¡rio:', error);
+            toast.error(`Erro ao atualizar usuÃ¡rio: ${error.message || 'Erro desconhecido'}`);
           });
       }
     } else {
-      // Criar novo usuário (requer senha - será implementado em componente separado)
-      toast.error('Para criar usuários, use a função de signup com senha. Esta funcionalidade será implementada.');
-      // TODO: Implementar criação de usuário com senha ou componente separado
+      // Criar novo usuÃ¡rio (requer senha - serÃ¡ implementado em componente separado)
+      toast.error('Para criar usuÃ¡rios, use a funÃ§Ã£o de signup com senha. Esta funcionalidade serÃ¡ implementada.');
+      // TODO: Implementar criaÃ§Ã£o de usuÃ¡rio com senha ou componente separado
     }
   };
 
   const handleSalvarPermissoes = () => {
-    if (usuarioPermissoes) {
-      // Nota: Permissões ainda não são gerenciadas via Edge Functions
-      // Por enquanto, atualizar apenas localmente
-      const dadosAtualizados = {
-        ...usuarioPermissoes,
-        permissoes: formulario.permissoes,
-      };
-      
-      setUsuarios(
-        usuarios.map((u) =>
-          u.id === usuarioPermissoes.id
-            ? dadosAtualizados
-            : u
-        )
-      );
-      toast.success("Permissões atualizadas com sucesso!");
-      setDialogPermissoesAberto(false);
-      setUsuarioPermissoes(null);
-    }
-  };
+    if (!usuarioPermissoes) return;
 
+    api.usuarios.update(usuarioPermissoes.id, {
+      permissoes: formulario.permissoes,
+    })
+      .then((usuarioAtualizado) => {
+        setUsuarios(
+          usuarios.map((u) =>
+            u.id === usuarioPermissoes.id
+              ? { ...u, permissoes: usuarioAtualizado.permissoes || formulario.permissoes }
+              : u
+          )
+        );
+        toast.success("Permissões atualizadas com sucesso!");
+        setDialogPermissoesAberto(false);
+        setUsuarioPermissoes(null);
+      })
+      .catch((error: any) => {
+        console.error('[USERS] Erro ao salvar permissões:', error);
+        toast.error('Erro ao salvar permissões.');
+      });
+  };
   const handleExcluirUsuario = (id: string) => {
     const usuario = usuarios.find((u) => u.id === id);
     if (usuario) {
@@ -268,12 +272,12 @@ export function UserManagement() {
       try {
         await api.usuarios.delete(deleteConfirm.id);
         setUsuarios(usuarios.filter((u) => u.id !== deleteConfirm.id));
-        toast.success(`Usuário "${deleteConfirm.name}" removido com sucesso`);
+        toast.success(`UsuÃ¡rio "${deleteConfirm.name}" removido com sucesso`);
         setDeleteConfirm({ open: false, id: null, name: null });
-        carregarUsuarios(); // Recarregar para garantir sincronização
+        carregarUsuarios(); // Recarregar para garantir sincronizaÃ§Ã£o
       } catch (error: any) {
-        console.error('[USERS] Erro ao excluir usuário:', error);
-        toast.error(`Erro ao excluir usuário: ${error.message || 'Erro desconhecido'}`);
+        console.error('[USERS] Erro ao excluir usuÃ¡rio:', error);
+        toast.error(`Erro ao excluir usuÃ¡rio: ${error.message || 'Erro desconhecido'}`);
       }
     }
   };
@@ -290,8 +294,8 @@ export function UserManagement() {
               u.id === id ? { ...usuarioAtualizado, permissoes: u.permissoes } : u
             )
           );
-          toast.success(`Usuário ${usuario.ativo ? "desativado" : "ativado"} com sucesso`);
-          carregarUsuarios(); // Recarregar para garantir sincronização
+          toast.success(`UsuÃ¡rio ${usuario.ativo ? "desativado" : "ativado"} com sucesso`);
+          carregarUsuarios(); // Recarregar para garantir sincronizaÃ§Ã£o
         })
         .catch((error: any) => {
           console.error('[USERS] Erro ao alterar status:', error);
@@ -341,9 +345,9 @@ export function UserManagement() {
     const nomes: Record<string, string> = {
       clientes: "Clientes",
       vendas: "Vendas",
-      relatorios: "Relatórios",
-      configuracoes: "Configurações",
-      usuarios: "Usuários",
+      relatorios: "RelatÃ³rios",
+      configuracoes: "ConfiguraÃ§Ãµes",
+      usuarios: "UsuÃ¡rios",
       contacorrente: "Conta Corrente",
     };
     return nomes[categoria] || categoria;
@@ -366,15 +370,15 @@ export function UserManagement() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Gerenciamento de Usuários
+                Gerenciamento de UsuÃ¡rios
               </CardTitle>
               <CardDescription className="mt-2">
-                Gerencie usuários backoffice e suas permissões de acesso ao sistema
+                Gerencie usuÃ¡rios backoffice e suas permissÃµes de acesso ao sistema
               </CardDescription>
             </div>
             <Button onClick={handleAbrirDialogo}>
               <Plus className="h-4 w-4 mr-2" />
-              Novo Usuário
+              Novo UsuÃ¡rio
             </Button>
           </div>
         </CardHeader>
@@ -393,7 +397,7 @@ export function UserManagement() {
             </div>
           </div>
 
-          {/* Tabela de Usuários */}
+          {/* Tabela de UsuÃ¡rios */}
           <div className="rounded-md border">
             <Table>
               <TableHeader>
@@ -432,7 +436,7 @@ export function UserManagement() {
                       )}
                     </button>
                   </TableHead>
-                  <TableHead>Permissões</TableHead>
+                  <TableHead>PermissÃµes</TableHead>
                   <TableHead>
                     <button
                       onClick={() => handleSort('ativo')}
@@ -472,7 +476,7 @@ export function UserManagement() {
                       onClick={() => handleSort('ultimoAcesso')}
                       className="flex items-center gap-1 hover:text-foreground"
                     >
-                      Último Acesso
+                      Ãšltimo Acesso
                       {sortField === 'ultimoAcesso' ? (
                         sortDirection === 'asc' ? (
                           <ArrowUp className="h-4 w-4" />
@@ -484,14 +488,14 @@ export function UserManagement() {
                       )}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+                  <TableHead className="text-right">AÃ§Ãµes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {usuariosOrdenados.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                      {busca ? "Nenhum usuário encontrado" : "Nenhum usuário cadastrado"}
+                      {busca ? "Nenhum usuÃ¡rio encontrado" : "Nenhum usuÃ¡rio cadastrado"}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -521,7 +525,7 @@ export function UserManagement() {
                       <TableCell>
                         <Badge variant="secondary" className="gap-1">
                           <Key className="h-3 w-3" />
-                          {getPermissoesCount(usuario)} permissões
+                          {getPermissoesCount(usuario)} permissÃµes
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -544,10 +548,10 @@ export function UserManagement() {
                             if (!usuario.dataCadastro) return "N/A";
                             try {
                               const date = new Date(usuario.dataCadastro);
-                              if (isNaN(date.getTime())) return "Data inválida";
+                              if (isNaN(date.getTime())) return "Data invÃ¡lida";
                               return format(date, "dd/MM/yyyy", { locale: ptBR });
                             } catch {
-                              return "Data inválida";
+                              return "Data invÃ¡lida";
                             }
                           })()}
                         </div>
@@ -559,10 +563,10 @@ export function UserManagement() {
                             {(() => {
                               try {
                                 const date = new Date(usuario.ultimoAcesso);
-                                if (isNaN(date.getTime())) return "Data inválida";
+                                if (isNaN(date.getTime())) return "Data invÃ¡lida";
                                 return format(date, "dd/MM/yyyy HH:mm", { locale: ptBR });
                               } catch {
-                                return "Data inválida";
+                                return "Data invÃ¡lida";
                               }
                             })()}
                           </div>
@@ -576,7 +580,7 @@ export function UserManagement() {
                             variant="ghost"
                             size="icon"
                             onClick={() => handleGerenciarPermissoes(usuario)}
-                            title="Gerenciar permissões"
+                            title="Gerenciar permissÃµes"
                           >
                             <Shield className="h-4 w-4" />
                           </Button>
@@ -584,7 +588,7 @@ export function UserManagement() {
                             variant="ghost"
                             size="icon"
                             onClick={() => handleEditarUsuario(usuario)}
-                            title="Editar usuário"
+                            title="Editar usuÃ¡rio"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -604,7 +608,7 @@ export function UserManagement() {
                             variant="ghost"
                             size="icon"
                             onClick={() => handleExcluirUsuario(usuario.id)}
-                            title="Excluir usuário"
+                            title="Excluir usuÃ¡rio"
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -619,17 +623,17 @@ export function UserManagement() {
         </CardContent>
       </Card>
 
-      {/* Dialog Criar/Editar Usuário */}
+      {/* Dialog Criar/Editar UsuÃ¡rio */}
       <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {modoEdicao ? "Editar Usuário" : "Novo Usuário"}
+              {modoEdicao ? "Editar UsuÃ¡rio" : "Novo UsuÃ¡rio"}
             </DialogTitle>
             <DialogDescription>
               {modoEdicao
-                ? "Atualize as informações do usuário"
-                : "Cadastre um novo usuário backoffice no sistema"}
+                ? "Atualize as informaÃ§Ãµes do usuÃ¡rio"
+                : "Cadastre um novo usuÃ¡rio backoffice no sistema"}
             </DialogDescription>
           </DialogHeader>
 
@@ -645,7 +649,7 @@ export function UserManagement() {
                   onChange={(e) =>
                     setFormulario({ ...formulario, nome: e.target.value })
                   }
-                  placeholder="Ex: João Silva"
+                  placeholder="Ex: JoÃ£o Silva"
                 />
               </div>
 
@@ -667,9 +671,9 @@ export function UserManagement() {
 
             <div className="flex items-center justify-between p-4 border rounded-lg">
               <div className="space-y-0.5">
-                <Label>Status do Usuário</Label>
+                <Label>Status do UsuÃ¡rio</Label>
                 <p className="text-sm text-muted-foreground">
-                  Usuários inativos não podem acessar o sistema
+                  UsuÃ¡rios inativos nÃ£o podem acessar o sistema
                 </p>
               </div>
               <Switch
@@ -683,9 +687,9 @@ export function UserManagement() {
             <Separator />
 
             <div>
-              <Label className="text-base">Permissões de Acesso</Label>
+              <Label className="text-base">PermissÃµes de Acesso</Label>
               <p className="text-sm text-muted-foreground mb-4">
-                Selecione as permissões que este usuário terá no sistema
+                Selecione as permissÃµes que este usuÃ¡rio terÃ¡ no sistema
               </p>
 
               <ScrollArea className="h-[300px] rounded-md border p-4">
@@ -751,22 +755,22 @@ export function UserManagement() {
               Cancelar
             </Button>
             <Button onClick={handleSalvarUsuario}>
-              {modoEdicao ? "Salvar Alterações" : "Criar Usuário"}
+              {modoEdicao ? "Salvar AlteraÃ§Ãµes" : "Criar UsuÃ¡rio"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog Gerenciar Permissões */}
+      {/* Dialog Gerenciar PermissÃµes */}
       <Dialog open={dialogPermissoesAberto} onOpenChange={setDialogPermissoesAberto}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5" />
-              Gerenciar Permissões
+              Gerenciar PermissÃµes
             </DialogTitle>
             <DialogDescription>
-              Configure as permissões de acesso para{" "}
+              Configure as permissÃµes de acesso para{" "}
               <strong>{usuarioPermissoes?.nome}</strong>
             </DialogDescription>
           </DialogHeader>
@@ -843,21 +847,22 @@ export function UserManagement() {
             >
               Cancelar
             </Button>
-            <Button onClick={handleSalvarPermissoes}>Salvar Permissões</Button>
+            <Button onClick={handleSalvarPermissoes}>Salvar PermissÃµes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Confirmação de Exclusão */}
+      {/* Dialog de ConfirmaÃ§Ã£o de ExclusÃ£o */}
       <DeleteConfirmDialog
         open={deleteConfirm.open}
         onOpenChange={(open) =>
           setDeleteConfirm({ ...deleteConfirm, open })
         }
         onConfirm={confirmDelete}
-        title="Excluir Usuário"
-        description={`Tem certeza que deseja excluir o usuário "${deleteConfirm.name}"? Esta ação não pode ser desfeita.`}
+        title="Excluir UsuÃ¡rio"
+        description={`Tem certeza que deseja excluir o usuÃ¡rio "${deleteConfirm.name}"? Esta aÃ§Ã£o nÃ£o pode ser desfeita.`}
       />
     </>
   );
 }
+

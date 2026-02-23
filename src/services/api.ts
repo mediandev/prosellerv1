@@ -24,6 +24,13 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://xxoiqfraeolsq
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4b2lxZnJhZW9sc3FzbXNoZXVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjY1ODQ5MDIsImV4cCI6MjA0MjE2MDkwMn0.m8A1mUf3GyAl_17FjltxkgBr-xRQYZw9YEDUVUBdttA';
 
 // Helper para obter permissões padrão baseadas no tipo
+function resolveUserPermissoes(user: any): string[] {
+  const explicit = user?.permissoes;
+  if (Array.isArray(explicit) && explicit.length > 0) {
+    return explicit.filter((p: any) => typeof p === 'string');
+  }
+  return getDefaultPermissoes(user?.tipo as TipoUsuario);
+}
 function getDefaultPermissoes(tipo: TipoUsuario): string[] {
   if (tipo === 'backoffice') {
     return [
@@ -490,6 +497,11 @@ function mapClienteFromApi(item: any): any {
   return {
     id: String(item.id ?? item.cliente_id ?? ''),
     codigo: item.codigo ?? '',
+    codigoOrigem: item.codigoOrigem ?? item.codigo_origem ?? undefined,
+    codigoTinySistema: item.codigoTinySistema ?? item.codigo_tiny_sistema ?? undefined,
+    codigoTinyIdExterno: item.codigoTinyIdExterno ?? item.codigo_tiny_id_externo ?? undefined,
+    codigoTinyIntegrationRef: item.codigoTinyIntegrationRef ?? item.codigo_tiny_integration_ref ?? undefined,
+    codigoGeradoEm: item.codigoGeradoEm ?? item.codigo_gerado_em ?? undefined,
     tipoPessoa: item.tipoPessoa ?? (item.cpfCnpj?.length === 11 || item.cpf_cnpj?.length === 11 ? 'Pessoa Física' : 'Pessoa Jurídica'),
     refTipoPessoaId: item.refTipoPessoaId ?? item.ref_tipo_pessoa_id ?? item.ref_tipo_pessoa_id_FK != null ? Number(item.ref_tipo_pessoa_id_FK) : undefined,
     cpfCnpj: item.cpfCnpj ?? item.cpf_cnpj ?? '',
@@ -750,6 +762,7 @@ export const api = {
             ativo: user.ativo,
             dataCadastro: user.data_cadastro,
             ultimoAcesso: user.ultimo_acesso,
+            permissoes: resolveUserPermissoes(user),
           },
           session: { access_token: token },
         };
@@ -794,6 +807,7 @@ export const api = {
           ativo: user.ativo,
           dataCadastro: user.data_cadastro,
           ultimoAcesso: user.ultimo_acesso,
+          permissoes: resolveUserPermissoes(user),
         };
       } catch (error: any) {
         console.error('[API] Me error:', error);
@@ -854,7 +868,7 @@ export const api = {
           ativo: u.ativo,
           dataCadastro: u.data_cadastro,
           ultimoAcesso: u.ultimo_acesso,
-          permissoes: getDefaultPermissoes(u.tipo), // Permissões baseadas no tipo
+          permissoes: resolveUserPermissoes(u),
         }));
 
         return users;
@@ -876,7 +890,7 @@ export const api = {
           ativo: userResponse.user.ativo,
           dataCadastro: userResponse.user.data_cadastro,
           ultimoAcesso: userResponse.user.ultimo_acesso,
-          permissoes: getDefaultPermissoes(userResponse.user.tipo),
+          permissoes: resolveUserPermissoes(userResponse.user),
         };
       } catch (error: any) {
         console.error('[API] Erro ao buscar usuário:', error);
@@ -884,7 +898,7 @@ export const api = {
       }
     },
 
-    create: async (userData: { nome: string; email: string; tipo: 'backoffice' | 'vendedor'; senha?: string }) => {
+    create: async (userData: { nome: string; email: string; tipo: 'backoffice' | 'vendedor'; senha?: string; permissoes?: string[] }) => {
       try {
         // Se senha fornecida, criar via signup (que cria no Auth e na tabela)
         if (userData.senha) {
@@ -896,6 +910,7 @@ export const api = {
             email: userData.email,
             nome: userData.nome,
             tipo: userData.tipo,
+            permissoes: userData.permissoes,
           });
 
           return {
@@ -905,7 +920,7 @@ export const api = {
             tipo: userResponse.user.tipo,
             ativo: userResponse.user.ativo,
             dataCadastro: userResponse.user.data_cadastro,
-            permissoes: getDefaultPermissoes(userResponse.user.tipo),
+            permissoes: resolveUserPermissoes(userResponse.user),
           };
         }
       } catch (error: any) {
@@ -914,13 +929,14 @@ export const api = {
       }
     },
 
-    update: async (userId: string, userData: { nome?: string; email?: string; tipo?: 'backoffice' | 'vendedor'; ativo?: boolean }) => {
+    update: async (userId: string, userData: { nome?: string; email?: string; tipo?: 'backoffice' | 'vendedor'; ativo?: boolean; permissoes?: string[] }) => {
       try {
         const userResponse = await callEdgeFunction('update-user-v2', 'PUT', {
           nome: userData.nome,
           email: userData.email,
           tipo: userData.tipo,
           ativo: userData.ativo,
+          permissoes: userData.permissoes,
         }, userId);
 
         // callEdgeFunction já retorna data.data
@@ -934,7 +950,7 @@ export const api = {
           ativo: user.ativo,
           dataCadastro: user.data_cadastro,
           ultimoAcesso: user.ultimo_acesso,
-          permissoes: getDefaultPermissoes(user.tipo),
+          permissoes: resolveUserPermissoes(user),
         };
       } catch (error: any) {
         console.error('[API] Erro ao atualizar usuário:', error);
@@ -1076,6 +1092,28 @@ export const api = {
         return response.data || response;
       } catch (error) {
         console.error('[API] Erro ao excluir pagamento:', error);
+        throw error;
+      }
+    },
+
+    updateVenda: async (data: { id: string, periodo: string, observacoes?: string }) => {
+      try {
+        console.log('[API] Atualizando comissão de venda:', data);
+        const response = await callEdgeFunction('comissoes-v2/vendas', 'PUT', data);
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao atualizar comissão de venda:', error);
+        throw error;
+      }
+    },
+
+    deleteVenda: async (id: string) => {
+      try {
+        console.log('[API] Excluindo comissão de venda:', id);
+        const response = await callEdgeFunction('comissoes-v2/vendas', 'DELETE', undefined, undefined, { id });
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao excluir comissão de venda:', error);
         throw error;
       }
     },
@@ -1760,6 +1798,11 @@ export const api = {
           nomeCliente: p.nomeCliente,
           cnpjCliente: p.cnpjCliente,
           inscricaoEstadualCliente: p.inscricaoEstadualCliente,
+          segmentoId: p.segmentoId,
+          segmentoMercado: p.segmentoNome,
+          statusCliente: p.statusCliente,
+          clienteGrupoRede: p.clienteGrupoRede,
+          clienteUf: p.clienteUf,
           vendedorId: p.vendedorId,
           nomeVendedor: p.nomeVendedor,
           naturezaOperacaoId: p.naturezaOperacaoId,
@@ -3230,15 +3273,64 @@ export const api = {
       return clientes[index];
     },
   },
-
   notificacoes: {
-    marcarTodasLidas: async () => {
-      const notificacoes = getStoredData('mockNotificacoes', notificacoesMock);
-      notificacoes.forEach((n: any) => {
-        n.lida = true;
+    list: async (params?: { status?: string; limit?: number; incluirArquivadas?: boolean }) => {
+      try {
+        const response = await callEdgeFunction('notificacoes-v2', 'GET', undefined, undefined, {
+          status: params?.status,
+          limit: params?.limit,
+          incluirArquivadas: params?.incluirArquivadas,
+        });
+        return Array.isArray(response) ? response : (response?.data || []);
+      } catch (error) {
+        console.error('[API] Erro ao listar notificacoes, usando fallback local:', error);
+        const notificacoes = getStoredData('mockNotificacoes', notificacoesMock);
+        return notificacoes || [];
+      }
+    },
+
+    create: async (payload: {
+      tipo: string;
+      titulo: string;
+      mensagem: string;
+      usuarioId: string;
+      link?: string;
+      dadosAdicionais?: Record<string, any>;
+    }) => {
+      const response = await callEdgeFunction('notificacoes-v2', 'POST', {
+        action: 'create',
+        ...payload,
       });
-      saveStoredData('mockNotificacoes', notificacoes);
-      return { success: true };
+      return response?.data || response;
+    },
+
+    createForBackoffice: async (payload: {
+      tipo: string;
+      titulo: string;
+      mensagem: string;
+      link?: string;
+      dadosAdicionais?: Record<string, any>;
+    }) => {
+      const response = await callEdgeFunction('notificacoes-v2', 'POST', {
+        action: 'create_backoffice',
+        ...payload,
+      });
+      return response?.data || response;
+    },
+
+    marcarComoLida: async (id: string) => {
+      const response = await callEdgeFunction('notificacoes-v2', 'PUT', { action: 'mark_read' }, id);
+      return response?.data || response;
+    },
+
+    marcarTodasLidas: async () => {
+      const response = await callEdgeFunction('notificacoes-v2', 'POST', { action: 'mark_all_read' });
+      return response?.data || response;
+    },
+
+    arquivar: async (id: string) => {
+      const response = await callEdgeFunction('notificacoes-v2', 'PUT', { action: 'archive' }, id);
+      return response?.data || response;
     },
   },
 
@@ -3535,10 +3627,14 @@ export const api = {
           nomeCliente: p.nomeCliente,
           cnpjCliente: p.cnpjCliente,
           inscricaoEstadualCliente: p.inscricaoEstadualCliente,
+          segmentoId: p.segmentoId,
+          segmentoMercado: p.segmentoNome,
+          statusCliente: p.statusCliente,
           clienteCodigo: p.clienteCodigo,
           clienteRazaoSocial: p.nomeCliente,
           clienteNomeFantasia: p.clienteNomeFantasia,
           clienteGrupoRede: p.clienteGrupoRede,
+          clienteUf: p.clienteUf,
           vendedorId: p.vendedorId,
           nomeVendedor: p.nomeVendedor,
           naturezaOperacaoId: p.naturezaOperacaoId,
@@ -4243,4 +4339,6 @@ export const api = {
     return { success: true };
   },
 };
+
+
 

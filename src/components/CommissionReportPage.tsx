@@ -1,4 +1,5 @@
-import { useState } from "react";
+﻿import { useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "./ui/button";
@@ -52,13 +53,14 @@ interface CommissionReportPageProps {
 }
 
 export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, onAtualizarRelatorio, onRecarregar }: CommissionReportPageProps) {
+  const { temPermissao, ehBackoffice } = useAuth();
   const [dialogLancamento, setDialogLancamento] = useState(false);
   const [dialogPagamento, setDialogPagamento] = useState(false);
   const [dialogVenda, setDialogVenda] = useState(false);
   const [dialogEmail, setDialogEmail] = useState(false);
   const [emailDestino, setEmailDestino] = useState("");
 
-  // Estados para visualização/edição
+  // Estados para visualizaÃ§Ã£o/ediÃ§Ã£o
   const [modoLancamento, setModoLancamento] = useState<'novo' | 'visualizar' | 'editar'>('novo');
   const [modoPagamento, setModoPagamento] = useState<'novo' | 'visualizar' | 'editar'>('novo');
   const [modoVenda, setModoVenda] = useState<'visualizar' | 'editar'>('visualizar');
@@ -66,7 +68,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
   const [pagamentoSelecionado, setPagamentoSelecionado] = useState<PagamentoPeriodo | null>(null);
   const [vendaSelecionada, setVendaSelecionada] = useState<ComissaoVenda | null>(null);
 
-  // Dados do relatório completo vêm das props
+  // Dados do relatÃ³rio completo vÃªm das props
   const vendedor = relatorioCompleto?.vendedor;
   const vendas = relatorioCompleto?.vendas || [];
   const lancamentos = relatorioCompleto?.lancamentos || [];
@@ -81,12 +83,12 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
   const totalCreditos = lancamentosCredito.reduce((sum: number, l: any) => sum + l.valor, 0);
   const totalDebitos = lancamentosDebito.reduce((sum: number, l: any) => sum + l.valor, 0);
 
-  // Calcular valor líquido e saldo em tempo real
+  // Calcular valor lÃ­quido e saldo em tempo real
   const valorLiquidoCalculado = totalComissoes + totalCreditos - totalDebitos + (relatorio.saldoAnterior || 0);
   const totalPagoCalculado = pagamentosRelatorio.reduce((sum: number, p: any) => sum + p.valor, 0);
   const saldoDevedorCalculado = valorLiquidoCalculado - totalPagoCalculado;
 
-  // Usar dados do relatorioCompleto se fornecido, senão usar calculados
+  // Usar dados do relatorioCompleto se fornecido, senÃ£o usar calculados
   const dadosRelatorio = relatorioCompleto || {
     relatorio,
     vendedorNome: vendedor?.nome || relatorio.vendedorId,
@@ -103,7 +105,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     totalDebitos
   };
 
-  // Formulário de lançamento manual
+  // FormulÃ¡rio de lanÃ§amento manual
   const [formLancamento, setFormLancamento] = useState({
     tipo: "credito" as "credito" | "debito",
     valor: "",
@@ -112,7 +114,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     periodo: relatorio.periodo
   });
 
-  // Formulário de pagamento
+  // FormulÃ¡rio de pagamento
   const [formPagamento, setFormPagamento] = useState({
     valor: "",
     formaPagamento: "",
@@ -122,11 +124,15 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     periodo: relatorio.periodo
   });
 
-  // Formulário de venda (para visualização/edição)
+  // FormulÃ¡rio de venda (para visualizaÃ§Ã£o/ediÃ§Ã£o)
   const [formVenda, setFormVenda] = useState({
     periodo: relatorio.periodo,
     observacoes: ""
   });
+  const canManageComissoes = ehBackoffice();
+  const canManageVendasComissao = ehBackoffice();
+  const canEditComissoes = ehBackoffice() && temPermissao('comissoes.lancamentos.editar');
+  const canDeleteComissoes = ehBackoffice() && temPermissao('comissoes.lancamentos.excluir');
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline", icon: any, label: string }> = {
       aberto: { variant: "secondary", icon: Clock, label: "Aberto" },
@@ -153,14 +159,14 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
   };
 
   const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return "—";
+    if (!dateString) return "â€”";
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return "—";
+    if (isNaN(date.getTime())) return "â€”";
     return format(date, "dd/MM/yyyy", { locale: ptBR });
   };
 
   const formatPeriodo = (periodo: string | null | undefined) => {
-    if (!periodo) return "—";
+    if (!periodo) return "â€”";
     const parts = periodo.split('-');
     if (parts.length < 2) return periodo;
     const [ano, mes] = parts;
@@ -200,18 +206,18 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
             const pageWidth = doc.internal.pageSize.getWidth();
             let yPos = 20;
 
-            // Título
+            // TÃ­tulo
             doc.setFontSize(18);
             doc.setFont('helvetica', 'bold');
             doc.text('RELATORIO DE COMISSOES', pageWidth / 2, yPos, { align: 'center' });
             yPos += 10;
 
-            // Linha divisória 1
+            // Linha divisÃ³ria 1
             doc.setDrawColor(200, 200, 200);
             doc.line(15, yPos, pageWidth - 15, yPos);
             yPos += 8;
 
-            // Informações do Vendedor
+            // InformaÃ§Ãµes do Vendedor
             doc.setFontSize(12);
             doc.setFont('helvetica', 'bold');
             doc.text('INFORMACOES DO VENDEDOR', 15, yPos);
@@ -228,7 +234,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
             doc.text('Status: ' + relatorio.status.toUpperCase(), 15, yPos);
             yPos += 8;
 
-            // Linha divisória 2
+            // Linha divisÃ³ria 2
             doc.setDrawColor(200, 200, 200);
             doc.line(15, yPos, pageWidth - 15, yPos);
             yPos += 8;
@@ -281,7 +287,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
             doc.setFont('helvetica', 'normal');
             yPos += 8;
 
-            // Linha divisória 3
+            // Linha divisÃ³ria 3
             doc.setDrawColor(200, 200, 200);
             doc.line(15, yPos, pageWidth - 15, yPos);
             yPos += 8;
@@ -322,7 +328,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
               yPos = (doc as any).lastAutoTable.finalY + 10;
             }
 
-            // Lançamentos Manuais (se houver)
+            // LanÃ§amentos Manuais (se houver)
             if (dadosRelatorio.lancamentosCredito.length > 0 || dadosRelatorio.lancamentosDebito.length > 0) {
               if (yPos > 250) {
                 doc.addPage();
@@ -367,7 +373,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
               yPos = (doc as any).lastAutoTable.finalY + 10;
             }
 
-            // Histórico de Pagamentos (se houver)
+            // HistÃ³rico de Pagamentos (se houver)
             if (dadosRelatorio.pagamentos.length > 0) {
               if (yPos > 250) {
                 doc.addPage();
@@ -404,7 +410,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
               yPos = (doc as any).lastAutoTable.finalY + 10;
             }
 
-            // Rodapé
+            // RodapÃ©
             const totalPages = (doc as any).internal.pages.length - 1;
             for (let i = 1; i <= totalPages; i++) {
               doc.setPage(i);
@@ -434,7 +440,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
         }, 500);
       }),
       {
-        loading: 'Gerando PDF do relatório...',
+        loading: 'Gerando PDF do relatÃ³rio...',
         success: (fileName) => 'PDF "' + fileName + '" baixado com sucesso!',
         error: 'Erro ao gerar PDF. Verifique o console para mais detalhes.',
       }
@@ -446,11 +452,11 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     const vendedorEmail = relatorioCompleto?.vendedor;
 
     if (!vendedorEmail || !vendedorEmail.email) {
-      toast.error('Vendedor não possui e-mail cadastrado');
+      toast.error('Vendedor nÃ£o possui e-mail cadastrado');
       return;
     }
 
-    // Abre dialog de confirmação com o e-mail
+    // Abre dialog de confirmaÃ§Ã£o com o e-mail
     setEmailDestino(vendedorEmail.email);
     setDialogEmail(true);
   };
@@ -464,23 +470,23 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
       new Promise((resolve, reject) => {
         setTimeout(() => {
           try {
-            // Simula a geração do PDF para anexar ao e-mail
+            // Simula a geraÃ§Ã£o do PDF para anexar ao e-mail
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
             let yPos = 20;
 
-            // Título
+            // TÃ­tulo
             doc.setFontSize(18);
             doc.setFont('helvetica', 'bold');
             doc.text('RELATORIO DE COMISSOES', pageWidth / 2, yPos, { align: 'center' });
             yPos += 10;
 
-            // Linha divisória 1
+            // Linha divisÃ³ria 1
             doc.setDrawColor(200, 200, 200);
             doc.line(15, yPos, pageWidth - 15, yPos);
             yPos += 8;
 
-            // Informações do Vendedor
+            // InformaÃ§Ãµes do Vendedor
             doc.setFontSize(12);
             doc.setFont('helvetica', 'bold');
             doc.text('INFORMACOES DO VENDEDOR', 15, yPos);
@@ -494,12 +500,12 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
             yPos += 6;
             doc.text('Periodo: ' + formatPeriodo(relatorio.periodo), 15, yPos);
 
-            // Gera o PDF em memória (output como blob)
+            // Gera o PDF em memÃ³ria (output como blob)
             const pdfBlob = doc.output('blob');
             const pdfSizeKB = (pdfBlob.size / 1024).toFixed(2);
 
             // Simula o envio do e-mail
-            // Em produção, aqui você faria uma chamada para sua API de e-mail
+            // Em produÃ§Ã£o, aqui vocÃª faria uma chamada para sua API de e-mail
             const corpoEmail = `Ola ${dadosRelatorio.vendedorNome},
 
 Segue em anexo o seu relatorio de comissoes referente ao periodo ${formatPeriodo(relatorio.periodo)}.
@@ -533,7 +539,7 @@ Equipe de Vendas`;
       {
         loading: 'Preparando e enviando relatorio por e-mail...',
         success: ({ email, pdfSizeKB }) => {
-          return `E-mail enviado com sucesso para ${email}!\n\nPDF anexado: ${pdfSizeKB} KB\n\n⚠️ NOTA: Como este e um prototipo com dados mockados, o e-mail nao e enviado de fato. Em producao, seria integrado com um servico de e-mail (SendGrid, AWS SES, etc).`;
+          return `E-mail enviado com sucesso para ${email}!\n\nPDF anexado: ${pdfSizeKB} KB\n\nâš ï¸ NOTA: Como este e um prototipo com dados mockados, o e-mail nao e enviado de fato. Em producao, seria integrado com um servico de e-mail (SendGrid, AWS SES, etc).`;
         },
         error: 'Erro ao enviar e-mail',
       }
@@ -541,6 +547,10 @@ Equipe de Vendas`;
   };
 
   const handleLancamentoManual = () => {
+    if (!canManageComissoes) {
+      toast.error("VocÃª nÃ£o tem permissÃ£o para criar/editar lanÃ§amentos");
+      return;
+    }
     setModoLancamento('novo');
     setLancamentoSelecionado(null);
     setFormLancamento({
@@ -567,10 +577,18 @@ Equipe de Vendas`;
   };
 
   const handleEditarLancamento = () => {
+    if (!canManageVendasComissao) {
+      toast.error("VocÃª nÃ£o tem permissÃ£o para editar lanÃ§amentos");
+      return;
+    }
     setModoLancamento('editar');
   };
 
   const handleRegistrarPagamento = () => {
+    if (!canManageComissoes) {
+      toast.error("VocÃª nÃ£o tem permissÃ£o para registrar/editar pagamentos");
+      return;
+    }
     setModoPagamento('novo');
     setPagamentoSelecionado(null);
     setFormPagamento({
@@ -599,6 +617,10 @@ Equipe de Vendas`;
   };
 
   const handleEditarPagamento = () => {
+    if (!canManageVendasComissao) {
+      toast.error("VocÃª nÃ£o tem permissÃ£o para editar pagamentos");
+      return;
+    }
     setModoPagamento('editar');
   };
 
@@ -613,42 +635,71 @@ Equipe de Vendas`;
   };
 
   const handleEditarVenda = () => {
+    if (!canManageVendasComissao) {
+      toast.error("VocÃª nÃ£o tem permissÃ£o para editar comissÃµes");
+      return;
+    }
     setModoVenda('editar');
+  };
+
+  const handleExcluirVenda = async () => {
+    if (!canManageVendasComissao) {
+      toast.error("Voce nao tem permissao para excluir comissoes");
+      return;
+    }
+    if (!vendaSelecionada) return;
+    if (!confirm("Tem certeza que deseja excluir esta comissao?")) return;
+
+    try {
+      await api.comissoes.deleteVenda(vendaSelecionada.id);
+      toast.success("Comissao de venda excluida com sucesso!");
+      setDialogVenda(false);
+      onRecarregar?.();
+    } catch (error) {
+      console.error("Erro ao excluir comissao de venda:", error);
+      toast.error("Erro ao excluir comissao de venda");
+    }
   };
 
 
 
   const handleExcluirLancamento = async () => {
+    if (!canDeleteComissoes) {
+      toast.error("VocÃª nÃ£o tem permissÃ£o para excluir lanÃ§amentos");
+      return;
+    }
     if (!lancamentoSelecionado) return;
 
-    if (!confirm("Tem certeza que deseja excluir este lançamento?")) return;
+    if (!confirm("Tem certeza que deseja excluir este lanÃ§amento?")) return;
 
     try {
       if (lancamentoSelecionado.tipo === 'venda') {
-        toast.error("Não é possível excluir comissão de venda automática");
+        toast.error("NÃ£o Ã© possÃ­vel excluir comissÃ£o de venda automÃ¡tica");
         return;
       }
 
       await api.comissoes.deleteLancamento(lancamentoSelecionado.id);
-      toast.success("Lançamento excluído com sucesso!");
-      await api.comissoes.deleteLancamento(lancamentoSelecionado.id);
-      toast.success("Lançamento excluído com sucesso!");
+      toast.success("LanÃ§amento excluÃ­do com sucesso!");
       setDialogLancamento(false);
       onRecarregar?.();
     } catch (error) {
-      console.error("Erro ao excluir lançamento:", error);
-      toast.error("Erro ao excluir lançamento");
+      console.error("Erro ao excluir lanÃ§amento:", error);
+      toast.error("Erro ao excluir lanÃ§amento");
     }
   };
 
   const handleExcluirPagamento = async () => {
+    if (!canDeleteComissoes) {
+      toast.error("VocÃª nÃ£o tem permissÃ£o para excluir pagamentos");
+      return;
+    }
     if (!pagamentoSelecionado) return;
 
     if (!confirm("Tem certeza que deseja excluir este pagamento?")) return;
 
     try {
       await api.comissoes.deletePagamento(pagamentoSelecionado.id);
-      toast.success("Pagamento excluído com sucesso!");
+      toast.success("Pagamento excluÃ­do com sucesso!");
       setDialogPagamento(false);
       onRecarregar?.();
     } catch (error) {
@@ -658,24 +709,28 @@ Equipe de Vendas`;
   };
 
   const handleSalvarLancamento = async () => {
+    if (!canEditComissoes) {
+      toast.error("VocÃª nÃ£o tem permissÃ£o para criar/editar lanÃ§amentos");
+      return;
+    }
     if (!formLancamento.valor || parseFloat(formLancamento.valor) <= 0) {
-      toast.error("Informe um valor válido");
+      toast.error("Informe um valor vÃ¡lido");
       return;
     }
 
     if (!formLancamento.descricao.trim()) {
-      toast.error("Informe a descrição do lançamento");
+      toast.error("Informe a descriÃ§Ã£o do lanÃ§amento");
       return;
     }
 
     if (!formLancamento.periodo) {
-      toast.error("Selecione o período do lançamento");
+      toast.error("Selecione o perÃ­odo do lanÃ§amento");
       return;
     }
 
     try {
       if (modoLancamento === 'editar' && lancamentoSelecionado) {
-        // Editando lançamento existente
+        // Editando lanÃ§amento existente
         await api.comissoes.updateLancamento({
           id: lancamentoSelecionado.id,
           tipo: formLancamento.tipo,
@@ -683,9 +738,9 @@ Equipe de Vendas`;
           descricao: formLancamento.descricao,
           periodo: formLancamento.periodo
         });
-        toast.success(`Lançamento atualizado com sucesso!`);
+        toast.success(`LanÃ§amento atualizado com sucesso!`);
       } else {
-        // Novo lançamento
+        // Novo lanÃ§amento
         await api.comissoes.createLancamento({
           vendedor_uuid: relatorio.vendedorId,
           tipo: formLancamento.tipo,
@@ -693,20 +748,24 @@ Equipe de Vendas`;
           descricao: formLancamento.descricao,
           periodo: formLancamento.periodo
         });
-        toast.success(`Lançamento de ${formLancamento.tipo} registrado com sucesso!`);
+        toast.success(`LanÃ§amento de ${formLancamento.tipo} registrado com sucesso!`);
       }
 
       setDialogLancamento(false);
       onRecarregar?.();
     } catch (error) {
-      console.error("Erro ao salvar lançamento:", error);
-      toast.error("Erro ao salvar lançamento");
+      console.error("Erro ao salvar lanÃ§amento:", error);
+      toast.error("Erro ao salvar lanÃ§amento");
     }
   };
 
   const handleSalvarPagamento = async () => {
+    if (!canEditComissoes) {
+      toast.error("VocÃª nÃ£o tem permissÃ£o para registrar/editar pagamentos");
+      return;
+    }
     if (!formPagamento.valor || parseFloat(formPagamento.valor) <= 0) {
-      toast.error("Informe um valor válido");
+      toast.error("Informe um valor vÃ¡lido");
       return;
     }
 
@@ -716,7 +775,7 @@ Equipe de Vendas`;
     }
 
     if (!formPagamento.periodo) {
-      toast.error("Selecione o período do pagamento");
+      toast.error("Selecione o perÃ­odo do pagamento");
       return;
     }
 
@@ -753,31 +812,45 @@ Equipe de Vendas`;
     }
   };
 
-  const handleSalvarVenda = () => {
+  const handleSalvarVenda = async () => {
+    if (!canManageVendasComissao) {
+      toast.error("Voce nao tem permissao para editar comissoes");
+      return;
+    }
     if (!formVenda.periodo) {
-      toast.error("Selecione o período da venda");
+      toast.error("Selecione o periodo da venda");
       return;
     }
 
     if (!vendaSelecionada) return;
 
-    // Simula a atualização da venda
-    toast.success("Comissão de venda atualizada com sucesso!");
-    setDialogVenda(false);
+    try {
+      await api.comissoes.updateVenda({
+        id: vendaSelecionada.id,
+        periodo: formVenda.periodo,
+        observacoes: formVenda.observacoes || ""
+      });
+      toast.success("Comissao de venda atualizada com sucesso!");
+      setDialogVenda(false);
+      onRecarregar?.();
+    } catch (error) {
+      console.error("Erro ao atualizar comissao de venda:", error);
+      toast.error("Erro ao atualizar comissao de venda");
+    }
   };
 
   return (
     <div className="space-y-6 pb-8">
-      {/* Cabeçalho */}
+      {/* CabeÃ§alho */}
       <div className="flex items-center justify-between">
         <div>
           <Button variant="ghost" onClick={onVoltar} className="mb-2 -ml-2">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Voltar para Comissões
+            Voltar para ComissÃµes
           </Button>
-          <h1 className="text-3xl">Relatório de Comissões</h1>
+          <h1 className="text-3xl">RelatÃ³rio de ComissÃµes</h1>
           <p className="text-muted-foreground mt-1">
-            {dadosRelatorio.vendedorNome} • {formatPeriodo(relatorio.periodo)}
+            {dadosRelatorio.vendedorNome} â€¢ {formatPeriodo(relatorio.periodo)}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -789,14 +862,18 @@ Equipe de Vendas`;
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleLancamentoManual}>
-                <Plus className="h-4 w-4 mr-2" />
-                Lançamento Manual
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleRegistrarPagamento}>
-                <CreditCard className="h-4 w-4 mr-2" />
-                Registrar Pagamento
-              </DropdownMenuItem>
+              {canManageComissoes && (
+                <DropdownMenuItem onClick={handleLancamentoManual}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  LanÃ§amento Manual
+                </DropdownMenuItem>
+              )}
+              {canManageComissoes && (
+                <DropdownMenuItem onClick={handleRegistrarPagamento}>
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Registrar Pagamento
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={handleExportarPDF}>
                 <Download className="h-4 w-4 mr-2" />
                 Exportar PDF
@@ -827,7 +904,7 @@ Equipe de Vendas`;
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Comissões</CardTitle>
+            <CardTitle className="text-sm font-medium">ComissÃµes</CardTitle>
             <DollarSign className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
@@ -842,7 +919,7 @@ Equipe de Vendas`;
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Valor Líquido</CardTitle>
+            <CardTitle className="text-sm font-medium">Valor LÃ­quido</CardTitle>
             <Wallet className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
@@ -876,12 +953,12 @@ Equipe de Vendas`;
         </Card>
       </div>
 
-      {/* Informações do Relatório */}
+      {/* InformaÃ§Ãµes do RelatÃ³rio */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Informações do Relatório
+            InformaÃ§Ãµes do RelatÃ³rio
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -898,7 +975,7 @@ Equipe de Vendas`;
               <p className="font-mono font-medium mt-1">{relatorio.vendedorId}</p>
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground">Período</Label>
+              <Label className="text-xs text-muted-foreground">PerÃ­odo</Label>
               <p className="font-medium flex items-center gap-2 mt-1 capitalize">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 {formatPeriodo(relatorio.periodo)}
@@ -909,7 +986,7 @@ Equipe de Vendas`;
               <div className="mt-1">{getStatusBadge(relatorio.status)}</div>
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground">Data de Geração</Label>
+              <Label className="text-xs text-muted-foreground">Data de GeraÃ§Ã£o</Label>
               <p className="mt-1">{formatDate(relatorio.dataGeracao)}</p>
             </div>
             {relatorio.dataFechamento && (
@@ -928,12 +1005,12 @@ Equipe de Vendas`;
         </CardContent>
       </Card>
 
-      {/* Vendas do Período */}
+      {/* Vendas do PerÃ­odo */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <DollarSign className="h-5 w-5" />
-            Vendas do Período ({dadosRelatorio.quantidadeVendas})
+            Vendas do PerÃ­odo ({dadosRelatorio.quantidadeVendas})
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -946,8 +1023,8 @@ Equipe de Vendas`;
                   <TableHead>Cliente</TableHead>
                   <TableHead>Data</TableHead>
                   <TableHead className="text-right">Valor Venda</TableHead>
-                  <TableHead className="text-right">% Comissão</TableHead>
-                  <TableHead className="text-right">Valor Comissão</TableHead>
+                  <TableHead className="text-right">% ComissÃ£o</TableHead>
+                  <TableHead className="text-right">Valor ComissÃ£o</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -978,13 +1055,13 @@ Equipe de Vendas`;
         </CardContent>
       </Card>
 
-      {/* Lançamentos Manuais */}
+      {/* LanÃ§amentos Manuais */}
       {(dadosRelatorio.lancamentosCredito.length > 0 || dadosRelatorio.lancamentosDebito.length > 0) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Wallet className="h-5 w-5" />
-              Lançamentos Manuais ({dadosRelatorio.lancamentosCredito.length + dadosRelatorio.lancamentosDebito.length})
+              LanÃ§amentos Manuais ({dadosRelatorio.lancamentosCredito.length + dadosRelatorio.lancamentosDebito.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -993,9 +1070,9 @@ Equipe de Vendas`;
                 <TableHeader>
                   <TableRow>
                     <TableHead>Tipo</TableHead>
-                    <TableHead>Descrição</TableHead>
+                    <TableHead>DescriÃ§Ã£o</TableHead>
                     <TableHead>Data</TableHead>
-                    <TableHead>Lançado Por</TableHead>
+                    <TableHead>LanÃ§ado Por</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1011,7 +1088,7 @@ Equipe de Vendas`;
                           <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
                             <ArrowUpCircle className="h-4 w-4 text-green-600" />
                           </div>
-                          <span className="text-green-700 font-medium">Crédito</span>
+                          <span className="text-green-700 font-medium">CrÃ©dito</span>
                         </div>
                       </TableCell>
                       <TableCell>{lanc.descricao}</TableCell>
@@ -1033,7 +1110,7 @@ Equipe de Vendas`;
                           <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
                             <ArrowDownCircle className="h-4 w-4 text-red-600" />
                           </div>
-                          <span className="text-red-700 font-medium">Débito</span>
+                          <span className="text-red-700 font-medium">DÃ©bito</span>
                         </div>
                       </TableCell>
                       <TableCell>{lanc.descricao}</TableCell>
@@ -1051,13 +1128,13 @@ Equipe de Vendas`;
         </Card>
       )}
 
-      {/* Histórico de Pagamentos */}
+      {/* HistÃ³rico de Pagamentos */}
       {dadosRelatorio.pagamentos.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CreditCard className="h-5 w-5" />
-              Histórico de Pagamentos
+              HistÃ³rico de Pagamentos
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -1070,7 +1147,7 @@ Equipe de Vendas`;
                     <TableHead>Forma de Pagamento</TableHead>
                     <TableHead>Comprovante</TableHead>
                     <TableHead>Realizado Por</TableHead>
-                    <TableHead>Observações</TableHead>
+                    <TableHead>ObservaÃ§Ãµes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1110,7 +1187,7 @@ Equipe de Vendas`;
         <CardContent>
           <div className="space-y-3">
             <div className="flex justify-between items-center py-2">
-              <span className="text-muted-foreground">Total de Comissões</span>
+              <span className="text-muted-foreground">Total de ComissÃµes</span>
               <span className="font-medium">{formatCurrency(dadosRelatorio.totalComissoes)}</span>
             </div>
             <div className={`flex justify-between items-center py-2 ${relatorio.saldoAnterior > 0 ? 'text-red-600' : relatorio.saldoAnterior < 0 ? 'text-green-600' : 'text-muted-foreground'
@@ -1127,7 +1204,7 @@ Equipe de Vendas`;
               <div className="flex justify-between items-center py-2 text-green-600">
                 <span className="flex items-center gap-2">
                   <ArrowUpCircle className="h-4 w-4" />
-                  Créditos
+                  CrÃ©ditos
                 </span>
                 <span className="font-medium">+{formatCurrency(dadosRelatorio.totalCreditos)}</span>
               </div>
@@ -1136,13 +1213,13 @@ Equipe de Vendas`;
               <div className="flex justify-between items-center py-2 text-red-600">
                 <span className="flex items-center gap-2">
                   <ArrowDownCircle className="h-4 w-4" />
-                  Débitos
+                  DÃ©bitos
                 </span>
                 <span className="font-medium">-{formatCurrency(dadosRelatorio.totalDebitos)}</span>
               </div>
             )}
             <div className="flex justify-between items-center py-3 border-t font-semibold">
-              <span>Valor Líquido</span>
+              <span>Valor LÃ­quido</span>
               <span className="text-blue-600">{formatCurrency(valorLiquidoCalculado)}</span>
             </div>
             <div className="flex justify-between items-center py-2 text-green-600">
@@ -1176,7 +1253,7 @@ Equipe de Vendas`;
         </CardContent>
       </Card>
 
-      {/* Dialog de Lançamento Manual */}
+      {/* Dialog de LanÃ§amento Manual */}
       <Dialog open={dialogLancamento} onOpenChange={setDialogLancamento}>
         <DialogContent className="max-h-[90vh] flex flex-col" aria-describedby={undefined}>
           <DialogHeader className="flex-shrink-0">
@@ -1186,16 +1263,16 @@ Equipe de Vendas`;
               ) : (
                 <Wallet className="h-5 w-5" />
               )}
-              {modoLancamento === 'novo' ? 'Novo Lançamento Manual' :
-                modoLancamento === 'visualizar' ? 'Detalhes do Lançamento' :
-                  'Editar Lançamento'}
+              {modoLancamento === 'novo' ? 'Novo LanÃ§amento Manual' :
+                modoLancamento === 'visualizar' ? 'Detalhes do LanÃ§amento' :
+                  'Editar LanÃ§amento'}
             </DialogTitle>
             <DialogDescription>
               {modoLancamento === 'novo'
-                ? `Adicione créditos ou débitos ao relatório de ${dadosRelatorio.vendedorNome}`
+                ? `Adicione crÃ©ditos ou dÃ©bitos ao relatÃ³rio de ${dadosRelatorio.vendedorNome}`
                 : modoLancamento === 'visualizar'
-                  ? 'Visualize os detalhes do lançamento. Clique em "Editar" para fazer alterações.'
-                  : `Edite o lançamento de ${dadosRelatorio.vendedorNome}`
+                  ? 'Visualize os detalhes do lanÃ§amento. Clique em "Editar" para fazer alteraÃ§Ãµes.'
+                  : `Edite o lanÃ§amento de ${dadosRelatorio.vendedorNome}`
               }
             </DialogDescription>
           </DialogHeader>
@@ -1204,7 +1281,7 @@ Equipe de Vendas`;
             {modoLancamento === 'visualizar' && lancamentoSelecionado && (
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-blue-900 font-medium">ID do Lançamento</span>
+                  <span className="text-sm text-blue-900 font-medium">ID do LanÃ§amento</span>
                   <span className="text-sm font-mono text-blue-700">{lancamentoSelecionado.id}</span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -1231,7 +1308,7 @@ Equipe de Vendas`;
             )}
 
             <div className="space-y-2">
-              <Label>Tipo de Lançamento</Label>
+              <Label>Tipo de LanÃ§amento</Label>
               <Select
                 value={formLancamento.tipo}
                 onValueChange={(value: "credito" | "debito") => setFormLancamento({ ...formLancamento, tipo: value })}
@@ -1244,13 +1321,13 @@ Equipe de Vendas`;
                   <SelectItem key="tipo-credito" value="credito">
                     <div className="flex items-center gap-2">
                       <ArrowUpCircle className="h-4 w-4 text-green-600" />
-                      <span>Crédito (Adicionar)</span>
+                      <span>CrÃ©dito (Adicionar)</span>
                     </div>
                   </SelectItem>
                   <SelectItem key="tipo-debito" value="debito">
                     <div className="flex items-center gap-2">
                       <ArrowDownCircle className="h-4 w-4 text-red-600" />
-                      <span>Débito (Subtrair)</span>
+                      <span>DÃ©bito (Subtrair)</span>
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -1258,7 +1335,7 @@ Equipe de Vendas`;
             </div>
 
             <div className="space-y-2">
-              <Label>Período *</Label>
+              <Label>PerÃ­odo *</Label>
               <Input
                 placeholder="Ex: 10/2025"
                 value={formatPeriodoInput(formLancamento.periodo)}
@@ -1301,9 +1378,9 @@ Equipe de Vendas`;
             </div>
 
             <div className="space-y-2">
-              <Label>Descrição</Label>
+              <Label>DescriÃ§Ã£o</Label>
               <Textarea
-                placeholder="Ex: Bonificação por meta, Desconto de vale transporte..."
+                placeholder="Ex: BonificaÃ§Ã£o por meta, Desconto de vale transporte..."
                 value={formLancamento.descricao}
                 onChange={(e) => setFormLancamento({ ...formLancamento, descricao: e.target.value })}
                 rows={3}
@@ -1318,22 +1395,26 @@ Equipe de Vendas`;
                 <Button variant="outline" onClick={() => setDialogLancamento(false)}>
                   Fechar
                 </Button>
-                <Button variant="destructive" onClick={handleExcluirLancamento}>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Excluir
-                </Button>
-                <Button onClick={handleEditarLancamento}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Editar
-                </Button>
+                {canDeleteComissoes && (
+                  <Button variant="destructive" onClick={handleExcluirLancamento}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Excluir
+                  </Button>
+                )}
+                {canManageVendasComissao && (
+                  <Button onClick={handleEditarLancamento}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Editar
+                  </Button>
+                )}
               </>
             ) : (
               <>
                 <Button variant="outline" onClick={() => setDialogLancamento(false)}>
                   Cancelar
                 </Button>
-                <Button onClick={handleSalvarLancamento}>
-                  Salvar {modoLancamento === 'editar' ? 'Alterações' : 'Lançamento'}
+                <Button onClick={handleSalvarLancamento} disabled={!canEditComissoes}>
+                  Salvar {modoLancamento === 'editar' ? 'AlteraÃ§Ãµes' : 'LanÃ§amento'}
                 </Button>
               </>
             )}
@@ -1350,14 +1431,14 @@ Equipe de Vendas`;
               Confirmar Envio de E-mail
             </DialogTitle>
             <DialogDescription>
-              O relatório de comissões será enviado por e-mail
+              O relatÃ³rio de comissÃµes serÃ¡ enviado por e-mail
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="p-4 bg-muted rounded-lg space-y-3">
               <div>
-                <Label className="text-xs text-muted-foreground">Destinatário</Label>
+                <Label className="text-xs text-muted-foreground">DestinatÃ¡rio</Label>
                 <p className="font-medium mt-1">{dadosRelatorio.vendedorNome}</p>
               </div>
               <div>
@@ -1365,7 +1446,7 @@ Equipe de Vendas`;
                 <p className="font-mono text-sm mt-1">{emailDestino}</p>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Período</Label>
+                <Label className="text-xs text-muted-foreground">PerÃ­odo</Label>
                 <p className="font-medium mt-1 capitalize">{formatPeriodo(relatorio.periodo)}</p>
               </div>
             </div>
@@ -1374,9 +1455,9 @@ Equipe de Vendas`;
               <div className="flex gap-2">
                 <FileText className="h-5 w-5 text-blue-600 flex-shrink-0" />
                 <div className="text-sm">
-                  <p className="font-medium text-blue-900">Anexo: Relatório em PDF</p>
+                  <p className="font-medium text-blue-900">Anexo: RelatÃ³rio em PDF</p>
                   <p className="text-blue-700 mt-1">
-                    Será gerado um PDF completo com todas as vendas, lançamentos e pagamentos do período.
+                    SerÃ¡ gerado um PDF completo com todas as vendas, lanÃ§amentos e pagamentos do perÃ­odo.
                   </p>
                 </div>
               </div>
@@ -1386,9 +1467,9 @@ Equipe de Vendas`;
               <div className="flex gap-2">
                 <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0" />
                 <div className="text-sm">
-                  <p className="font-medium text-orange-900">Ambiente de Demonstração</p>
+                  <p className="font-medium text-orange-900">Ambiente de DemonstraÃ§Ã£o</p>
                   <p className="text-orange-700 mt-1">
-                    Este é um protótipo com dados mockados. O e-mail não será realmente enviado, mas a funcionalidade está implementada e seria integrada com um serviço de e-mail em produção.
+                    Este Ã© um protÃ³tipo com dados mockados. O e-mail nÃ£o serÃ¡ realmente enviado, mas a funcionalidade estÃ¡ implementada e seria integrada com um serviÃ§o de e-mail em produÃ§Ã£o.
                   </p>
                 </div>
               </div>
@@ -1407,7 +1488,7 @@ Equipe de Vendas`;
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Venda (Visualização/Edição) */}
+      {/* Dialog de Venda (VisualizaÃ§Ã£o/EdiÃ§Ã£o) */}
       <Dialog open={dialogVenda} onOpenChange={setDialogVenda}>
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col" aria-describedby={undefined}>
           <DialogHeader className="flex-shrink-0">
@@ -1417,12 +1498,12 @@ Equipe de Vendas`;
               ) : (
                 <DollarSign className="h-5 w-5" />
               )}
-              {modoVenda === 'visualizar' ? 'Detalhes da Comissão' : 'Editar Comissão'}
+              {modoVenda === 'visualizar' ? 'Detalhes da ComissÃ£o' : 'Editar ComissÃ£o'}
             </DialogTitle>
             <DialogDescription>
               {modoVenda === 'visualizar'
-                ? 'Visualize os detalhes da comissão. Clique em "Editar" para fazer alterações.'
-                : 'Edite os dados da comissão de venda'
+                ? 'Visualize os detalhes da comissÃ£o. Clique em "Editar" para fazer alteraÃ§Ãµes.'
+                : 'Edite os dados da comissÃ£o de venda'
               }
             </DialogDescription>
           </DialogHeader>
@@ -1473,13 +1554,13 @@ Equipe de Vendas`;
                   <Input value={formatCurrency(vendaSelecionada.valorTotalVenda)} disabled />
                 </div>
                 <div className="space-y-2">
-                  <Label>% Comissão</Label>
+                  <Label>% ComissÃ£o</Label>
                   <Input value={`${vendaSelecionada.percentualComissao.toFixed(2)}%`} disabled />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Valor da Comissão</Label>
+                <Label>Valor da ComissÃ£o</Label>
                 <Input
                   value={formatCurrency(vendaSelecionada.valorComissao)}
                   disabled
@@ -1488,7 +1569,7 @@ Equipe de Vendas`;
               </div>
 
               <div className="space-y-2">
-                <Label>Período *</Label>
+                <Label>PerÃ­odo *</Label>
                 <Input
                   placeholder="Ex: 10/2025"
                   value={formatPeriodoInput(formVenda.periodo)}
@@ -1508,9 +1589,9 @@ Equipe de Vendas`;
               </div>
 
               <div className="space-y-2">
-                <Label>Observações</Label>
+                <Label>ObservaÃ§Ãµes</Label>
                 <Textarea
-                  placeholder="Observações sobre esta comissão..."
+                  placeholder="ObservaÃ§Ãµes sobre esta comissÃ£o..."
                   value={formVenda.observacoes}
                   onChange={(e) => setFormVenda({ ...formVenda, observacoes: e.target.value })}
                   rows={3}
@@ -1526,18 +1607,26 @@ Equipe de Vendas`;
                 <Button variant="outline" onClick={() => setDialogVenda(false)}>
                   Fechar
                 </Button>
-                <Button onClick={handleEditarVenda}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Editar
-                </Button>
+                {canManageVendasComissao && (
+                  <Button variant="destructive" onClick={handleExcluirVenda}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Excluir
+                  </Button>
+                )}
+                {canManageVendasComissao && (
+                  <Button onClick={handleEditarVenda}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Editar
+                  </Button>
+                )}
               </>
             ) : (
               <>
                 <Button variant="outline" onClick={() => setDialogVenda(false)}>
                   Cancelar
                 </Button>
-                <Button onClick={handleSalvarVenda}>
-                  Salvar Alterações
+                <Button onClick={handleSalvarVenda} disabled={!canManageVendasComissao}>
+                  Salvar AlteraÃ§Ãµes
                 </Button>
               </>
             )}
@@ -1563,7 +1652,7 @@ Equipe de Vendas`;
               {modoPagamento === 'novo'
                 ? `Registre um pagamento para ${dadosRelatorio.vendedorNome}`
                 : modoPagamento === 'visualizar'
-                  ? 'Visualize os detalhes do pagamento. Clique em "Editar" para fazer alterações.'
+                  ? 'Visualize os detalhes do pagamento. Clique em "Editar" para fazer alteraÃ§Ãµes.'
                   : `Edite o pagamento de ${dadosRelatorio.vendedorNome}`
               }
             </DialogDescription>
@@ -1611,7 +1700,7 @@ Equipe de Vendas`;
             )}
 
             <div className="space-y-2">
-              <Label>Período *</Label>
+              <Label>PerÃ­odo *</Label>
               <Input
                 placeholder="Ex: 10/2025"
                 value={formatPeriodoInput(formPagamento.periodo)}
@@ -1665,7 +1754,7 @@ Equipe de Vendas`;
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem key="pag-pix" value="PIX">PIX</SelectItem>
-                  <SelectItem key="pag-transf" value="Transferência Bancária">Transferência Bancária</SelectItem>
+                  <SelectItem key="pag-transf" value="TransferÃªncia BancÃ¡ria">TransferÃªncia BancÃ¡ria</SelectItem>
                   <SelectItem key="pag-dinheiro" value="Dinheiro">Dinheiro</SelectItem>
                   <SelectItem key="pag-cheque" value="Cheque">Cheque</SelectItem>
                 </SelectContent>
@@ -1673,7 +1762,7 @@ Equipe de Vendas`;
             </div>
 
             <div className="space-y-2">
-              <Label>Número do Comprovante (Opcional)</Label>
+              <Label>NÃºmero do Comprovante (Opcional)</Label>
               <Input
                 placeholder="Ex: COMP-2025-001, PIX-123456..."
                 value={formPagamento.comprovante}
@@ -1683,9 +1772,9 @@ Equipe de Vendas`;
             </div>
 
             <div className="space-y-2">
-              <Label>Observações (Opcional)</Label>
+              <Label>ObservaÃ§Ãµes (Opcional)</Label>
               <Textarea
-                placeholder="Informações adicionais sobre o pagamento..."
+                placeholder="InformaÃ§Ãµes adicionais sobre o pagamento..."
                 value={formPagamento.observacoes}
                 onChange={(e) => setFormPagamento({ ...formPagamento, observacoes: e.target.value })}
                 rows={2}
@@ -1700,22 +1789,26 @@ Equipe de Vendas`;
                 <Button variant="outline" onClick={() => setDialogPagamento(false)}>
                   Fechar
                 </Button>
-                <Button variant="destructive" onClick={handleExcluirPagamento}>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Excluir
-                </Button>
-                <Button onClick={handleEditarPagamento}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Editar
-                </Button>
+                {canDeleteComissoes && (
+                  <Button variant="destructive" onClick={handleExcluirPagamento}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Excluir
+                  </Button>
+                )}
+                {canEditComissoes && (
+                  <Button onClick={handleEditarPagamento}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Editar
+                  </Button>
+                )}
               </>
             ) : (
               <>
                 <Button variant="outline" onClick={() => setDialogPagamento(false)}>
                   Cancelar
                 </Button>
-                <Button onClick={handleSalvarPagamento}>
-                  {modoPagamento === 'editar' ? 'Salvar Alterações' : 'Registrar Pagamento'}
+                <Button onClick={handleSalvarPagamento} disabled={!canEditComissoes}>
+                  {modoPagamento === 'editar' ? 'Salvar AlteraÃ§Ãµes' : 'Registrar Pagamento'}
                 </Button>
               </>
             )}
@@ -1726,3 +1819,10 @@ Equipe de Vendas`;
     </div>
   );
 }
+
+
+
+
+
+
+

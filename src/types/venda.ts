@@ -96,6 +96,11 @@ export interface Venda {
   nomeCliente: string;
   cnpjCliente: string;
   inscricaoEstadualCliente: string;
+  segmentoId?: string;
+  segmentoMercado?: string;
+  statusCliente?: string;
+  clienteGrupoRede?: string;
+  clienteUf?: string;
   
   // Informações Comerciais
   listaPrecoId: string;

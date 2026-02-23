@@ -103,6 +103,7 @@ import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { api } from '../services/api';
 import { tinyERPSyncService } from '../services/tinyERPSync';
 import { useAuth } from '../contexts/AuthContext';
+import { toSafeNumber } from '../utils/number';
 
 interface Sale {
   id: string;
@@ -202,7 +203,7 @@ const convertVendaToSale = (venda: Venda | any): Sale => {
     vendedor: nomeVendedor,
     vendedorId: venda.vendedorId || venda.vendedor_uuid || '',
     vendedorIniciais: iniciais,
-    valor: venda.valorPedido || venda.valor_total || 0,
+    valor: toSafeNumber(venda.valorPedido ?? venda.valor_total, 0),
     produtos: produtos,
     naturezaOperacao: venda.nomeNaturezaOperacao || venda.naturezaOperacaoNome || 'Natureza não informada',
     naturezaOperacaoId: venda.naturezaOperacaoId || venda.natureza_operacao_id || '',
@@ -253,7 +254,7 @@ interface SalesPageProps {
 
 // Funções de formatação de valores (mesma lógica do Dashboard)
 const formatCurrency = (value: number) => {
-  return value.toLocaleString('pt-BR', { 
+  return toSafeNumber(value, 0).toLocaleString('pt-BR', {
     style: 'currency', 
     currency: 'BRL',
     minimumFractionDigits: 2,
@@ -263,15 +264,16 @@ const formatCurrency = (value: number) => {
 
 const formatDisplayValue = (value: number) => {
   // Se for >= 1 milhão, abreviar mostrando milhões e milhares
-  if (value >= 1000000) {
+  const safeValue = toSafeNumber(value, 0);
+  if (safeValue >= 1000000) {
     // Truncar para milhares (remover centenas e centavos)
-    const truncatedValue = Math.floor(value / 1000);
+    const truncatedValue = Math.floor(safeValue / 1000);
     // Formatar com separador de milhar
     return `R$ ${truncatedValue.toLocaleString('pt-BR')} M`;
   }
   
   // Se for < 1 milhão, mostrar valor completo
-  return formatCurrency(value);
+  return formatCurrency(safeValue);
 };
 
 export function SalesPage({ 
@@ -1531,9 +1533,7 @@ export function SalesPage({
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className="font-medium">
-                          R$ {sale.valor.toLocaleString('pt-BR')}
-                        </span>
+                        <span className="font-medium">{formatCurrency(sale.valor)}</span>
                       </TableCell>
                       <TableCell>
                         <Badge variant={statusConfig[sale.status].variant}>
@@ -1770,9 +1770,7 @@ export function SalesPage({
                       <Label className="text-muted-foreground">Valor Total</Label>
                       <div className="flex items-center gap-2 mt-1">
                         <DollarSign className="h-4 w-4 text-muted-foreground" />
-                        <p className="text-2xl font-bold">
-                          R$ {selectedSale.valor.toLocaleString('pt-BR')}
-                        </p>
+                        <p className="text-2xl font-bold">{formatCurrency(selectedSale.valor)}</p>
                       </div>
                     </div>
                     <div>

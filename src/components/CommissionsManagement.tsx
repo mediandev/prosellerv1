@@ -58,6 +58,7 @@ import {
   LancamentoManual,
   PagamentoPeriodo
 } from "../types/comissao";
+import { useAuth } from "../contexts/AuthContext";
 
 import { CommissionReportPage } from "./CommissionReportPage";
 
@@ -74,6 +75,10 @@ export function CommissionsManagement({
   customDateRange = { from: undefined, to: undefined },
   onCustomDateRangeChange
 }: CommissionsManagementProps) {
+  const { temPermissao, ehBackoffice } = useAuth();
+  const canManageComissoes = ehBackoffice();
+  const canEditComissoes = ehBackoffice() && temPermissao('comissoes.lancamentos.editar');
+  const canDeleteComissoes = ehBackoffice() && temPermissao('comissoes.lancamentos.excluir');
   // Estados principais
   const [relatorios, setRelatorios] = useState<RelatorioPeriodoComissoes[]>([]);
   const [comissoesVendas, setComissoesVendas] = useState<ComissaoVenda[]>([]);
@@ -137,6 +142,33 @@ export function CommissionsManagement({
   });
 
   const periodoSelecionado = `${anoSelecionado}-${mesSelecionado}`;
+
+  useEffect(() => {
+    if (/^\d{4}-\d{2}$/.test(period)) {
+      const [ano, mes] = period.split('-');
+      if (ano && mes) {
+        setAnoSelecionado(ano);
+        setMesSelecionado(mes);
+      }
+      return;
+    }
+
+    const now = new Date();
+    if (period === 'last_month') {
+      now.setMonth(now.getMonth() - 1);
+    }
+    if (period === 'current_year') {
+      setAnoSelecionado(String(now.getFullYear()));
+      setMesSelecionado(String(now.getMonth() + 1).padStart(2, '0'));
+      return;
+    }
+    setAnoSelecionado(String(now.getFullYear()));
+    setMesSelecionado(String(now.getMonth() + 1).padStart(2, '0'));
+  }, [period]);
+
+  useEffect(() => {
+    onPeriodChange?.(periodoSelecionado);
+  }, [periodoSelecionado, onPeriodChange]);
 
   // Funções para navegação de período
   const avancarMes = () => {
@@ -402,6 +434,10 @@ export function CommissionsManagement({
   // ========================================
 
   const handleAbrirLancamento = (relatorioCompleto: RelatorioComissoesCompleto) => {
+    if (!canManageComissoes) {
+      toast.error("Você não tem permissão para criar/editar lançamentos");
+      return;
+    }
     setRelatorioSelecionado(relatorioCompleto);
     setFormLancamento({
       tipo: "credito",
@@ -413,6 +449,10 @@ export function CommissionsManagement({
   };
 
   const handleSalvarLancamento = () => {
+    if (!canManageComissoes) {
+      toast.error("Você não tem permissão para criar/editar lançamentos");
+      return;
+    }
     if (!relatorioSelecionado) return;
 
     if (!formLancamento.valor || parseFloat(formLancamento.valor) <= 0) {
@@ -453,6 +493,10 @@ export function CommissionsManagement({
   // ========================================
 
   const handleAbrirPagamento = (relatorioCompleto: RelatorioComissoesCompleto) => {
+    if (!canManageComissoes) {
+      toast.error("Você não tem permissão para registrar/editar pagamentos");
+      return;
+    }
     setRelatorioSelecionado(relatorioCompleto);
     setFormPagamento({
       valor: relatorioCompleto.relatorio.saldoDevedor.toFixed(2),
@@ -465,6 +509,10 @@ export function CommissionsManagement({
   };
 
   const handleSalvarPagamento = () => {
+    if (!canManageComissoes) {
+      toast.error("Você não tem permissão para registrar/editar pagamentos");
+      return;
+    }
     if (!relatorioSelecionado) return;
 
     if (!formPagamento.valor || parseFloat(formPagamento.valor) <= 0) {
@@ -509,6 +557,10 @@ export function CommissionsManagement({
     tipo: 'venda' | 'lancamentoManual' | 'pagamento',
     dados: ComissaoVenda | LancamentoManual | PagamentoPeriodo
   ) => {
+    if (!canEditComissoes) {
+      toast.error("Você não tem permissão para editar lançamentos");
+      return;
+    }
     setLancamentoEditando({ tipo, dados });
     setFormEdicao({
       periodo: dados.periodo,
@@ -518,6 +570,10 @@ export function CommissionsManagement({
   };
 
   const handleSalvarEdicaoLancamento = () => {
+    if (!canEditComissoes) {
+      toast.error("Você não tem permissão para editar lançamentos");
+      return;
+    }
     if (!lancamentoEditando) return;
 
     const { tipo, dados } = lancamentoEditando;
@@ -580,11 +636,19 @@ export function CommissionsManagement({
   // ========================================
 
   const handleAbrirReabrir = (relatorioCompleto: RelatorioComissoesCompleto) => {
+    if (!canEditComissoes) {
+      toast.error("Você não tem permissão para reabrir períodos");
+      return;
+    }
     setRelatorioSelecionado(relatorioCompleto);
     setDialogReabrir(true);
   };
 
   const handleReabrirPeriodo = () => {
+    if (!canEditComissoes) {
+      toast.error("Você não tem permissão para reabrir períodos");
+      return;
+    }
     if (!relatorioSelecionado) return;
 
     const relatorio = relatorioSelecionado.relatorio;
@@ -764,6 +828,10 @@ export function CommissionsManagement({
   // ========================================
 
   const handleCalcularComissoesPendentes = async () => {
+    if (!canEditComissoes) {
+      toast.error("Você não tem permissão para calcular comissões pendentes");
+      return;
+    }
     try {
       setLoading(true);
       toast.info('Calculando comissões de vendas concluídas...');
@@ -791,6 +859,10 @@ export function CommissionsManagement({
   // ========================================
 
   const handleLimparComissoesCanceladas = async () => {
+    if (!canDeleteComissoes) {
+      toast.error("Você não tem permissão para limpar comissões canceladas");
+      return;
+    }
     try {
       setLoading(true);
       toast.info('🧹 Limpando comissões de vendas canceladas...');
@@ -1009,45 +1081,51 @@ export function CommissionsManagement({
             </div>
 
             {/* Dropdown de Ações Administrativas */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={loading}
-                >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Ações
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem
-                  onClick={handleCalcularComissoesPendentes}
-                  disabled={loading}
-                >
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  <div className="flex flex-col">
-                    <span>Calcular Comissões Pendentes</span>
-                    <span className="text-xs text-muted-foreground">
-                      Processa vendas concluídas sem comissão
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleLimparComissoesCanceladas}
-                  disabled={loading}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  <div className="flex flex-col">
-                    <span>Limpar Comissões Canceladas</span>
-                    <span className="text-xs text-muted-foreground">
-                      Remove comissões de vendas canceladas
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {(canEditComissoes || canDeleteComissoes) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={loading}
+                  >
+                    <Settings className="h-4 w-4 mr-2" />
+                    Ações
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  {canEditComissoes && (
+                    <DropdownMenuItem
+                      onClick={handleCalcularComissoesPendentes}
+                      disabled={loading}
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      <div className="flex flex-col">
+                        <span>Calcular Comissões Pendentes</span>
+                        <span className="text-xs text-muted-foreground">
+                          Processa vendas concluídas sem comissão
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                  )}
+                  {canDeleteComissoes && (
+                    <DropdownMenuItem
+                      onClick={handleLimparComissoesCanceladas}
+                      disabled={loading}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      <div className="flex flex-col">
+                        <span>Limpar Comissões Canceladas</span>
+                        <span className="text-xs text-muted-foreground">
+                          Remove comissões de vendas canceladas
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1288,29 +1366,29 @@ export function CommissionsManagement({
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleVerDetalhes(relCompleto)}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              Ver Detalhes
-                            </DropdownMenuItem>
-                            {relCompleto.relatorio.status !== "pago" && (
-                              <>
-                                <DropdownMenuItem onClick={() => handleAbrirLancamento(relCompleto)}>
-                                  <Plus className="h-4 w-4 mr-2" />
-                                  Lançamento Manual
-                                </DropdownMenuItem>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleVerDetalhes(relCompleto)}>
+                                <Eye className="h-4 w-4 mr-2" />
+                                Ver Detalhes
+                              </DropdownMenuItem>
+                              {canManageComissoes && relCompleto.relatorio.status !== "pago" && (
+                                <>
+                                  <DropdownMenuItem onClick={() => handleAbrirLancamento(relCompleto)}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Lançamento Manual
+                                  </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleAbrirPagamento(relCompleto)}>
                                   <CreditCard className="h-4 w-4 mr-2" />
                                   Registrar Pagamento
                                 </DropdownMenuItem>
                               </>
                             )}
-                            {relCompleto.relatorio.status === "fechado" && (
-                              <DropdownMenuItem onClick={() => handleAbrirReabrir(relCompleto)}>
-                                <Unlock className="h-4 w-4 mr-2" />
-                                Reabrir Período
-                              </DropdownMenuItem>
-                            )}
+                              {canEditComissoes && relCompleto.relatorio.status === "fechado" && (
+                                <DropdownMenuItem onClick={() => handleAbrirReabrir(relCompleto)}>
+                                  <Unlock className="h-4 w-4 mr-2" />
+                                  Reabrir Período
+                                </DropdownMenuItem>
+                              )}
                             <DropdownMenuItem>
                               <Download className="h-4 w-4 mr-2" />
                               Exportar PDF
@@ -1403,7 +1481,7 @@ export function CommissionsManagement({
             <Button variant="outline" onClick={() => setDialogLancamento(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSalvarLancamento}>
+            <Button onClick={handleSalvarLancamento} disabled={!canEditComissoes}>
               Salvar Lançamento
             </Button>
           </DialogFooter>
@@ -1500,7 +1578,7 @@ export function CommissionsManagement({
             <Button variant="outline" onClick={() => setDialogPagamento(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSalvarPagamento}>
+            <Button onClick={handleSalvarPagamento} disabled={!canEditComissoes}>
               Registrar Pagamento
             </Button>
           </DialogFooter>
@@ -1604,7 +1682,7 @@ export function CommissionsManagement({
             <Button variant="outline" onClick={() => setDialogEditarLancamento(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSalvarEdicaoLancamento}>
+            <Button onClick={handleSalvarEdicaoLancamento} disabled={!canEditComissoes}>
               Salvar Alterações
             </Button>
           </DialogFooter>
@@ -1658,7 +1736,7 @@ export function CommissionsManagement({
             <Button variant="outline" onClick={() => setDialogReabrir(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleReabrirPeriodo} variant="default">
+            <Button onClick={handleReabrirPeriodo} variant="default" disabled={!canEditComissoes}>
               Confirmar Reabertura
             </Button>
           </DialogFooter>

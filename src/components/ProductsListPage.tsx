@@ -34,7 +34,7 @@ export function ProductsListPage({
   onVisualizarProduto,
   refreshKey = 0,
 }: ProductsListPageProps) {
-  const { ehVendedor } = useAuth();
+  const { ehVendedor, temPermissao, ehBackoffice } = useAuth();
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -46,6 +46,10 @@ export function ProductsListPage({
   const [produtoToDelete, setProdutoToDelete] = useState<string | null>(null);
   const [sortField, setSortField] = useState<keyof Produto | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const canCreateProduto = temPermissao('produtos.criar') || ehBackoffice();
+  const canVisualizarProduto = temPermissao('produtos.visualizar') || ehBackoffice() || ehVendedor();
+  const canEditarProduto = temPermissao('produtos.editar') || ehBackoffice();
+  const canExcluirProduto = temPermissao('produtos.excluir') || ehBackoffice();
 
   // Carregar produtos do Supabase
   const carregarProdutos = async () => {
@@ -179,6 +183,10 @@ export function ProductsListPage({
   };
 
   const handleDeleteProduto = (id: string) => {
+    if (!canExcluirProduto) {
+      toast.error('Você não tem permissão para excluir produtos');
+      return;
+    }
     setProdutoToDelete(id);
     setDeleteDialogOpen(true);
   };
@@ -235,10 +243,12 @@ export function ProductsListPage({
               </>
             )}
           </Button>
-          <Button onClick={onNovoProduto}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Produto
-          </Button>
+          {canCreateProduto && (
+            <Button onClick={onNovoProduto}>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Produto
+            </Button>
+          )}
         </div>
       </div>
 
@@ -484,26 +494,30 @@ export function ProductsListPage({
                             <DropdownMenuContent align="end">
                               <DropdownMenuLabel>Ações</DropdownMenuLabel>
                               <DropdownMenuSeparator />
-                              {onVisualizarProduto && (
+                              {onVisualizarProduto && canVisualizarProduto && (
                                 <DropdownMenuItem onClick={() => onVisualizarProduto(produto.id)}>
                                   <Eye className="h-4 w-4 mr-2" />
                                   Ver Detalhes
                                 </DropdownMenuItem>
                               )}
-                              {onEditarProduto && (
+                              {onEditarProduto && canEditarProduto && (
                                 <DropdownMenuItem onClick={() => onEditarProduto(produto.id)}>
                                   <Edit className="h-4 w-4 mr-2" />
                                   Editar
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() => handleDeleteProduto(produto.id)}
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Excluir
-                              </DropdownMenuItem>
+                              {canExcluirProduto && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className="text-destructive"
+                                    onClick={() => handleDeleteProduto(produto.id)}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Excluir
+                                  </DropdownMenuItem>
+                                </>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>

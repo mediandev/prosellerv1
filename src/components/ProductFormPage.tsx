@@ -19,11 +19,12 @@ let productFormSubmitLock = false;
 
 interface ProductFormPageProps {
   productId?: string;
+  mode?: 'create' | 'edit' | 'view';
   onBack: () => void;
   onSave?: (produto: Produto) => void;
 }
 
-export function ProductFormPage({ productId, onBack, onSave }: ProductFormPageProps) {
+export function ProductFormPage({ productId, mode, onBack, onSave }: ProductFormPageProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const marcaTriggerRef = useRef<HTMLButtonElement>(null);
   const unidadeTriggerRef = useRef<HTMLButtonElement>(null);
@@ -70,6 +71,8 @@ export function ProductFormPage({ productId, onBack, onSave }: ProductFormPagePr
 
   const [fotoPreview, setFotoPreview] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
+  const resolvedMode: 'create' | 'edit' | 'view' = mode || (productId ? 'edit' : 'create');
+  const isViewMode = resolvedMode === 'view';
 
   // Carregar dados auxiliares (marcas, tipos, unidades)
   useEffect(() => {
@@ -309,6 +312,7 @@ export function ProductFormPage({ productId, onBack, onSave }: ProductFormPagePr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isViewMode) return;
 
     if (productFormSubmitLock) return;
     productFormSubmitLock = true;
@@ -385,7 +389,9 @@ export function ProductFormPage({ productId, onBack, onSave }: ProductFormPagePr
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
-          <h1 className="text-3xl">{productId ? "Editar Produto" : "Novo Produto"}</h1>
+          <h1 className="text-3xl">
+            {resolvedMode === 'view' ? "Visualizar Produto" : productId ? "Editar Produto" : "Novo Produto"}
+          </h1>
           <p className="text-muted-foreground">
             {productId ? "Atualize as informações do produto" : "Cadastre um novo produto"}
           </p>
@@ -393,6 +399,7 @@ export function ProductFormPage({ productId, onBack, onSave }: ProductFormPagePr
       </div>
 
       <form onSubmit={handleSubmit}>
+        <div className={isViewMode ? "pointer-events-none" : ""}>
         <Card>
           <CardHeader>
             <CardTitle>Informações do Produto</CardTitle>
@@ -752,16 +759,19 @@ export function ProductFormPage({ productId, onBack, onSave }: ProductFormPagePr
             </div>
           </CardContent>
         </Card>
+        </div>
 
         {/* Botões de ação */}
         <div className="flex justify-end gap-4 mt-6">
           <Button type="button" variant="outline" onClick={onBack} disabled={loading}>
-            Cancelar
+            {isViewMode ? 'Voltar' : 'Cancelar'}
           </Button>
-          <Button type="submit" disabled={loading}>
-            <Save className="h-4 w-4 mr-2" />
-            {loading ? 'Salvando...' : (productId ? "Atualizar" : "Cadastrar")}
-          </Button>
+          {!isViewMode && (
+            <Button type="submit" disabled={loading}>
+              <Save className="h-4 w-4 mr-2" />
+              {loading ? 'Salvando...' : (productId ? "Atualizar" : "Cadastrar")}
+            </Button>
+          )}
         </div>
       </form>
 

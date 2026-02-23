@@ -107,9 +107,7 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
         ...clienteData,
         // Garantir que arrays estejam inicializados
         pessoasContato: clienteData.pessoasContato || [],
-        dadosBancarios: clienteData.dadosBancarios || [],
-        condicoesPagamentoAssociadas: clienteData.condicoesPagamentoAssociadas || [],
-        // Mapear dados de contato - priorizar campos no nível raiz, depois objeto contato
+        dadosBancarios: clienteData.dadosBancarios || [],        // Mapear dados de contato - priorizar campos no nível raiz, depois objeto contato
         emailPrincipal: clienteData.emailPrincipal || contato.emailPrincipal || '',
         emailNFe: clienteData.emailNFe || contato.emailNFe || '',
         telefoneFixoPrincipal: clienteData.telefoneFixoPrincipal || contato.telefoneFixoPrincipal || '',
@@ -216,6 +214,37 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
       }
     }
 
+
+    let codigoOrigemFinal = formData.codigoOrigem;
+    let codigoTinySistemaFinal = formData.codigoTinySistema;
+    let codigoTinyIdExternoFinal = formData.codigoTinyIdExterno;
+
+    if (modo === 'criar') {
+      try {
+        const clientesExistentes = await api.get('clientes') as Cliente[];
+        const resolucaoCodigo = customerCodeService.resolverCodigoComPrioridade(
+          { ...formData, codigo: codigoFinal },
+          formData.id || '',
+          clientesExistentes || []
+        );
+
+        if (!resolucaoCodigo.valido || !resolucaoCodigo.resultado) {
+          toast.error(resolucaoCodigo.erro || 'Erro ao resolver codigo do cliente');
+          setActiveTab('dados-cadastrais');
+          return;
+        }
+
+        codigoFinal = resolucaoCodigo.resultado.codigo;
+        codigoOrigemFinal = resolucaoCodigo.resultado.origem;
+        codigoTinySistemaFinal = resolucaoCodigo.resultado.tinySistema;
+        codigoTinyIdExternoFinal = resolucaoCodigo.resultado.tinyIdExterno;
+      } catch (error: any) {
+        console.error('[CLIENTE] Erro ao resolver codigo com prioridade:', error);
+        toast.error('Erro ao resolver codigo do cliente');
+        return;
+      }
+    }
+
     // Log detalhado do formData antes de salvar
     console.log('[CLIENTE] FormData completo antes de salvar:', {
       id: clienteId,
@@ -241,6 +270,10 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
             ...formData as Cliente,
             id: `cliente-${Date.now()}`,
             codigo: codigoFinal,
+            codigoOrigem: codigoOrigemFinal,
+            codigoTinySistema: codigoTinySistemaFinal,
+            codigoTinyIdExterno: codigoTinyIdExternoFinal,
+            codigoGeradoEm: new Date().toISOString(),
             dataCadastro: new Date().toISOString(),
             dataAtualizacao: new Date().toISOString(),
             criadoPor: usuario.nome,
@@ -275,37 +308,17 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
           
           // Se for vendedor, criar notificação para backoffice
           if (usuario.tipo === 'vendedor') {
-            const { notificacoesMock } = await import('../data/mockNotificacoes');
-            const { mockUsuarios } = await import('../data/mockUsers');
-            
-            // Encontrar todos os usuários backoffice
-            const usuariosBackoffice = mockUsuarios.filter(u => u.tipo === 'backoffice');
-            
-            // Criar notificação para cada usuário backoffice
-            usuariosBackoffice.forEach(userBackoffice => {
-              notificacoesMock.push({
-                id: `not-${Date.now()}-${userBackoffice.id}`,
-                tipo: 'cliente_pendente_aprovacao',
-                titulo: 'Novo cliente aguardando aprovação',
-                mensagem: `O vendedor ${usuario.nome} cadastrou um novo cliente: ${novoCliente.razaoSocial}`,
-                link: '/clientes/pendentes',
-                status: 'nao_lida',
-                usuarioId: userBackoffice.id,
-                dataCriacao: new Date().toISOString(),
-                dadosAdicionais: {
-                  clienteId: novoCliente.id,
-                  clienteNome: novoCliente.razaoSocial,
-                  vendedorId: usuario.id,
-                  vendedorNome: usuario.nome,
-                },
-              });
-            });
-            
-            console.log('[NOTIFICAÇÃO] Notificações criadas para usuários backoffice:', {
-              clienteId: novoCliente.id,
-              clienteNome: novoCliente.razaoSocial,
-              vendedor: usuario.nome,
-              quantidadeNotificacoes: usuariosBackoffice.length,
+            await api.notificacoes.createForBackoffice({
+              tipo: 'cliente_pendente_aprovacao',
+              titulo: 'Novo cliente aguardando aprova��o',
+              mensagem: `O vendedor ${usuario.nome} cadastrou um novo cliente: ${novoCliente.razaoSocial}`,
+              link: '/clientes/pendentes',
+              dadosAdicionais: {
+                clienteId: novoCliente.id,
+                clienteNome: novoCliente.razaoSocial,
+                vendedorId: usuario.id,
+                vendedorNome: usuario.nome,
+              },
             });
           }
           
@@ -485,17 +498,13 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
       }
       
       // Criar notificação para o vendedor
-      const { notificacoesMock } = await import('../data/mockNotificacoes');
       if (formData.vendedorAtribuido?.id) {
-        notificacoesMock.push({
-          id: `not-aprovacao-${Date.now()}`,
+        await api.notificacoes.create({
           tipo: 'cliente_aprovado',
           titulo: 'Cliente aprovado',
           mensagem: `Seu cadastro do cliente "${formData.razaoSocial}" foi aprovado pelo gestor ${usuario.nome}`,
           link: `/clientes/${clienteId}`,
-          status: 'nao_lida',
           usuarioId: formData.vendedorAtribuido.id,
-          dataCriacao: new Date().toISOString(),
           dadosAdicionais: {
             clienteId: formData.id,
             clienteNome: formData.razaoSocial,
@@ -564,17 +573,13 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
       }
       
       // Criar notificação para o vendedor
-      const { notificacoesMock } = await import('../data/mockNotificacoes');
       if (formData.vendedorAtribuido?.id) {
-        notificacoesMock.push({
-          id: `not-rejeicao-${Date.now()}`,
+        await api.notificacoes.create({
           tipo: 'cliente_rejeitado',
           titulo: 'Cliente rejeitado',
           mensagem: `Seu cadastro do cliente "${formData.razaoSocial}" foi rejeitado pelo gestor ${usuario.nome}. Motivo: ${motivoRejeicao}`,
           link: `/clientes/${clienteId}`,
-          status: 'nao_lida',
           usuarioId: formData.vendedorAtribuido.id,
-          dataCriacao: new Date().toISOString(),
           dadosAdicionais: {
             clienteId: formData.id,
             clienteNome: formData.razaoSocial,

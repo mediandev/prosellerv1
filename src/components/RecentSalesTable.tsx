@@ -8,6 +8,7 @@ import { DashboardFilters } from "./DashboardMetrics";
 import { useAuth } from "../contexts/AuthContext";
 import { Transaction } from "../services/dashboardDataService";
 import { StatusVenda } from "../types/venda"; // ✅ CORRIGIDO: Importar StatusVenda
+import { toSafeNumber } from "../utils/number";
 
 interface Sale {
   id: string; // ID real da venda (para navegação)
@@ -1081,7 +1082,7 @@ export function RecentSalesTable({ period, filters, transactions, onVisualizarVe
         numero: t.id, // Número formatado do pedido (PV-2025-XXXX)
         cliente: t.cliente,
         vendedor: t.vendedor,
-        valor: `R$ ${t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        valor: `R$ ${toSafeNumber(t.valor, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         status: t.status as StatusVenda, // ✅ USA STATUS DIRETO DO BANCO
         data: t.data,
         natureza: t.natureza,

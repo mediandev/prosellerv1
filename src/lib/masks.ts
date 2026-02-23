@@ -152,8 +152,9 @@ export const applyCPFCNPJMask = (value: string): string => {
 };
 
 // Função para formatar moeda
-export const formatCurrency = (value: number): string => {
-  return value.toLocaleString('pt-BR', {
+export const formatCurrency = (value: number | null | undefined): string => {
+  const safeValue = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  return safeValue.toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   });

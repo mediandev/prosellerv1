@@ -392,7 +392,7 @@ function AppContent() {
   });
 
   // Estados para período de comissões
-  const [commissionsPeriod, setCommissionsPeriod] = useState<string>("current_month");
+  const [commissionsPeriod, setCommissionsPeriod] = useState<string>(getCurrentMonthPeriod());
   const [commissionsCustomDateRange, setCommissionsCustomDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({ 
     from: undefined, 
     to: undefined 
@@ -681,6 +681,17 @@ function AppContent() {
 
     // Comissões
     if (currentPage === "comissoes") {
+      if (/^\d{4}-\d{2}$/.test(commissionsPeriod)) {
+        const [year, month] = commissionsPeriod.split('-').map(Number);
+        const monthIndex = month - 1;
+        const mesesNomes = [
+          "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+          "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+        ];
+        if (monthIndex >= 0 && monthIndex < 12) {
+          return `${mesesNomes[monthIndex]} ${year}`;
+        }
+      }
       switch (commissionsPeriod) {
         case "current_month":
           return `Mês Atual (${format(new Date(), "MMMM yyyy", { locale: ptBR }).replace(/^./, str => str.toUpperCase())})`;
@@ -923,6 +934,7 @@ function AppContent() {
         } else if (productView === 'create') {
           return (
             <ProductFormPage
+              mode="create"
               onBack={handleVoltarListaProdutos}
               onSave={handleSalvarProduto}
             />
@@ -931,6 +943,7 @@ function AppContent() {
           return (
             <ProductFormPage
               productId={selectedProductId}
+              mode="edit"
               onBack={handleVoltarListaProdutos}
               onSave={handleSalvarProduto}
             />
@@ -939,6 +952,7 @@ function AppContent() {
           return (
             <ProductFormPage
               productId={selectedProductId}
+              mode="view"
               onBack={handleVoltarListaProdutos}
               onSave={handleSalvarProduto}
             />

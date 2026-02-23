@@ -156,6 +156,11 @@ serve(async (req) => {
     if (body.pedido_minimo !== undefined) sanitizedData.pedido_minimo = body.pedido_minimo
     if (body.vendedoresatribuidos !== undefined) sanitizedData.vendedoresatribuidos = body.vendedoresatribuidos
     if (body.observacao_interna !== undefined) sanitizedData.observacao_interna = sanitizeInput(body.observacao_interna).trim()
+    if (body.codigo_origem !== undefined) sanitizedData.codigo_origem = body.codigo_origem ? sanitizeInput(body.codigo_origem).trim() : null
+    if (body.codigo_tiny_sistema !== undefined) sanitizedData.codigo_tiny_sistema = body.codigo_tiny_sistema ? sanitizeInput(body.codigo_tiny_sistema).trim() : null
+    if (body.codigo_tiny_id_externo !== undefined) sanitizedData.codigo_tiny_id_externo = body.codigo_tiny_id_externo ? sanitizeInput(body.codigo_tiny_id_externo).trim() : null
+    if (body.codigo_tiny_integration_ref !== undefined) sanitizedData.codigo_tiny_integration_ref = body.codigo_tiny_integration_ref ? sanitizeInput(body.codigo_tiny_integration_ref).trim() : null
+    if (body.codigo_gerado_em !== undefined) sanitizedData.codigo_gerado_em = body.codigo_gerado_em || null
 
     console.log('[UPDATE-CLIENTE-V2] Step 5: Calling RPC function...', { p_cliente_id: clienteIdNum, p_atualizado_por: user.id })
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
@@ -181,6 +186,38 @@ serve(async (req) => {
     if (rpcError) {
       console.error('[UPDATE-CLIENTE-V2] RPC Error:', { message: rpcError.message, details: rpcError.details, code: rpcError.code })
       throw new Error(`Database operation failed: ${rpcError.message}`)
+    }
+
+    if (
+      sanitizedData.codigo_origem !== undefined ||
+      sanitizedData.codigo_tiny_sistema !== undefined ||
+      sanitizedData.codigo_tiny_id_externo !== undefined ||
+      sanitizedData.codigo_tiny_integration_ref !== undefined ||
+      sanitizedData.codigo_gerado_em !== undefined
+    ) {
+      const { error: metadataError } = await supabase
+        .from('cliente')
+        .update({
+          codigo_origem: sanitizedData.codigo_origem,
+          codigo_tiny_sistema: sanitizedData.codigo_tiny_sistema,
+          codigo_tiny_id_externo: sanitizedData.codigo_tiny_id_externo,
+          codigo_tiny_integration_ref: sanitizedData.codigo_tiny_integration_ref,
+          codigo_gerado_em: sanitizedData.codigo_gerado_em,
+        })
+        .eq('cliente_id', clienteIdNum)
+
+      if (metadataError) {
+        console.error('[UPDATE-CLIENTE-V2] Metadata update error:', metadataError)
+        throw new Error(`Database operation failed: ${metadataError.message}`)
+      }
+
+      if (rpcData?.[0]) {
+        rpcData[0].codigo_origem = sanitizedData.codigo_origem
+        rpcData[0].codigo_tiny_sistema = sanitizedData.codigo_tiny_sistema
+        rpcData[0].codigo_tiny_id_externo = sanitizedData.codigo_tiny_id_externo
+        rpcData[0].codigo_tiny_integration_ref = sanitizedData.codigo_tiny_integration_ref
+        rpcData[0].codigo_gerado_em = sanitizedData.codigo_gerado_em
+      }
     }
 
     console.log('[UPDATE-CLIENTE-V2] RPC call successful:', { dataLength: rpcData?.length || 0 })

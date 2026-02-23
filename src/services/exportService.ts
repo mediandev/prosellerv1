@@ -81,6 +81,11 @@ export const exportService = {
       'Empresa Faturamento': cliente.empresaFaturamento || '',
       'Vendedor (Email)': cliente.vendedorEmail || '',
       'Lista de Preços': cliente.listaPrecos || '',
+      'Condições de Pagamento': Array.isArray(cliente.condicoesPagamentoNomes)
+        ? cliente.condicoesPagamentoNomes.join(' | ')
+        : (Array.isArray(cliente.condicoesPagamentoAssociadas)
+          ? cliente.condicoesPagamentoAssociadas.join(' | ')
+          : ''),
       'Desconto Padrão (%)': cliente.descontoPadrao || 0,
       'Desconto Financeiro (%)': cliente.descontoFinanceiro || 0,
       'Pedido Mínimo (R$)': cliente.pedidoMinimo || 0,

@@ -90,6 +90,11 @@ export interface CondicaoPagamento {
 export interface Cliente {
   id: string;
   codigo?: string; // Código do cliente (manual ou automático)
+  codigoOrigem?: 'tiny_dap' | 'tiny_cantico' | 'sequencial' | 'manual';
+  codigoTinySistema?: 'dap' | 'cantico';
+  codigoTinyIdExterno?: string;
+  codigoTinyIntegrationRef?: string;
+  codigoGeradoEm?: string;
   
   // Dados Cadastrais - Identificação
   tipoPessoa: TipoPessoa;

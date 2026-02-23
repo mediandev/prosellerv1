@@ -42,9 +42,12 @@ Lista de clientes mostrando duplicidade do mesmo cliente.
 
 ### 👤 Lista de Clientes (Vendedor)
 
--   [ ] Exibir clientes vinculados ao vendedor.
+-   [ ] Clientes > Lista de Clientes Exibir clientes vinculados ao vendedor
+Para o usuário vendedor, a lista de clientes não exibe nenhum cliente. 
+Note que o teste foi feito com o usuário do vendedor Donato, que tem clientes vinculados 
+a ele..
 
-📸 Evidência visual --- página 5\
+📸 Evidência visual --- ![alt text](image-2.png)
 Lista vazia para usuário vendedor mesmo com clientes vinculados.
 
 ------------------------------------------------------------------------

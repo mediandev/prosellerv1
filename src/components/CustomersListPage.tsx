@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Cliente } from '../types/customer';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -81,6 +81,7 @@ export function CustomersListPage({
   onVisualizarCliente,
   onEditarCliente,
 }: CustomersListPageProps) {
+  const SEARCH_DEBOUNCE_MS = 700;
   const { usuario, temPermissao, ehBackoffice } = useAuth();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,6 +97,7 @@ export function CustomersListPage({
   const [sortField, setSortField] = useState<keyof Cliente | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [segmentos, setSegmentos] = useState<Array<{ id: string | number; nome: string }>>([]);
+  const requestIdRef = useRef(0);
 
   // Carregar lista de segmentos para o filtro (nome do segmento vindo da API)
   useEffect(() => {
@@ -107,9 +109,9 @@ export function CustomersListPage({
   // Busca com debounce (declarado antes de carregarClientes para evitar "before initialization")
   const [searchDebounced, setSearchDebounced] = useState('');
   useEffect(() => {
-    const t = setTimeout(() => setSearchDebounced(searchTerm), 400);
+    const t = setTimeout(() => setSearchDebounced(searchTerm), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [searchTerm]);
+  }, [searchTerm, SEARCH_DEBOUNCE_MS]);
 
   // Mapear situação (UI) para status_aprovacao (API)
   const situacaoToStatusAprovacao = useCallback((situacao: string): string | undefined => {
@@ -124,6 +126,7 @@ export function CustomersListPage({
 
   // Carregar clientes do Supabase com paginação e filtros no servidor
   const carregarClientes = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
       const statusAprovacao = situacaoToStatusAprovacao(situacaoFiltro);
@@ -132,8 +135,12 @@ export function CustomersListPage({
         limit: itensPorPagina,
         search: searchDebounced.trim() || undefined,
         status_aprovacao: statusAprovacao,
+        vendedor: ehBackoffice() ? undefined : usuario?.id,
       };
       const data = await api.get<{ clientes: Cliente[]; pagination?: { page: number; limit: number; total: number; total_pages: number } }>('clientes', { params });
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       if (data && typeof data === 'object' && 'clientes' in data && Array.isArray(data.clientes)) {
         setClientes(data.clientes);
         const pag = data.pagination;
@@ -146,15 +153,20 @@ export function CustomersListPage({
         setTotalPaginas(1);
       }
     } catch (error: any) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       console.error('[CLIENTES-LIST] Erro ao carregar clientes:', error);
       setClientes([]);
       setTotalItens(0);
       setTotalPaginas(1);
       toast.error('Erro ao carregar clientes da API.');
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
-  }, [paginaAtual, itensPorPagina, searchDebounced, situacaoFiltro, situacaoToStatusAprovacao]);
+  }, [paginaAtual, itensPorPagina, searchDebounced, situacaoFiltro, situacaoToStatusAprovacao, ehBackoffice, usuario]);
 
   useEffect(() => {
     carregarClientes();
@@ -163,7 +175,7 @@ export function CustomersListPage({
   // Reset para página 1 quando filtros mudam
   useEffect(() => {
     setPaginaAtual(1);
-  }, [itensPorPagina, situacaoFiltro, searchDebounced]);
+  }, [itensPorPagina, situacaoFiltro, searchTerm]);
 
   const goToPage = (page: number) => {
     setPaginaAtual(Math.max(1, Math.min(page, totalPaginas)));
@@ -192,17 +204,6 @@ export function CustomersListPage({
   const clientesFiltrados = useMemo(() => {
     let resultado = clientes;
 
-    if (!ehBackoffice() && usuario) {
-      resultado = resultado.filter((cliente) => {
-        if (cliente.statusAprovacao !== 'aprovado') return false;
-        if (cliente.vendedorAtribuido) return cliente.vendedorAtribuido.id === usuario.id;
-        if (cliente.vendedoresAtribuidos && Array.isArray(cliente.vendedoresAtribuidos)) {
-          return cliente.vendedoresAtribuidos.some((v) => v.id === usuario.id);
-        }
-        return false;
-      });
-    }
-
     if (segmentoFiltro && segmentoFiltro !== 'todos') {
       resultado = resultado.filter((cliente) => cliente.segmentoMercado === segmentoFiltro);
     }
@@ -224,7 +225,7 @@ export function CustomersListPage({
     }
 
     return resultado;
-  }, [clientes, segmentoFiltro, ehBackoffice, usuario, sortField, sortDirection]);
+  }, [clientes, segmentoFiltro, sortField, sortDirection]);
 
   const indiceInicial = totalItens === 0 ? 0 : (paginaAtual - 1) * itensPorPagina + 1;
   const indiceFinal = Math.min(paginaAtual * itensPorPagina, totalItens);

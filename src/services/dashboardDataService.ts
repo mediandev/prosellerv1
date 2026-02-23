@@ -7,10 +7,10 @@
  * @updated 2025-12-18 - Corrigido para buscar vendedor por ID em vez de nome
  */
 import { Venda } from '../types/venda';
-import { Cliente } from '../types/customer';
 import { NaturezaOperacao } from '../types/naturezaOperacao';
 import { Seller } from '../types';
 import { api } from './api';
+import { toSafeNumber } from '../utils/number';
 
 export interface Transaction {
   id: string;
@@ -52,10 +52,6 @@ export async function carregarDadosDashboard(): Promise<Transaction[]> {
     const vendas: Venda[] = await api.get('vendas');
     console.log('[DASHBOARD-SERVICE] Vendas carregadas:', vendas.length);
     
-    // Carregar clientes para obter informações adicionais (segmento, UF, etc.)
-    const clientes: Cliente[] = await api.get('clientes');
-    console.log('[DASHBOARD-SERVICE] Clientes carregados:', clientes.length);
-    
     // Carregar naturezas de operação para filtrar receitas
     const naturezas: NaturezaOperacao[] = await api.naturezasOperacao.list();
     console.log('[DASHBOARD-SERVICE] Naturezas de operação carregadas:', naturezas.length);
@@ -63,13 +59,7 @@ export async function carregarDadosDashboard(): Promise<Transaction[]> {
     // 🆕 Carregar vendedores para mapear ID -> Nome
     const vendedores: Seller[] = await api.get('vendedores');
     console.log('[DASHBOARD-SERVICE] Vendedores carregados:', vendedores.length);
-    
-    // Criar mapa de clientes para acesso rápido
-    const clientesMap = new Map<string, Cliente>();
-    clientes.forEach(cliente => {
-      clientesMap.set(cliente.id, cliente);
-    });
-    
+
     // Criar mapa de naturezas de operação para acesso rápido
     const naturezasMap = new Map<string, NaturezaOperacao>();
     naturezas.forEach(natureza => {
@@ -90,7 +80,6 @@ export async function carregarDadosDashboard(): Promise<Transaction[]> {
         return natureza?.geraReceita === true;
       })
       .map(venda => {
-        const cliente = clientesMap.get(venda.clienteId);
         const natureza = naturezasMap.get(venda.naturezaOperacaoId);
         
         // 🆕 Buscar nome do vendedor pelo ID
@@ -118,7 +107,9 @@ export async function carregarDadosDashboard(): Promise<Transaction[]> {
         const semanaDoMes = Math.ceil(diaDoMes / 7);
         
         // Usar valor faturado se disponível, senão usar valor do pedido (provisório)
-        const valorFinal = venda.valorFaturado ?? venda.valorPedido;
+        const valorFinal = toSafeNumber(venda.valorFaturado ?? venda.valorPedido, 0);
+        const segmentoNome = venda.segmentoMercado
+          || 'Não Classificado';
         
         // Badge verde (faturado) se:
         // 1. Tem valorFaturado preenchido OU
@@ -165,13 +156,13 @@ export async function carregarDadosDashboard(): Promise<Transaction[]> {
           clienteId: venda.clienteId, // 🆕 ID do cliente
           vendedor: nomeVendedor, // 🆕 Nome buscado pelo ID
           vendedorId: venda.vendedorId, // 🆕 ID do vendedor
-          valor: valorFinal,
+          valor: toSafeNumber(valorFinal, 0),
           quantidade: venda.totalQuantidades,
           natureza: venda.nomeNaturezaOperacao,
-          segmento: cliente?.segmentoMercado || 'Não Classificado',
-          statusCliente: cliente?.situacao || 'Ativo',
-          grupoRede: cliente?.grupoRede,
-          uf: cliente?.uf || 'N/A',
+          segmento: segmentoNome,
+          statusCliente: venda.statusCliente || 'Ativo',
+          grupoRede: venda.clienteGrupoRede,
+          uf: venda.clienteUf || 'N/A',
           data: dataFormatada,
           periodo: `Sem ${semanaDoMes}`,
           dia: diaSemana,

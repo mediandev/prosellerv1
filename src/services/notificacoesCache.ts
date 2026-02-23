@@ -29,7 +29,7 @@ export const getNotificacoesWithCache = async (): Promise<any[]> => {
   isFetching = true;
   pendingPromise = (async () => {
     try {
-      const notificacoes = await api.get('notificacoes');
+      const notificacoes = await api.notificacoes.list({ limit: 100 });
       notificacoesCache = notificacoes || [];
       lastFetchTime = Date.now();
       return notificacoesCache;

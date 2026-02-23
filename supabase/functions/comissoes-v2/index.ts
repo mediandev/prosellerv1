@@ -398,6 +398,75 @@ serve(async (req) => {
             return createHttpSuccessResponse(data)
         }
 
+        /* =========================
+           PUT /vendas
+           ========================= */
+        if (action === 'vendas' && req.method === 'PUT') {
+            if (user.tipo !== 'backoffice') throw new Error('Apenas backoffice pode editar comissões de venda')
+
+            const body = await req.json()
+            const { id, periodo, observacoes } = body ?? {}
+
+            if (!id) throw new Error('ID é obrigatório')
+
+            const updatePayload: Record<string, unknown> = {
+                editado_por: user.id,
+                editado_em: new Date().toISOString(),
+            }
+
+            if (typeof periodo === 'string' && periodo.trim()) {
+                if (!/^\d{4}-\d{2}$/.test(periodo.trim())) {
+                    throw new Error('Período inválido. Use YYYY-MM')
+                }
+                updatePayload.periodo = periodo.trim()
+            }
+
+            if (observacoes !== undefined) {
+                updatePayload.observacoes = observacoes === null ? null : String(observacoes)
+            }
+
+            const hasBusinessFields = Object.keys(updatePayload).some((k) => k !== 'editado_por' && k !== 'editado_em')
+            if (!hasBusinessFields) throw new Error('Nenhum campo para atualizar')
+
+            const { data, error } = await supabase
+                .from('vendedor_comissão')
+                .update(updatePayload)
+                .eq('vendedor_comissao_id', id)
+                .select()
+
+            if (error) throw error
+            if (!data || data.length === 0) throw new Error('Comissão de venda não encontrada')
+
+            return createHttpSuccessResponse(data[0])
+        }
+
+        /* =========================
+           DELETE /vendas
+           ========================= */
+        if (action === 'vendas' && req.method === 'DELETE') {
+            if (user.tipo !== 'backoffice') throw new Error('Apenas backoffice pode excluir comissões de venda')
+
+            const id = url.searchParams.get('id')
+            if (!id) throw new Error('ID é obrigatório')
+
+            const { data: existente, error: selectError } = await supabase
+                .from('vendedor_comissão')
+                .select('vendedor_comissao_id')
+                .eq('vendedor_comissao_id', id)
+                .maybeSingle()
+
+            if (selectError) throw selectError
+            if (!existente) throw new Error('Comissão de venda não encontrada')
+
+            const { error } = await supabase
+                .from('vendedor_comissão')
+                .delete()
+                .eq('vendedor_comissao_id', id)
+
+            if (error) throw error
+            return createHttpSuccessResponse({ success: true, id })
+        }
+
         return new Response(JSON.stringify({ error: 'Endpoint not found' }), {
             status: 404,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }

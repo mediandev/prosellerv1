@@ -1,4 +1,4 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+﻿import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -13,7 +13,7 @@ interface AuthenticatedUser {
   ativo: boolean
 }
 
-// Helper: Valida JWT e retorna usuário autenticado
+// Helper: Valida JWT e retorna usuÃ¡rio autenticado
 async function validateJWT(
   req: Request,
   supabaseUrl: string,
@@ -39,7 +39,7 @@ async function validateJWT(
       },
     })
 
-    // Verificar usuário autenticado
+    // Verificar usuÃ¡rio autenticado
     console.log('[AUTH] Calling supabase.auth.getUser...')
     const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token)
     
@@ -63,7 +63,7 @@ async function validateJWT(
       email_confirmed_at: authUser.email_confirmed_at
     })
 
-    // Buscar dados do usuário na tabela user
+    // Buscar dados do usuÃ¡rio na tabela user
     console.log('[AUTH] Querying user table with user_id:', authUser.id)
     const { data: userData, error: userError } = await supabase
       .from('user')
@@ -80,7 +80,7 @@ async function validateJWT(
         code: userError.code
       })
       
-      // Tentar buscar sem filtro de ativo para ver se o usuário existe mas está inativo
+      // Tentar buscar sem filtro de ativo para ver se o usuÃ¡rio existe mas estÃ¡ inativo
       console.log('[AUTH] Trying to find user without active filter...')
       const { data: inactiveUser, error: inactiveError } = await supabase
         .from('user')
@@ -130,7 +130,7 @@ async function validateJWT(
       tipo: authenticatedUser.tipo
     })
 
-    // Atualizar último acesso (não bloqueia se falhar)
+    // Atualizar Ãºltimo acesso (nÃ£o bloqueia se falhar)
     try {
       const { error: updateError } = await supabase
         .from('user')
@@ -146,7 +146,7 @@ async function validateJWT(
           hint: updateError.hint,
           code: updateError.code
         })
-        // Não retorna erro, apenas loga o warning
+        // NÃ£o retorna erro, apenas loga o warning
       } else {
         console.log('[AUTH] ultimo_acesso updated successfully')
       }
@@ -154,7 +154,7 @@ async function validateJWT(
       console.error('[AUTH] WARNING: Exception updating ultimo_acesso:', {
         message: updateException instanceof Error ? updateException.message : String(updateException)
       })
-      // Não retorna erro, apenas loga o warning
+      // NÃ£o retorna erro, apenas loga o warning
     }
 
     return { user: authenticatedUser, error: null }
@@ -167,7 +167,7 @@ async function validateJWT(
   }
 }
 
-// Helper: Cria resposta de erro de autenticação
+// Helper: Cria resposta de erro de autenticaÃ§Ã£o
 function createAuthErrorResponse(message: string, statusCode: number = 401): Response {
   return new Response(
     JSON.stringify({ 
@@ -217,7 +217,7 @@ function formatErrorResponse(error: Error | unknown): Response {
       statusCode = 403
     } else if (error.message.includes('not found')) {
       statusCode = 404
-    } else if (error.message.includes('validation') || error.message.includes('invalid') || error.message.includes('obrigatório')) {
+    } else if (error.message.includes('validation') || error.message.includes('invalid') || error.message.includes('obrigatÃ³rio')) {
       statusCode = 400
     }
   }
@@ -241,7 +241,7 @@ function formatErrorResponse(error: Error | unknown): Response {
   )
 }
 
-// Helper: Cria erro de validação
+// Helper: Cria erro de validaÃ§Ã£o
 class ValidationError extends Error {
   constructor(message: string) {
     super(message)
@@ -263,7 +263,7 @@ serve(async (req) => {
   }
 
   try {
-    // 1. AUTENTICAÇÃO
+    // 1. AUTENTICAÃ‡ÃƒO
     console.log('[GET-USER-V2] Step 1: Starting authentication...')
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -301,7 +301,7 @@ serve(async (req) => {
 
     if (!userId || userId === 'get-user-v2') {
       console.error('[GET-USER-V2] ERROR: user_id is missing or invalid')
-      throw new ValidationError('user_id é obrigatório na URL')
+      throw new ValidationError('user_id Ã© obrigatÃ³rio na URL')
     }
 
     // 3. CHAMADA RPC
@@ -345,6 +345,19 @@ serve(async (req) => {
       throw new Error('User not found')
     }
 
+    const { data: permsData, error: permsError } = await supabase
+      .from('user')
+      .select('permissoes')
+      .eq('user_id', userId)
+      .single()
+
+    if (permsError) {
+      console.error('[GET-USER-V2] ERROR loading permissions:', permsError)
+      throw new Error(`Database operation failed: ${permsError.message}`)
+    }
+
+    rpcData[0].permissoes = Array.isArray(permsData?.permissoes) ? permsData.permissoes : []
+
     // 4. RESPOSTA
     const duration = Date.now() - startTime
     console.log(`[GET-USER-V2] SUCCESS: User fetched: ${userId} by ${user.id} (${duration}ms)`)
@@ -369,3 +382,4 @@ serve(async (req) => {
     return formatErrorResponse(error)
   }
 })
+

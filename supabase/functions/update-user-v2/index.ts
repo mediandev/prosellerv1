@@ -1,4 +1,4 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+﻿import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -23,6 +23,7 @@ interface UpdateUserBody {
   ref_user_role_id?: number
   user_login?: string
   ativo?: boolean
+  permissoes?: string[]
   
   // Campos da tabela dados_vendedor (quando tipo = 'vendedor')
   iniciais?: string
@@ -48,7 +49,7 @@ interface UpdateUserBody {
   contatosAdicionais?: any[]
 }
 
-// Helper: Valida JWT (mesmo código da get-user-v2)
+// Helper: Valida JWT (mesmo cÃ³digo da get-user-v2)
 async function validateJWT(
   req: Request,
   supabaseUrl: string,
@@ -115,7 +116,7 @@ function formatErrorResponse(error: Error | unknown): Response {
     if (error.message.includes('Unauthorized') || error.message.includes('authentication')) statusCode = 401
     else if (error.message.includes('permission') || error.message.includes('forbidden')) statusCode = 403
     else if (error.message.includes('not found')) statusCode = 404
-    else if (error.message.includes('validation') || error.message.includes('invalid') || error.message.includes('obrigatório')) statusCode = 400
+    else if (error.message.includes('validation') || error.message.includes('invalid') || error.message.includes('obrigatÃ³rio')) statusCode = 400
   }
   console.error('[ERROR]', { message: errorMessage, statusCode, stack: error instanceof Error ? error.stack : undefined })
   return new Response(
@@ -177,7 +178,7 @@ serve(async (req) => {
 
     if (!userId || userId === 'update-user-v2') {
       console.error('[UPDATE-USER-V2] ERROR: user_id is missing or invalid')
-      throw new ValidationError('user_id é obrigatório na URL')
+      throw new ValidationError('user_id Ã© obrigatÃ³rio na URL')
     }
 
     console.log('[UPDATE-USER-V2] Step 3: Validating input...')
@@ -185,7 +186,7 @@ serve(async (req) => {
     console.log('[UPDATE-USER-V2] Request body received:', { fields: Object.keys(body) })
 
     if (body.email !== undefined && !validateEmail(body.email)) {
-      throw new ValidationError('Formato de email inválido')
+      throw new ValidationError('Formato de email invÃ¡lido')
     }
     if (body.nome !== undefined && !validateMinLength(body.nome, 2)) {
       throw new ValidationError('Nome deve ter pelo menos 2 caracteres')
@@ -202,6 +203,15 @@ serve(async (req) => {
     if (body.ref_user_role_id !== undefined) sanitizedData.ref_user_role_id = body.ref_user_role_id
     if (body.user_login !== undefined) sanitizedData.user_login = sanitizeInput(body.user_login).trim()
     if (body.ativo !== undefined) sanitizedData.ativo = body.ativo
+    if (body.permissoes !== undefined) {
+      if (!Array.isArray(body.permissoes)) {
+        throw new ValidationError('permissoes deve ser um array de strings')
+      }
+      sanitizedData.permissoes = body.permissoes
+        .filter((p) => typeof p === 'string')
+        .map((p) => sanitizeInput(p).trim())
+        .filter((p) => p.length > 0)
+    }
 
     console.log('[UPDATE-USER-V2] Step 5: Calling RPC function update_user_v2...', { p_user_id: userId, p_updated_by: user.id })
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
@@ -231,8 +241,25 @@ serve(async (req) => {
       console.error('[UPDATE-USER-V2] ERROR: RPC returned empty data')
       throw new Error('User not found')
     }
+    if (sanitizedData.permissoes !== undefined) {
+      if (user.tipo !== 'backoffice') {
+        throw new ValidationError('Apenas backoffice pode alterar permissoes')
+      }
 
-    // Se há dados de vendedor e o usuário é do tipo vendedor, atualizar dados_vendedor
+      const { error: permsError } = await supabase
+        .from('user')
+        .update({ permissoes: sanitizedData.permissoes })
+        .eq('user_id', userId)
+
+      if (permsError) {
+        console.error('[UPDATE-USER-V2] RPC Error (permissions update):', permsError)
+        throw new Error(`Database operation failed: ${permsError.message}`)
+      }
+
+      rpcData[0].permissoes = sanitizedData.permissoes
+    }
+
+    // Se hÃ¡ dados de vendedor e o usuÃ¡rio Ã© do tipo vendedor, atualizar dados_vendedor
     const hasVendedorData = body.iniciais !== undefined || body.cpf !== undefined || body.telefone !== undefined ||
       body.dataAdmissao !== undefined || body.status !== undefined || body.cnpj !== undefined ||
       body.razaoSocial !== undefined || body.nomeFantasia !== undefined || body.inscricaoEstadual !== undefined ||
@@ -281,7 +308,7 @@ serve(async (req) => {
           details: dadosVendedorError.details,
           code: dadosVendedorError.code
         });
-        // Não falhar completamente, apenas logar o erro
+        // NÃ£o falhar completamente, apenas logar o erro
         console.warn('[UPDATE-USER-V2] WARNING: Failed to update dados_vendedor, but user was updated');
       } else {
         console.log('[UPDATE-USER-V2] dados_vendedor updated successfully:', { dataLength: dadosVendedorData?.length || 0 });
@@ -292,7 +319,7 @@ serve(async (req) => {
     console.log(`[UPDATE-USER-V2] SUCCESS: User updated: ${userId} by ${user.id} (${duration}ms)`)
 
     return createHttpSuccessResponse(
-      { user: rpcData[0], message: 'Usuário atualizado com sucesso' },
+      { user: rpcData[0], message: 'UsuÃ¡rio atualizado com sucesso' },
       200,
       { userId: user.id, duration: `${duration}ms` }
     )
@@ -306,3 +333,4 @@ serve(async (req) => {
     return formatErrorResponse(error)
   }
 })
+
