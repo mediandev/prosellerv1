@@ -1288,7 +1288,7 @@ class TinyERPSyncService {
           console.log('ℹ️ Cliente já existe no Tiny ERP');
           clienteCadastrado = true;
         } else if (msgErro.includes('HTTP Error: 404') || msgErro.includes('File not found')) {
-          console.error('❌ Erro na API do Tiny ERP - URL inválida ou m��todo incorreto');
+          console.error('? Erro na API do Tiny ERP - URL inv�lida ou m??todo incorreto');
           console.error('❌ Contate o suporte técnico');
           throw new Error('Erro crítico na API do Tiny ERP. Contate o suporte.');
         } else {
@@ -1442,7 +1442,7 @@ class TinyERPSyncService {
             errorMsg.includes('Erro na validação') || errorMsg.includes('não encontrado')) {
           console.error('');
           console.error('🚨 ERRO DE VALIDAÇÃO DO TINY ERP');
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━���━');
+          console.error('?????????????????????????????????????????????');
           console.error('⚠️  IMPORTANTE: A mensagem "JSON mal formado" do Tiny ERP é enganadora!');
           console.error('    Ela geralmente significa que algum dado não está cadastrado ou é inválido.');
           console.error('');

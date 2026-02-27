@@ -20,6 +20,7 @@ import {
   calculateMetricsWithComparison,
 } from "../services/dashboardDataService";
 import { isStatusConcluido } from "../utils/statusVendaUtils";
+import { fetchDashboardSnapshot, type DashboardSnapshot } from "../services/dashboardSnapshotService";
 
 interface MetricCardProps {
   title: string;
@@ -129,6 +130,7 @@ interface DashboardMetricsProps {
   onTransactionsChange?: (transactions: Transaction[]) => void; // Callback para enviar transações filtradas (SEM canceladas)
   onAllTransactionsChange?: (transactions: Transaction[]) => void; // Callback para enviar TODAS as transações (COM canceladas) para CanceledSalesTable
   onRawTransactionsChange?: (transactions: Transaction[]) => void; // 🆕 NOVO: Callback para enviar TODAS as transações SEM filtro de período (para Curva ABC)
+  onDashboardSnapshotChange?: (snapshot: DashboardSnapshot | null) => void;
 }
 
 // Dados mockados para diferentes períodos
@@ -301,7 +303,7 @@ interface DateRange {
   to: Date | undefined;
 }
 
-export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChange, filters, onFiltersChange, onTransactionsChange, onAllTransactionsChange, onRawTransactionsChange }: DashboardMetricsProps) {
+export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChange, filters, onFiltersChange, onTransactionsChange, onAllTransactionsChange, onRawTransactionsChange, onDashboardSnapshotChange }: DashboardMetricsProps) {
   const { usuario } = useAuth();
   const ehVendedor = usuario?.tipo === 'vendedor';
   
@@ -316,6 +318,7 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   
   // Estado para armazenar a meta do período
   const [metaMensal, setMetaMensal] = useState<number>(0);
+  const [serverSnapshot, setServerSnapshot] = useState<DashboardSnapshot | null>(null);
   
   // Estado para armazenar as métricas calculadas
   const [metrics, setMetrics] = useState({
@@ -359,6 +362,11 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   
   // Carregar meta do período
   useEffect(() => {
+    if (serverSnapshot?.summary) {
+      setMetaMensal(serverSnapshot.summary.metaMensal || 0);
+      return;
+    }
+
     async function loadMeta() {
       // Determinar ano e mês baseado no período
       let year: number;
@@ -408,7 +416,35 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
     }
     
     loadMeta();
-  }, [period, ehVendedor, usuario]);
+  }, [period, ehVendedor, usuario, serverSnapshot]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setServerSnapshot(null);
+    onDashboardSnapshotChange?.(null);
+
+    async function loadSnapshot() {
+      try {
+        const snapshot = await fetchDashboardSnapshot({
+          period,
+          filters,
+          customDateRange: dateRange,
+        });
+        if (cancelled) return;
+        setServerSnapshot(snapshot);
+        setMetaMensal(snapshot.summary?.metaMensal || 0);
+        onDashboardSnapshotChange?.(snapshot);
+      } catch (error) {
+        console.warn('[DASHBOARD] Snapshot backend indisponível, usando cálculo local:', error);
+      }
+    }
+
+    loadSnapshot();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [period, filters, dateRange, onDashboardSnapshotChange]);
   
   // Inicializar ano baseado no período atual
   const getYearFromPeriod = (period: string) => {
@@ -657,6 +693,11 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   // Calculate metrics from filtered transactions with comparison to previous period
   useEffect(() => {
     async function calculateMetrics() {
+      if (serverSnapshot?.summary?.cards) {
+        setMetrics(serverSnapshot.summary.cards);
+        return;
+      }
+
       if (loading || allTransactions.length === 0) {
         setMetrics({
           vendasTotais: 0,
@@ -696,7 +737,7 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
     }
     
     calculateMetrics();
-  }, [loading, allTransactions, period, selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, ehVendedor, usuario, metaMensal, selectedStatusVendas, selectedCurvaABC]);
+  }, [loading, allTransactions, period, selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, ehVendedor, usuario, metaMensal, selectedStatusVendas, selectedCurvaABC, serverSnapshot]);
   const [segmentoPopoverOpen, setSegmentoPopoverOpen] = useState(false);
   
   // Extrair valores únicos das transações para os filtros

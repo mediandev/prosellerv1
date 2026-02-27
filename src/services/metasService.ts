@@ -48,14 +48,18 @@ export async function buscarMetaTotal(
     } else if (response && typeof response === 'object') {
       // Verificar diferentes formatos de resposta
       if ('total' in response) {
-        return (response as any).total || 0;
+        const total = Number((response as any).total || 0);
+        if (total > 0) return total;
       } else if ('data' in response && typeof (response as any).data === 'object') {
         const data = (response as any).data;
-        return data?.total || 0;
+        const total = Number(data?.total || 0);
+        if (total > 0) return total;
       }
     }
-    
-    return 0;
+
+    // Fallback: somar metas do período (cobre inconsistências do endpoint /total)
+    const metasPeriodo = await buscarTodasMetas(ano, mes);
+    return metasPeriodo.reduce((sum, meta) => sum + (Number(meta.metaMensal) || 0), 0);
   } catch (error) {
     console.error('[METAS] Erro ao buscar meta total:', error);
     return 0;

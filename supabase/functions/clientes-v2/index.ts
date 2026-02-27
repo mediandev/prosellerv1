@@ -105,6 +105,18 @@ function mapClienteListItem(row: Record<string, unknown>): Record<string, unknow
   }
 }
 
+function extractCondicaoPagamentoId(cond: any): string | null {
+  const raw =
+    cond?.['ID_condi\u00e7\u00f5es'] ??
+    cond?.ID_condicoes ??
+    cond?.id_condicao ??
+    cond?.condicao_id
+
+  if (raw == null) return null
+  const id = String(raw)
+  return id && id !== 'undefined' ? id : null
+}
+
 function mapClienteCompleto(rpc: {
   cliente?: Record<string, unknown>
   contato?: Record<string, unknown> | null
@@ -151,7 +163,9 @@ function mapClienteCompleto(rpc: {
     condicoesPagamentoAssociadas: Array.isArray((c as any).condicoesdisponiveis)
       ? (c as any).condicoesdisponiveis.map((x: unknown) => String(x))
       : Array.isArray(rpc.condicoes_cliente)
-        ? rpc.condicoes_cliente.map((cond: any) => String(cond.ID_condicoes ?? cond.id_condicao ?? cond.condicao_id ?? cond.id))
+        ? rpc.condicoes_cliente
+          .map((cond: any) => extractCondicaoPagamentoId(cond))
+          .filter((id: string | null): id is string => Boolean(id))
         : [],
     empresaFaturamento: (c as any).empresaFaturamento != null ? String((c as any).empresaFaturamento) : undefined,
     vendedoresAtribuidos: vendedores.map((v: any) => ({ id: v.user_id ?? v.id, nome: v.nome ?? '', email: v.email ?? '' })),
@@ -373,9 +387,22 @@ serve(async (req) => {
         }
       }
 
-      // Converter situacao para ref_situacao_id se necessario
-      let refSituacaoId: number | null = null
-      if (body.situacao) {
+      // Priorizar ID de situacao enviado no payload; fallback por nome da situacao
+      let refSituacaoId: number | null =
+        body.ref_situacao_id != null
+          ? Number(body.ref_situacao_id)
+          : body.refSituacaoId != null
+            ? Number(body.refSituacaoId)
+            : null
+
+      const statusAprovacao =
+        typeof body.status_aprovacao === 'string'
+          ? body.status_aprovacao
+          : typeof body.statusAprovacao === 'string'
+            ? body.statusAprovacao
+            : null
+
+      if ((refSituacaoId == null || Number.isNaN(refSituacaoId)) && body.situacao) {
         const { data: situacaoData, error: situacaoError } = await supabase
           .from('ref_situacao')
           .select('ref_situacao_id')
@@ -385,6 +412,7 @@ serve(async (req) => {
           refSituacaoId = situacaoData.ref_situacao_id
         }
       }
+      if (refSituacaoId != null && Number.isNaN(refSituacaoId)) refSituacaoId = null
 
       // Processar vendedoresAtribuidos - pode vir como array de IDs ou array de objetos
       let vendedoresAtribuidosArray: string[] | null = null
@@ -403,14 +431,20 @@ serve(async (req) => {
 
       // Processar condicoesPagamentoAssociadas - pode vir como array de IDs ou array de objetos
       let condicoesPagamentoIds: number[] | null = null
+      if (!body.condicoesPagamentoAssociadas && Array.isArray(body.condicoesCliente)) {
+        condicoesPagamentoIds = body.condicoesCliente
+          .map((c: any) => extractCondicaoPagamentoId(c))
+          .filter((id: string | null): id is string => Boolean(id))
+          .map((id: string) => Number(id))
+      }
       if (body.condicoesPagamentoAssociadas) {
         if (Array.isArray(body.condicoesPagamentoAssociadas)) {
           if (body.condicoesPagamentoAssociadas.length > 0) {
             // Se for array de objetos, extrair IDs
             if (typeof body.condicoesPagamentoAssociadas[0] === 'object') {
-              condicoesPagamentoIds = body.condicoesPagamentoAssociadas.map((c: any) =>
-                Number(c.id || c.condicao_id || c.condicaoId || c)
-              )
+              condicoesPagamentoIds = body.condicoesPagamentoAssociadas
+                .map((c: any) => extractCondicaoPagamentoId(c) ?? c.condicao_id ?? c.condicaoId ?? c.id)
+                .map((id: any) => Number(id))
             } else {
               // Se for array de IDs (numeros ou strings)
               condicoesPagamentoIds = body.condicoesPagamentoAssociadas.map((c: any) => Number(c))
@@ -483,6 +517,7 @@ serve(async (req) => {
         p_observacao_interna: body.observacoesInternas ?? body.observacao_interna ?? null,
         p_segmento_id: body.segmentoId ?? body.segmento_id != null ? Number(body.segmentoId ?? body.segmento_id) : null,
         p_ref_situacao_id: refSituacaoId,
+        p_status_aprovacao: statusAprovacao,
         p_atualizado_por: user.id,
       })
       if (rpcError) throw new Error(rpcError.message)

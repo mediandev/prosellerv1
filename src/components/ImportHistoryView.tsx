@@ -63,7 +63,7 @@ export function ImportHistoryView() {
         tipo: item.tipo,
         dataImportacao: new Date(item.dataImportacao || item.createdAt || item.created_at || Date.now()),
         usuarioId: String(item.usuarioId || item.usuario_uuid || ''),
-        usuarioNome: item.usuarioNome || item.usuario_nome || 'Usuário',
+        usuarioNome: item.usuarioNome || item.usuario_nome || 'Usu?rio',
         nomeArquivo: item.nomeArquivo || item.nome_arquivo || '-',
         totalLinhas: Number(item.totalLinhas || item.total_linhas || 0),
         sucessos: Number(item.sucessos || 0),
@@ -77,7 +77,7 @@ export function ImportHistoryView() {
 
       setImportHistory(mapped);
     } catch (error) {
-      console.error('[IMPORT-HISTORY] Erro ao carregar histórico:', error);
+      console.error('[IMPORT-HISTORY] Erro ao carregar hist?rico:', error);
       setImportHistory([]);
     }
   };

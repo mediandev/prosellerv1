@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Usuario, TipoUsuario } from '../types/user';
 import { api, getAuthToken, setAuthToken, isTokenExpiringSoon, refreshAuthToken } from '../services/api';
 
@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const checkSession = async () => {
       const token = getAuthToken();
       if (token) {
-        // Tentar restaurar sessÃ£o via Supabase Auth
+        // Tentar restaurar sessão via Supabase Auth
         try {
           const user = await api.auth.me();
           if (user) {
@@ -39,12 +39,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               permissoes: resolverPermissoesUsuario(user),
             };
             setUsuario(usuarioComPermissoes);
-            console.log('[AuthContext] SessÃ£o restaurada:', user.email);
+            console.log('[AuthContext] Sessão restaurada:', user.email);
           }
         } catch (error) {
           // Silently fail - it's normal to not have a session on first load
-          console.log('[AuthContext] Nenhuma sessÃ£o ativa para restaurar');
-          api.auth.signout(); // Limpar qualquer token invÃ¡lido
+          console.log('[AuthContext] Nenhuma sessão ativa para restaurar');
+          api.auth.signout(); // Limpar qualquer token inválido
         }
       }
       setLoading(false);
@@ -53,17 +53,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkSession();
   }, []);
 
-  // Verificar periodicamente se o token estÃ¡ prÃ³ximo de expirar e fazer refresh automÃ¡tico
+  // Verificar periodicamente se o token está próximo de expirar e fazer refresh automático
   useEffect(() => {
-    if (!usuario) return; // SÃ³ verificar se hÃ¡ usuÃ¡rio logado
+    if (!usuario) return; // Só verificar se há usuário logado
     
     // Verificar a cada 2 minutos
     const interval = setInterval(async () => {
       if (isTokenExpiringSoon()) {
-        console.log('[AuthContext] Token prÃ³ximo de expirar, fazendo refresh automÃ¡tico...');
+        console.log('[AuthContext] Token próximo de expirar, fazendo refresh automático...');
         const refreshed = await refreshAuthToken();
         if (!refreshed) {
-          console.warn('[AuthContext] NÃ£o foi possÃ­vel renovar o token, fazendo logout...');
+          console.warn('[AuthContext] Não foi possível renovar o token, fazendo logout...');
           logout();
         } else {
           console.log('[AuthContext] Token renovado com sucesso');
@@ -132,31 +132,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log('[AuthContext] Tentando login via Supabase:', { email });
       
-      // Usar autenticaÃ§Ã£o via Supabase Edge Functions
+      // Usar autenticação via Supabase Edge Functions
       const result = await api.auth.signin(email, senha);
       
       if (result && result.user) {
-        // Verificar se usuÃ¡rio estÃ¡ ativo
+        // Verificar se usuário está ativo
         if (!result.user.ativo) {
           return {
             success: false,
-            error: 'UsuÃ¡rio inativo. Entre em contato com o administrador.',
+            error: 'Usuário inativo. Entre em contato com o administrador.',
           };
         }
 
-        // Garantir que tem permissÃµes
+        // Garantir que tem permissões
         const usuarioComPermissoes = {
           ...result.user,
           permissoes: resolverPermissoesUsuario(result.user as Usuario),
         };
         
-        console.log('[AuthContext] âœ“ Login realizado com sucesso!', {
+        console.log('[AuthContext] ✓ Login realizado com sucesso!', {
           id: usuarioComPermissoes.id,
           nome: usuarioComPermissoes.nome,
           tipo: usuarioComPermissoes.tipo,
         });
         
-        // Atualizar estado do usuÃ¡rio
+        // Atualizar estado do usuário
         setUsuario(usuarioComPermissoes);
         
         return { success: true };
@@ -164,12 +164,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       return {
         success: false,
-        error: 'NÃ£o foi possÃ­vel obter dados do usuÃ¡rio. Tente novamente.',
+        error: 'Não foi possível obter dados do usuário. Tente novamente.',
       };
     } catch (error: any) {
-      console.error('[AuthContext] âœ— Erro ao fazer login:', error);
+      console.error('[AuthContext] ✗ Erro ao fazer login:', error);
       
-      // Mapear erros comuns para mensagens amigÃ¡veis
+      // Mapear erros comuns para mensagens amigáveis
       let errorMessage = 'Erro ao fazer login. Tente novamente.';
       
       if (error.message) {
@@ -177,16 +177,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('email ou senha')) {
           errorMessage = 'Email ou senha incorretos. Verifique suas credenciais.';
-        } else if (msg.includes('user not found') || msg.includes('usuÃ¡rio nÃ£o encontrado')) {
-          errorMessage = 'UsuÃ¡rio nÃ£o encontrado. Verifique se o email estÃ¡ correto.';
+        } else if (msg.includes('user not found') || msg.includes('usuário não encontrado')) {
+          errorMessage = 'Usuário não encontrado. Verifique se o email está correto.';
         } else if (msg.includes('inactive') || msg.includes('inativo')) {
-          errorMessage = 'UsuÃ¡rio inativo. Entre em contato com o administrador.';
+          errorMessage = 'Usuário inativo. Entre em contato com o administrador.';
         } else if (msg.includes('network') || msg.includes('fetch')) {
-          errorMessage = 'Erro de conexÃ£o. Verifique sua internet e tente novamente.';
+          errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente.';
         } else if (msg.includes('token') || msg.includes('unauthorized')) {
-          errorMessage = 'SessÃ£o expirada. FaÃ§a login novamente.';
+          errorMessage = 'Sessão expirada. Faça login novamente.';
         } else {
-          // Usar mensagem do erro se for especÃ­fica
+          // Usar mensagem do erro se for específica
           errorMessage = error.message;
         }
       }

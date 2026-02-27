@@ -835,7 +835,15 @@ export function CustomerFormDadosCadastrais({
             <Label htmlFor="situacao">Situação *</Label>
             <Select
               value={situacaoNormalizada}
-              onValueChange={(value: SituacaoCliente) => updateFormData({ situacao: value })}
+              onValueChange={(value: SituacaoCliente) => {
+                const situacaoSelecionada = situacoes.find(
+                  (s) => String(s.nome).trim().toLowerCase() === String(value).trim().toLowerCase()
+                );
+                updateFormData({
+                  situacao: value,
+                  refSituacaoId: situacaoSelecionada ? Number(situacaoSelecionada.id) : undefined,
+                });
+              }}
               disabled={readOnly}
             >
               <SelectTrigger id="situacao">

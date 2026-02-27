@@ -144,9 +144,10 @@ interface SalesChartProps {
   period: string;
   filters?: DashboardFilters;
   transactions: Transaction[]; // Receber transações já filtradas
+  metaOverride?: number | null;
 }
 
-export function SalesChart({ period, filters, transactions }: SalesChartProps) {
+export function SalesChart({ period, filters, transactions, metaOverride }: SalesChartProps) {
   const { usuario } = useAuth();
   const ehVendedor = usuario?.tipo === 'vendedor';
   
@@ -185,6 +186,11 @@ export function SalesChart({ period, filters, transactions }: SalesChartProps) {
   // Carregar meta do período
   useEffect(() => {
     async function loadMeta() {
+      if (typeof metaOverride === 'number') {
+        setMetaPeriodo(metaOverride);
+        return;
+      }
+
       if (!getPeriodoMeta.compativel) {
         console.log('[SALES CHART] ⚠️ Período não compatível com meta:', period);
         setMetaPeriodo(0);
@@ -246,7 +252,7 @@ export function SalesChart({ period, filters, transactions }: SalesChartProps) {
     }
     
     loadMeta();
-  }, [getPeriodoMeta, ehVendedor, usuario, filters]);
+  }, [getPeriodoMeta, ehVendedor, usuario, filters, metaOverride]);
   
   // Calculate chart data from filtered transactions
   const data = useMemo(() => {

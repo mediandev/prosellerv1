@@ -17,7 +17,6 @@ import { CustomerFormContaCorrente } from './CustomerFormContaCorrente';
 import { CustomerHistoryTab } from './CustomerHistoryTab';
 import { CustomerMixTab } from './CustomerMixTab';
 import { CustomerIndicatorsTab } from './CustomerIndicatorsTab';
-import { CNPJDebugger } from './CNPJDebugger';
 import { historyService } from '../services/historyService';
 import { customerCodeService } from '../services/customerCodeService';
 import { emailService } from '../services/emailService';
@@ -31,6 +30,19 @@ interface CustomerFormPageProps {
   onRejeitar?: () => void;
 }
 
+const extractCondicaoPagamentoIdFromVinculoLocal = (item: any): string | null => {
+  const raw =
+    item?.['ID_condi\u00e7\u00f5es'] ??
+    item?.['ID_condi\u00c3\u00a7\u00c3\u00b5es'] ??
+    item?.ID_condicoes ??
+    item?.id_condicao ??
+    item?.condicao_id;
+
+  if (raw == null) return null;
+  const id = String(raw);
+  return id && id !== 'undefined' ? id : null;
+};
+
 export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejeitar }: CustomerFormPageProps) {
   const { usuario, temPermissao } = useAuth();
   const [activeTab, setActiveTab] = useState('dados-cadastrais');
@@ -40,7 +52,7 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
   const [motivoRejeicao, setMotivoRejeicao] = useState('');
   const [formData, setFormData] = useState<Partial<Cliente>>({
     tipoPessoa: 'Pessoa Jurídica',
-    situacao: 'Ativo',
+    situacao: 'ATIVO',
     enderecoEntregaDiferente: false,
     pessoasContato: [],
     vendedorAtribuido: undefined,
@@ -48,7 +60,7 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
     descontoFinanceiro: 0,
     condicoesPagamentoAssociadas: [],
     pedidoMinimo: 0,
-    empresaFaturamento: '',
+    empresaFaturamento: 0,
     requisitosLogisticos: {
       entregaAgendada: false,
       horarioRecebimentoHabilitado: false,
@@ -122,10 +134,11 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
         uf: clienteData.uf || endereco.uf || '',
         municipio: clienteData.municipio || endereco.municipio || '',
         // Mapear condições_cliente se vierem da RPC
-        condicoesPagamentoAssociadas: clienteData.condicoesPagamentoAssociadas || 
-          (Array.isArray(clienteData.condicoesCliente) 
-            ? clienteData.condicoesCliente.map((c: any) => String(c.id_condicao || c.ID_condições || c.id || c))
-            : []),
+        condicoesPagamentoAssociadas: Array.isArray(clienteData.condicoesCliente)
+          ? clienteData.condicoesCliente
+              .map((c: any) => extractCondicaoPagamentoIdFromVinculoLocal(c))
+              .filter((id: string | null): id is string => Boolean(id))
+          : (clienteData.condicoesPagamentoAssociadas || []),
       };
 
       console.log('[CUSTOMER-FORM] Cliente completo mapeado:', {
@@ -279,8 +292,8 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
             criadoPor: usuario.nome,
             atualizadoPor: usuario.nome,
             // Se for vendedor, definir status como pendente e situação como Análise
-            statusAprovacao: usuario.tipo === 'vendedor' ? 'pendente' : (formData.statusAprovacao || 'aprovado'),
-            situacao: usuario.tipo === 'vendedor' ? 'Análise' : (formData.situacao || 'Ativo'),
+            statusAprovacao: usuario.tipo === 'vendedor' ? 'aprovado' : (formData.statusAprovacao || 'aprovado'),
+            situacao: usuario.tipo === 'vendedor' ? 'Análise' : (formData.situacao || 'ATIVO'),
             vendedorAtribuido: usuario.tipo === 'vendedor' 
               ? { id: usuario.id, nome: usuario.nome, email: usuario.email || '' }
               : formData.vendedorAtribuido,
@@ -310,7 +323,7 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
           if (usuario.tipo === 'vendedor') {
             await api.notificacoes.createForBackoffice({
               tipo: 'cliente_pendente_aprovacao',
-              titulo: 'Novo cliente aguardando aprova��o',
+              titulo: 'Novo cliente aguardando aprovação',
               mensagem: `O vendedor ${usuario.nome} cadastrou um novo cliente: ${novoCliente.razaoSocial}`,
               link: '/clientes/pendentes',
               dadosAdicionais: {
@@ -470,7 +483,7 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
       const clienteAtualizado = {
         ...formData,
         statusAprovacao: 'aprovado',
-        situacao: 'Ativo',
+        situacao: 'ATIVO',
         dataAtualizacao: new Date().toISOString(),
         atualizadoPor: usuario.nome,
       };
@@ -480,7 +493,7 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
         console.log('[APROVAÇÃO] Cliente atualizado no Supabase:', {
           clienteId,
           statusAprovacao: 'aprovado',
-          situacao: 'Ativo',
+          situacao: 'ATIVO',
         });
       } catch (apiError: any) {
         console.error('[APROVAÇÃO] Erro ao atualizar no Supabase:', apiError);
@@ -644,6 +657,11 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
     : 'Visualizar Cliente';
 
   const podeEditar = temPermissao('clientes.editar');
+  const podeAprovarNoModoEdicao =
+    modo !== 'aprovar' &&
+    !!clienteId &&
+    temPermissao('clientes.aprovar') &&
+    String(formData.statusAprovacao ?? '').toLowerCase() === 'pendente';
 
   return (
     <div className="space-y-4">
@@ -717,6 +735,25 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
                 <X className="h-4 w-4 mr-2" />
                 Cancelar
               </Button>
+              {podeAprovarNoModoEdicao && (
+                <Button
+                  onClick={() => setMostrarDialogRejeitar(true)}
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Rejeitar
+                </Button>
+              )}
+              {podeAprovarNoModoEdicao && (
+                <Button
+                  onClick={handleAprovarCliente}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Aprovar
+                </Button>
+              )}
               <Button onClick={handleSave}>
                 <Save className="h-4 w-4 mr-2" />
                 Salvar
@@ -725,6 +762,25 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
           )}
           {modo !== 'visualizar' && modo !== 'aprovar' && !readOnly && (
             <>
+              {podeAprovarNoModoEdicao && (
+                <Button
+                  onClick={() => setMostrarDialogRejeitar(true)}
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Rejeitar
+                </Button>
+              )}
+              {podeAprovarNoModoEdicao && (
+                <Button
+                  onClick={handleAprovarCliente}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Aprovar
+                </Button>
+              )}
               <Button onClick={handleSave}>
                 <Save className="h-4 w-4 mr-2" />
                 Salvar
@@ -735,7 +791,6 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
       </div>
 
       {/* Debug Tool - Mostrar apenas em modo de criação para não poluir */}
-      {modo === 'criar' && <CNPJDebugger />}
 
       <Card>
         <CardContent className="pt-6">
@@ -905,6 +960,25 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
           <Button variant="outline" onClick={modo === 'visualizar' ? handleCancelarEdicao : onVoltar}>
             Cancelar
           </Button>
+          {podeAprovarNoModoEdicao && (
+            <Button
+              onClick={() => setMostrarDialogRejeitar(true)}
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              Rejeitar
+            </Button>
+          )}
+          {podeAprovarNoModoEdicao && (
+            <Button
+              onClick={handleAprovarCliente}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Aprovar
+            </Button>
+          )}
           <Button onClick={handleSave}>
             <Save className="h-4 w-4 mr-2" />
             Salvar Cliente

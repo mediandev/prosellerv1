@@ -105,6 +105,7 @@ export interface Cliente {
   nomeFantasia?: string;
   inscricaoEstadual?: string;
   situacao: SituacaoCliente;
+  refSituacaoId?: number;
   segmentoMercado: string;
   segmentoId?: string; // FK para segmento_cliente (id da tabela segmento_cliente)
   grupoRede?: string;

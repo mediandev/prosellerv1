@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompanies } from '../hooks/useCompanies';
 import { Venda, ItemVenda, StatusVenda, ItemFaturado } from '../types/venda';
@@ -79,7 +79,7 @@ import { formatCurrency, formatCNPJ, formatCPF } from '../lib/masks';
 import { mockNaturezasOperacao } from '../data/mockNaturezasOperacao';
 import { condicoesPagamentoMock } from '../data/mockCondicoesPagamento';
 
-// FunÃ§Ã£o auxiliar para converter Date para string local (yyyy-mm-dd) sem conversÃ£o de fuso horÃ¡rio
+// Função auxiliar para converter Date para string local (yyyy-mm-dd) sem conversão de fuso horário
 const formatarDataParaInput = (data: Date | string): string => {
   if (typeof data === 'string') {
     // Evita problemas de fuso com strings no formato date-only (YYYY-MM-DD).
@@ -93,10 +93,10 @@ const formatarDataParaInput = (data: Date | string): string => {
   return `${ano}-${mes}-${dia}`;
 };
 
-// FunÃ§Ã£o auxiliar para criar Date a partir de string local (yyyy-mm-dd) sem conversÃ£o de fuso horÃ¡rio
+// Função auxiliar para criar Date a partir de string local (yyyy-mm-dd) sem conversão de fuso horário
 const criarDataLocal = (dataString: string): Date => {
   const [ano, mes, dia] = dataString.split('-').map(Number);
-  return new Date(ano, mes - 1, dia, 12, 0, 0); // Meio-dia para evitar problemas de fuso horÃ¡rio
+  return new Date(ano, mes - 1, dia, 12, 0, 0); // Meio-dia para evitar problemas de fuso horário
 };
 
 interface SaleFormPageProps {
@@ -105,7 +105,7 @@ interface SaleFormPageProps {
   onVoltar: () => void;
 }
 
-// FunÃ§Ã£o auxiliar para remover duplicatas de arrays por ID
+// Função auxiliar para remover duplicatas de arrays por ID
 const removeDuplicatesById = <T extends { id: string }>(array: T[]): T[] => {
   return Array.from(new Map(array.map(item => [item.id, item])).values());
 };
@@ -114,7 +114,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   const { usuario, temPermissao } = useAuth();
   const { companies: companiesRaw } = useCompanies();
 
-  // Garantir que companies nÃ£o tem duplicatas
+  // Garantir que companies não tem duplicatas
   const companies = useMemo(() => removeDuplicatesById(companiesRaw), [companiesRaw]);
 
   const [modoAtual, setModoAtual] = useState(modo);
@@ -137,10 +137,10 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     valorPedido: 0,
   });
 
-  // Guardar dados originais para cancelar ediÃ§Ã£o
+  // Guardar dados originais para cancelar edição
   const [dadosOriginais, setDadosOriginais] = useState<Partial<Venda> | null>(null);
 
-  // Estados para adiÃ§Ã£o de itens
+  // Estados para adição de itens
   const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ItemVenda | null>(null);
   const [selectedProdutoId, setSelectedProdutoId] = useState<string>('');
@@ -155,7 +155,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   const [isLoadingCliente, setIsLoadingCliente] = useState(false); // Estado para carregamento dos dados completos do cliente
   const clienteSearchTimeout = useRef<number | null>(null);
 
-  // Estados para controlar exibiÃ§Ã£o por etapas (apenas no modo criar)
+  // Estados para controlar exibição por etapas (apenas no modo criar)
   const [mostrarCamposCliente, setMostrarCamposCliente] = useState(modo !== 'criar');
   const [mostrarDemaisCampos, setMostrarDemaisCampos] = useState(modo !== 'criar');
 
@@ -185,7 +185,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   const [listasPreco, setListasPreco] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Estado para controlar validaÃ§Ã£o visual de campos
+  // Estado para controlar validação visual de campos
   const [camposComErro, setCamposComErro] = useState<Set<string>>(new Set());
   const [tentouSalvar, setTentouSalvar] = useState(false);
 
@@ -214,25 +214,25 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     [produtosDisponiveisParaPedido, selectedProdutoId]
   );
 
-  // Verificar se pedido estÃ¡ bloqueado para ediÃ§Ã£o (jÃ¡ foi enviado ao ERP)
+  // Verificar se pedido está bloqueado para edição (já foi enviado ao ERP)
   const pedidoBloqueado = useMemo(() => {
     if (modo === 'criar') return false;
     if (!formData.integracaoERP?.erpPedidoId) return false;
     return true;
   }, [modo, formData.integracaoERP]);
 
-  // Verificar se usuÃ¡rio pode editar este pedido
+  // Verificar se usuário pode editar este pedido
   const podeEditar = useMemo(() => {
-    // Se estÃ¡ criando, sempre pode editar
+    // Se está criando, sempre pode editar
     if (modo === 'criar') return true;
 
-    // Se o pedido estÃ¡ bloqueado (enviado ao ERP), nÃ£o pode editar
+    // Se o pedido está bloqueado (enviado ao ERP), não pode editar
     if (pedidoBloqueado) return false;
 
-    // Verificar permissÃ£o de editar vendas
+    // Verificar permissão de editar vendas
     if (!temPermissao('vendas.editar')) return false;
 
-    // Vendedores sÃ³ podem editar seus prÃ³prios pedidos
+    // Vendedores só podem editar seus próprios pedidos
     if (!isBackoffice && formData.vendedorId !== usuario?.id) {
       return false;
     }
@@ -240,15 +240,15 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     return true;
   }, [modo, pedidoBloqueado, temPermissao, isBackoffice, formData.vendedorId, usuario]);
 
-  // ForÃ§ar modo visualizaÃ§Ã£o se pedido estiver bloqueado
+  // Forçar modo visualização se pedido estiver bloqueado
   useEffect(() => {
     if (pedidoBloqueado && modo === 'editar') {
-      console.log('[SALE-FORM] Pedido bloqueado detectado - forÃ§ando modo visualizaÃ§Ã£o');
+      console.log('[SALE-FORM] Pedido bloqueado detectado - forçando modo visualização');
       setModoAtual('visualizar');
     }
   }, [pedidoBloqueado, modo]);
 
-  // Clientes filtrados por permissÃ£o
+  // Clientes filtrados por permissão
   const clientesDisponiveis = useMemo(() => {
     // A API já aplica os filtros de status e vendedor (quando aplicável).
     // Não aplicar filtro local para evitar ocultar clientes válidos do payload.
@@ -280,7 +280,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   // Buscar clientes na API quando o termo de busca mudar
   useEffect(() => {
     const buscarClientes = async () => {
-      // Se nÃ£o hÃ¡ termo de busca, restaurar lista inicial
+      // Se não há termo de busca, restaurar lista inicial
       if (!clienteSearchDebounced.trim()) {
         if (clientesIniciais.length > 0) {
           console.log('[VENDAS] Restaurando lista inicial de clientes:', clientesIniciais.length);
@@ -295,7 +295,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
         const params: Record<string, string | number | undefined> = {
           page: 1,
-          limit: 100, // Limite razoÃ¡vel para busca
+          limit: 100, // Limite razoável para busca
           search: clienteSearchDebounced.trim(),
           status_aprovacao: 'aprovado', // Apenas clientes aprovados
           vendedor: isBackoffice ? undefined : usuario?.id,
@@ -324,19 +324,19 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     buscarClientes();
   }, [clienteSearchDebounced, clientesIniciais, isBackoffice, usuario?.id]);
 
-  // Clientes filtrados pela busca (agora usa os clientes jÃ¡ filtrados pela API)
+  // Clientes filtrados pela busca (agora usa os clientes já filtrados pela API)
   const clientesFiltrados = useMemo(() => {
-    // Se nÃ£o hÃ¡ termo de busca, retornar todos os clientes disponÃ­veis
+    // Se não há termo de busca, retornar todos os clientes disponíveis
     if (!clienteSearchTerm.trim()) {
       return clientesDisponiveis;
     }
 
-    // Se hÃ¡ termo de busca, os clientes jÃ¡ vÃªm filtrados da API
-    // Apenas aplicar o filtro de permissÃµes
+    // Se há termo de busca, os clientes já vêm filtrados da API
+    // Apenas aplicar o filtro de permissões
     return clientesDisponiveis;
   }, [clientesDisponiveis, clienteSearchTerm]);
 
-  // CondiÃ§Ãµes de pagamento do cliente selecionado
+  // Condições de pagamento do cliente selecionado
   const condicoesPagamentoDisponiveis = useMemo(() => {
     if (!formData.clienteId) return [];
 
@@ -345,10 +345,10 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
     const condicoesIds = cliente.condicoesPagamentoAssociadas || [];
 
-    // Converter IDs para string para garantir comparaÃ§Ã£o correta
+    // Converter IDs para string para garantir comparação correta
     const condicoesIdsStr = condicoesIds.map(id => String(id));
 
-    console.log('[VENDAS] Debug condiÃ§Ãµes de pagamento:', {
+    console.log('[VENDAS] Debug condições de pagamento:', {
       clienteId: cliente.id,
       clienteNome: cliente.razaoSocial,
       condicoesAssociadas: condicoesIds,
@@ -362,12 +362,12 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     const condicoesFiltradasPorCliente = condicoes.filter(c => {
       const match = condicoesIdsStr.includes(String(c.id));
       if (match) {
-        console.log('[VENDAS] CondiÃ§Ã£o encontrada:', { id: c.id, nome: c.nome });
+        console.log('[VENDAS] Condição encontrada:', { id: c.id, nome: c.nome });
       }
       return match;
     });
 
-    console.log('[VENDAS] CondiÃ§Ãµes de pagamento disponÃ­veis:', {
+    console.log('[VENDAS] Condições de pagamento disponíveis:', {
       clienteId: cliente.id,
       clienteNome: cliente.razaoSocial,
       condicoesAssociadas: condicoesIds,
@@ -375,13 +375,13 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       todasCondicoes: condicoes.length,
     });
 
-    // Filtrar por pedido mÃ­nimo atendido
+    // Filtrar por pedido mínimo atendido
     const condicoesDisponiveis = condicoesFiltradasPorCliente.filter(c => {
       if (!c.pedidoMinimo) return true;
       return (formData.valorTotalProdutos || 0) >= c.pedidoMinimo;
     });
 
-    console.log('[VENDAS] CondiÃ§Ãµes apÃ³s filtro de pedido mÃ­nimo:', condicoesDisponiveis.length);
+    console.log('[VENDAS] Condições após filtro de pedido mínimo:', condicoesDisponiveis.length);
 
     // Remover duplicatas por ID
     return removeDuplicatesById(condicoesDisponiveis);
@@ -437,11 +437,11 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       setCondicoes(removeDuplicatesById(condicoesAPI));
       setListasPreco(removeDuplicatesById(listasPrecoAPI));
 
-      // Se for ediÃ§Ã£o, carregar venda existente
+      // Se for edição, carregar venda existente
       if (vendaId && modo !== 'criar') {
         const vendaExistente = vendaExistenteAPI as Venda | null;
         if (vendaExistente && vendaExistente.id === vendaId) {
-          console.log('[VENDAS] Venda carregada para ediÃ§Ã£o/visualizaÃ§Ã£o:', {
+          console.log('[VENDAS] Venda carregada para edição/visualização:', {
             id: vendaExistente.id,
             numero: vendaExistente.numero,
             clienteId: vendaExistente.clienteId,
@@ -472,8 +472,8 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           setDadosOriginais(vendaComDataCorrigida);
           setClienteJaCarregado(true);
         } else {
-          console.error('[VENDAS] Venda nÃ£o encontrada:', vendaId);
-          toast.error('Venda nÃ£o encontrada');
+          console.error('[VENDAS] Venda não encontrada:', vendaId);
+          toast.error('Venda não encontrada');
         }
       }
 
@@ -505,7 +505,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     }
   };
 
-  // FunÃ§Ã£o para buscar itens faturados da nota fiscal
+  // Função para buscar itens faturados da nota fiscal
   const carregarItensFaturados = async () => {
     if (
       modoAtual !== 'visualizar' ||
@@ -533,11 +533,11 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       const pedido = pedidoData.pedido || pedidoData.pedidos?.[0];
 
       if (!pedido) {
-        console.warn('[ITENS FATURADOS] Pedido nÃ£o encontrado na resposta');
+        console.warn('[ITENS FATURADOS] Pedido não encontrado na resposta');
         return;
       }
 
-      // Verificar mÃºltiplas possibilidades de estrutura para o ID da nota fiscal
+      // Verificar múltiplas possibilidades de estrutura para o ID da nota fiscal
       const notaFiscalId =
         pedido.id_nota_fiscal ||
         pedido.nota_fiscal?.id ||
@@ -553,7 +553,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         situacao: pedido.situacao
       });
 
-      // Validar se o ID da nota fiscal Ã© vÃ¡lido (diferente de "0", null, undefined, ou string vazia)
+      // Validar se o ID da nota fiscal é válido (diferente de "0", null, undefined, ou string vazia)
       const notaFiscalIdValido = notaFiscalId && notaFiscalId !== '0' && notaFiscalId !== 0;
 
       if (notaFiscalIdValido) {
@@ -571,7 +571,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
           if (notaFiscal && notaFiscal.itens) {
             // Log detalhado da estrutura dos itens para debug
-            console.log('[ITENS FATURADOS] ðŸ“‹ Estrutura completa dos itens da NF:', JSON.stringify(notaFiscal.itens, null, 2));
+            console.log('[ITENS FATURADOS] 📋 Estrutura completa dos itens da NF:', JSON.stringify(notaFiscal.itens, null, 2));
 
             // Buscar dados completos dos produtos (incluindo EAN) em paralelo
             const itensComEAN = await Promise.all(
@@ -579,7 +579,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                 const idProduto = item.id_produto || item.item?.id_produto;
 
                 // Log individual de cada item para debug
-                console.log(`[ITENS FATURADOS] ðŸ” Item ${index + 1} - Estrutura:`, {
+                console.log(`[ITENS FATURADOS] 🔍 Item ${index + 1} - Estrutura:`, {
                   item_completo: item,
                   id_produto: idProduto,
                   gtin: item.gtin,
@@ -596,13 +596,13 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                 let eanDoProduto = null;
                 if (idProduto) {
                   try {
-                    console.log(`[ITENS FATURADOS] ðŸ”Ž Buscando produto ${idProduto} no Tiny para obter EAN...`);
+                    console.log(`[ITENS FATURADOS] 🔎 Buscando produto ${idProduto} no Tiny para obter EAN...`);
                     const produtoCompleto = await api.tinyObterProduto(
                       formData.empresaFaturamentoId!,
                       idProduto
                     );
 
-                    console.log(`[ITENS FATURADOS] ðŸ“¦ Dados completos do produto ${idProduto}:`, {
+                    console.log(`[ITENS FATURADOS] 📦 Dados completos do produto ${idProduto}:`, {
                       tem_produto: !!produtoCompleto.produto,
                       gtin: produtoCompleto.produto?.gtin,
                       codigo_barras: produtoCompleto.produto?.codigo_barras,
@@ -619,17 +619,17 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                       || produtoCompleto.produto?.ean;
 
                     if (eanDoProduto) {
-                      console.log(`[ITENS FATURADOS] âœ… EAN do produto ${idProduto}:`, eanDoProduto);
+                      console.log(`[ITENS FATURADOS] ✅ EAN do produto ${idProduto}:`, eanDoProduto);
                     } else {
-                      console.warn(`[ITENS FATURADOS] âš ï¸ Produto ${idProduto} nÃ£o possui EAN/GTIN cadastrado no Tiny ERP`);
+                      console.warn(`[ITENS FATURADOS] ⚠️ Produto ${idProduto} não possui EAN/GTIN cadastrado no Tiny ERP`);
                     }
                   } catch (error: any) {
-                    console.error(`[ITENS FATURADOS] âŒ Erro ao buscar EAN do produto ${idProduto}:`, {
+                    console.error(`[ITENS FATURADOS] ❌ Erro ao buscar EAN do produto ${idProduto}:`, {
                       error: error.message,
                       stack: error.stack,
                       fullError: error
                     });
-                    // NÃ£o falhar - continuar sem o EAN
+                    // Não falhar - continuar sem o EAN
                   }
                 }
 
@@ -638,7 +638,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                 const quantidade = parseFloat(item.quantidade || item.item?.quantidade || '0');
                 const valorTotalDireto = item.valor_total || item.item?.valor_total;
 
-                // Se valor_total nÃ£o existir, calcular: quantidade * valor_unitario
+                // Se valor_total não existir, calcular: quantidade * valor_unitario
                 const subtotal = valorTotalDireto
                   ? parseFloat(valorTotalDireto)
                   : valorUnitario * quantidade;
@@ -666,28 +666,28 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
             setItensFaturados(itensComEAN);
             console.log('[ITENS FATURADOS] Itens faturados da NF carregados com sucesso:', itensComEAN.length);
-            console.log('[ITENS FATURADOS] ðŸ“Š Dados convertidos:', itensComEAN);
+            console.log('[ITENS FATURADOS] 📊 Dados convertidos:', itensComEAN);
             return;
           }
         } catch (nfError: any) {
-          // Log informativo em vez de warning (situaÃ§Ã£o esperada quando NF ainda nÃ£o foi emitida)
-          console.log('[ITENS FATURADOS] â„¹ï¸ NÃ£o foi possÃ­vel carregar a nota fiscal, usando itens do pedido');
+          // Log informativo em vez de warning (situação esperada quando NF ainda não foi emitida)
+          console.log('[ITENS FATURADOS] ℹ️ Não foi possível carregar a nota fiscal, usando itens do pedido');
         }
       } else if (notaFiscalId === '0' || notaFiscalId === 0) {
-        console.log('[ITENS FATURADOS] â„¹ï¸ Nota fiscal ainda nÃ£o emitida (ID = 0), usando itens do pedido');
+        console.log('[ITENS FATURADOS] ℹ️ Nota fiscal ainda não emitida (ID = 0), usando itens do pedido');
       } else {
-        console.log('[ITENS FATURADOS] â„¹ï¸ ID da nota fiscal nÃ£o encontrado, usando itens do pedido');
+        console.log('[ITENS FATURADOS] ℹ️ ID da nota fiscal não encontrado, usando itens do pedido');
       }
 
-      console.log('[ITENS FATURADOS] ðŸ“¦ Carregando itens do pedido');
-      console.log('[ITENS FATURADOS] ðŸ“‹ Estrutura completa dos itens do pedido:', JSON.stringify(pedido.itens, null, 2));
+      console.log('[ITENS FATURADOS] 📦 Carregando itens do pedido');
+      console.log('[ITENS FATURADOS] 📋 Estrutura completa dos itens do pedido:', JSON.stringify(pedido.itens, null, 2));
 
       if (pedido.itens && Array.isArray(pedido.itens) && pedido.itens.length > 0) {
         // Processar itens do pedido e buscar EAN de cada produto
         const itensConvertidos: ItemFaturado[] = await Promise.all(
           pedido.itens.map(async (item: any, index: number) => {
             // Log individual de cada item para debug
-            console.log(`[ITENS FATURADOS] ðŸ” Item do pedido ${index + 1} - Estrutura:`, {
+            console.log(`[ITENS FATURADOS] 🔍 Item do pedido ${index + 1} - Estrutura:`, {
               item_completo: item,
               gtin: item.gtin,
               'item.gtin': item.item?.gtin,
@@ -708,13 +708,13 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             let eanDoProduto = null;
             if (idProduto) {
               try {
-                console.log(`[ITENS FATURADOS] ðŸ”Ž Buscando produto ${idProduto} no Tiny para obter EAN...`);
+                console.log(`[ITENS FATURADOS] 🔎 Buscando produto ${idProduto} no Tiny para obter EAN...`);
                 const produtoCompleto = await api.tinyObterProduto(
                   formData.empresaFaturamentoId!,
                   idProduto
                 );
 
-                console.log(`[ITENS FATURADOS] ðŸ“¦ Dados completos do produto ${idProduto}:`, {
+                console.log(`[ITENS FATURADOS] 📦 Dados completos do produto ${idProduto}:`, {
                   tem_produto: !!produtoCompleto.produto,
                   gtin: produtoCompleto.produto?.gtin,
                   codigo_barras: produtoCompleto.produto?.codigo_barras,
@@ -731,17 +731,17 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                   || produtoCompleto.produto?.ean;
 
                 if (eanDoProduto) {
-                  console.log(`[ITENS FATURADOS] âœ… EAN do produto ${idProduto}:`, eanDoProduto);
+                  console.log(`[ITENS FATURADOS] ✅ EAN do produto ${idProduto}:`, eanDoProduto);
                 } else {
-                  console.warn(`[ITENS FATURADOS] âš ï¸ Produto ${idProduto} nÃ£o possui EAN/GTIN cadastrado no Tiny ERP`);
+                  console.warn(`[ITENS FATURADOS] ⚠️ Produto ${idProduto} não possui EAN/GTIN cadastrado no Tiny ERP`);
                 }
               } catch (error: any) {
-                console.error(`[ITENS FATURADOS] âŒ Erro ao buscar EAN do produto ${idProduto}:`, {
+                console.error(`[ITENS FATURADOS] ❌ Erro ao buscar EAN do produto ${idProduto}:`, {
                   error: error.message,
                   stack: error.stack,
                   fullError: error
                 });
-                // NÃ£o falhar - continuar sem o EAN
+                // Não falhar - continuar sem o EAN
               }
             }
 
@@ -750,7 +750,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             const quantidade = parseFloat(item.quantidade || item.item?.quantidade || '0');
             const valorTotalDireto = item.valor_total || item.item?.valor_total;
 
-            // Se valor_total nÃ£o existir, calcular: quantidade * valor_unitario
+            // Se valor_total não existir, calcular: quantidade * valor_unitario
             const subtotal = valorTotalDireto
               ? parseFloat(valorTotalDireto)
               : valorUnitario * quantidade;
@@ -772,9 +772,9 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
         setItensFaturados(itensConvertidos);
         console.log('[ITENS FATURADOS] Itens do pedido carregados como fallback:', itensConvertidos.length);
-        console.log('[ITENS FATURADOS] ðŸ“Š Dados convertidos do pedido:', itensConvertidos);
+        console.log('[ITENS FATURADOS] 📊 Dados convertidos do pedido:', itensConvertidos);
       } else {
-        console.warn('[ITENS FATURADOS] Pedido sem itens disponÃ­veis');
+        console.warn('[ITENS FATURADOS] Pedido sem itens disponíveis');
       }
     } catch (error) {
       console.error('[ITENS FATURADOS] Erro ao buscar itens faturados:', error);
@@ -789,11 +789,11 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     }
   }, [formData.id, formData.integracaoERP?.erpPedidoId, formData.status, formData.empresaFaturamentoId, modoAtual]);
 
-  // Carregar dados completos da NFe quando necessÃ¡rio
+  // Carregar dados completos da NFe quando necessário
   const carregarDadosNFe = async () => {
     setLoadingDadosNFe(true);
 
-    // Se tiver ID da nota fiscal vÃ¡lido, buscar dados completos do ERP
+    // Se tiver ID da nota fiscal válido, buscar dados completos do ERP
     if (formData.integracaoERP?.notaFiscalId &&
       formData.integracaoERP.notaFiscalId !== '0' &&
       formData.empresaFaturamentoId) {
@@ -810,7 +810,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         if (notaFiscalData?.nota_fiscal) {
           const nf = notaFiscalData.nota_fiscal;
 
-          console.log('[DADOS NFE] ðŸ” Estrutura da nota fiscal:', {
+          console.log('[DADOS NFE] 🔍 Estrutura da nota fiscal:', {
             situacao: nf.situacao,
             situacao_nfe: nf.situacao_nfe,
             data_emissao: nf.data_emissao,
@@ -826,8 +826,8 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             cfop: nf.cfop
           });
 
-          // Mapear situaÃ§Ã£o da SEFAZ
-          let situacaoTexto = 'NÃ£o informado';
+          // Mapear situação da SEFAZ
+          let situacaoTexto = 'Não informado';
           if (nf.situacao) {
             const situacaoMap: Record<string, string> = {
               '1': 'Autorizada',
@@ -835,21 +835,21 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
               '3': 'Cancelada',
               '4': 'Inutilizada',
               '5': 'Denegada',
-              '6': 'Autorizada',  // SituaÃ§Ã£o 6 tambÃ©m Ã© Autorizada (emitida e autorizada pela SEFAZ)
-              '7': 'Autorizada',  // SituaÃ§Ã£o 7 = Emitida DANFE (nota autorizada pela SEFAZ)
+              '6': 'Autorizada',  // Situação 6 também é Autorizada (emitida e autorizada pela SEFAZ)
+              '7': 'Autorizada',  // Situação 7 = Emitida DANFE (nota autorizada pela SEFAZ)
             };
-            situacaoTexto = situacaoMap[nf.situacao.toString()] || `SituaÃ§Ã£o ${nf.situacao}`;
+            situacaoTexto = situacaoMap[nf.situacao.toString()] || `Situação ${nf.situacao}`;
           }
 
           // Mapear tipo de NF baseado no campo "finalidade" (campo oficial da NFe)
-          let tipoNF = 'NÃ£o informado';
+          let tipoNF = 'Não informado';
 
           if (nf.finalidade) {
             const finalidadeMap: Record<string, string> = {
-              '1': 'SaÃ­da',           // NF-e Normal (venda/saÃ­da)
+              '1': 'Saída',           // NF-e Normal (venda/saída)
               '2': 'Complementar',    // NF-e Complementar
               '3': 'Ajuste',          // NF-e de Ajuste
-              '4': 'Entrada',         // DevoluÃ§Ã£o de Mercadoria (entrada)
+              '4': 'Entrada',         // Devolução de Mercadoria (entrada)
             };
             tipoNF = finalidadeMap[nf.finalidade.toString()] || `Finalidade ${nf.finalidade}`;
           }
@@ -864,15 +864,15 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             naturezaOperacao: nf.natureza_operacao || nf.natureza,
           };
 
-          console.log('[DADOS NFE] âœ… Dados mapeados para exibiÃ§Ã£o:', dadosMapeados);
+          console.log('[DADOS NFE] ✅ Dados mapeados para exibição:', dadosMapeados);
           setDadosNFe(dadosMapeados);
         } else {
-          console.warn('[DADOS NFE] âš ï¸ Estrutura de nota fiscal nÃ£o encontrada na resposta');
+          console.warn('[DADOS NFE] ⚠️ Estrutura de nota fiscal não encontrada na resposta');
         }
       } catch (error: any) {
-        console.log('[DADOS NFE] â„¹ï¸ NÃ£o foi possÃ­vel carregar dados completos da NFe:', error?.message);
+        console.log('[DADOS NFE] ℹ️ Não foi possível carregar dados completos da NFe:', error?.message);
 
-        // Usar dados parciais que jÃ¡ temos na venda
+        // Usar dados parciais que já temos na venda
         setDadosNFe({
           numero: formData.integracaoERP?.notaFiscalNumero,
           chaveAcesso: formData.integracaoERP?.notaFiscalChave,
@@ -886,7 +886,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         setLoadingDadosNFe(false);
       }
     } else {
-      // Se nÃ£o tiver ID, usar apenas dados parciais que jÃ¡ estÃ£o salvos
+      // Se não tiver ID, usar apenas dados parciais que já estão salvos
       console.log('[DADOS NFE] Usando dados parciais da NFe (sem ID para buscar do ERP)');
       setDadosNFe({
         numero: formData.integracaoERP?.notaFiscalNumero,
@@ -902,7 +902,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   };
 
   useEffect(() => {
-    // Mostrar dados da NFe se tiver qualquer indicaÃ§Ã£o de nota fiscal
+    // Mostrar dados da NFe se tiver qualquer indicação de nota fiscal
     const temNotaFiscal = formData.integracaoERP?.notaFiscalId ||
       formData.integracaoERP?.notaFiscalNumero ||
       formData.integracaoERP?.notaFiscalChave;
@@ -925,10 +925,10 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     modoAtual
   ]);
 
-  // Log de debug para integraÃ§Ã£o ERP
+  // Log de debug para integração ERP
   useEffect(() => {
     if (modoAtual === 'visualizar' && formData.integracaoERP) {
-      console.log('[DEBUG INTEGRACAO ERP] Dados completos da integraÃ§Ã£o:', {
+      console.log('[DEBUG INTEGRACAO ERP] Dados completos da integração:', {
         integracaoERP: formData.integracaoERP,
         erpPedidoId: formData.integracaoERP.erpPedidoId,
         notaFiscalId: formData.integracaoERP.notaFiscalId,
@@ -945,47 +945,47 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   const [clienteJaCarregado, setClienteJaCarregado] = useState(false);
 
   useEffect(() => {
-    // SÃ³ auto-preencher se for modo criar ou se o cliente foi alterado manualmente
+    // Só auto-preencher se for modo criar ou se o cliente foi alterado manualmente
     if (formData.clienteId && modo === 'criar' && !clienteJaCarregado) {
       const cliente = clientes.find(c => c.id === formData.clienteId);
       if (cliente && companies.length > 0) {
-        // FunÃ§Ã£o async para buscar lista de preÃ§o e processar dados do cliente
+        // Função async para buscar lista de preço e processar dados do cliente
         const processarCliente = async () => {
           let listaPreco = null;
 
-          // Buscar lista de preÃ§os: primeiro verificar se Ã© um ID numÃ©rico e buscar na Edge Function
+          // Buscar lista de preços: primeiro verificar se é um ID numérico e buscar na Edge Function
           if (cliente.listaPrecos) {
-            // Verificar se listaPrecos Ã© um ID numÃ©rico (string que pode ser convertida para nÃºmero)
+            // Verificar se listaPrecos é um ID numérico (string que pode ser convertida para número)
             const listaPrecosValue = String(cliente.listaPrecos).trim();
             const isNumericId = /^\d+$/.test(listaPrecosValue);
 
             if (isNumericId) {
-              // Ã‰ um ID numÃ©rico, buscar na Edge Function
+              // É um ID numérico, buscar na Edge Function
               try {
-                console.log('[AUTO-PREENCHIMENTO] Buscando lista de preÃ§o via Edge Function com ID:', listaPrecosValue);
+                console.log('[AUTO-PREENCHIMENTO] Buscando lista de preço via Edge Function com ID:', listaPrecosValue);
                 const listaPrecoCompleta = await api.getById('listas-preco', listaPrecosValue);
                 if (listaPrecoCompleta) {
                   listaPreco = listaPrecoCompleta;
-                  // Adicionar Ã  lista local se nÃ£o estiver lÃ¡
+                  // Adicionar à lista local se não estiver lá
                   const jaExiste = listasPreco.find(lp => lp.id === listaPrecoCompleta.id);
                   if (!jaExiste) {
                     setListasPreco(prev => [...prev, listaPrecoCompleta]);
                   }
-                  console.log('[AUTO-PREENCHIMENTO] Lista de preÃ§o encontrada na Edge Function:', listaPrecoCompleta.nome);
+                  console.log('[AUTO-PREENCHIMENTO] Lista de preço encontrada na Edge Function:', listaPrecoCompleta.nome);
                 }
               } catch (error) {
-                console.error('[AUTO-PREENCHIMENTO] Erro ao buscar lista de preÃ§o na Edge Function:', error);
+                console.error('[AUTO-PREENCHIMENTO] Erro ao buscar lista de preço na Edge Function:', error);
                 // Fallback: tentar encontrar na lista local
                 listaPreco = listasPreco.find(lp => lp.id === listaPrecosValue);
               }
             } else {
-              // NÃ£o Ã© um ID numÃ©rico, buscar por nome na lista local
+              // Não é um ID numérico, buscar por nome na lista local
               listaPreco = listasPreco.find(lp => lp.id === cliente.listaPrecos);
               if (!listaPreco) {
                 listaPreco = listasPreco.find(lp => lp.nome === cliente.listaPrecos);
               }
               if (!listaPreco) {
-                // Busca parcial: verifica se o nome da lista contÃ©m o texto do cliente
+                // Busca parcial: verifica se o nome da lista contém o texto do cliente
                 listaPreco = listasPreco.find(lp => lp.nome.toLowerCase().includes(cliente.listaPrecos.toLowerCase()));
               }
             }
@@ -1008,9 +1008,9 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             // Tentar encontrar a empresa por ID primeiro (o mais comum)
             let empresa = companies.find(c => c.id === cliente.empresaFaturamento);
 
-            // Se nÃ£o encontrou por ID, tentar por nome
+            // Se não encontrou por ID, tentar por nome
             if (!empresa) {
-              // Normalizar para comparaÃ§Ã£o (remover espaÃ§os extras, converter para maiÃºsculas)
+              // Normalizar para comparação (remover espaços extras, converter para maiúsculas)
               const empresaNormalizada = cliente.empresaFaturamento.trim().toUpperCase();
 
               // Busca exata por nome
@@ -1019,7 +1019,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                 c.nomeFantasia?.trim().toUpperCase() === empresaNormalizada
               );
 
-              // Se nÃ£o encontrou, tentar busca parcial
+              // Se não encontrou, tentar busca parcial
               if (!empresa) {
                 empresa = companies.find(c =>
                   c.razaoSocial?.trim().toUpperCase().includes(empresaNormalizada) ||
@@ -1041,26 +1041,26 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
               empresaFaturamentoId = empresa.id;
               nomeEmpresaFaturamento = empresa.razaoSocial;
             } else {
-              // âœ… FALLBACK: Usar primeira empresa disponÃ­vel se o cliente tem empresa antiga/invÃ¡lida
+              // ✅ FALLBACK: Usar primeira empresa disponível se o cliente tem empresa antiga/inválida
               if (companies.length > 0) {
                 const primeiraEmpresa = companies[0];
                 empresaFaturamentoId = primeiraEmpresa.id;
                 nomeEmpresaFaturamento = primeiraEmpresa.razaoSocial;
-                console.log('[AUTO-PREENCHIMENTO] ðŸ”„ Empresa do cliente nÃ£o encontrada. Usando fallback:', {
+                console.log('[AUTO-PREENCHIMENTO] 🔄 Empresa do cliente não encontrada. Usando fallback:', {
                   empresaCliente: cliente.empresaFaturamento,
                   empresaFallback: primeiraEmpresa.razaoSocial,
                   id: primeiraEmpresa.id
                 });
               } else {
                 nomeEmpresaFaturamento = cliente.empresaFaturamento;
-                console.error('[AUTO-PREENCHIMENTO] âŒ Nenhuma empresa cadastrada no sistema!');
+                console.error('[AUTO-PREENCHIMENTO] ❌ Nenhuma empresa cadastrada no sistema!');
               }
             }
           }
 
-          // Se nÃ£o encontrou empresa, alertar mas NÃƒO bloquear
+          // Se não encontrou empresa, alertar mas NÃO bloquear
           if (!empresaFaturamentoId && companies.length === 0) {
-            console.error('[AUTO-PREENCHIMENTO] âŒ CRÃTICO: Nenhuma empresa cadastrada no sistema!');
+            console.error('[AUTO-PREENCHIMENTO] ❌ CRÍTICO: Nenhuma empresa cadastrada no sistema!');
             toast.error('Nenhuma empresa cadastrada! Configure as empresas antes de criar pedidos.');
           }
 
@@ -1096,7 +1096,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           setClienteJaCarregado(true);
         };
 
-        // Chamar funÃ§Ã£o async
+        // Chamar função async
         processarCliente();
       }
     }
@@ -1128,9 +1128,9 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     }));
   }, [formData.itens, formData.percentualDescontoExtra]);
 
-  // Atualizar desconto extra baseado na condiÃ§Ã£o de pagamento (removido - agora Ã© feito no handler)
+  // Atualizar desconto extra baseado na condição de pagamento (removido - agora é feito no handler)
 
-  // Handler para mudanÃ§a de cliente
+  // Handler para mudança de cliente
   const handleClienteChange = async (clienteId: string) => {
     limparErro('clienteId'); // Limpar erro ao selecionar cliente
     setIsLoadingCliente(true); // Iniciar carregamento
@@ -1142,7 +1142,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       const clienteCompleto = await api.getById('clientes', clienteId);
 
       if (!clienteCompleto) {
-        toast.error('Cliente nÃ£o encontrado');
+        toast.error('Cliente não encontrado');
         return;
       }
 
@@ -1151,40 +1151,40 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       // Usar os dados completos do cliente
       const cliente = clienteCompleto;
 
-      // Buscar lista de preÃ§os: primeiro verificar se Ã© um ID numÃ©rico e buscar na Edge Function
+      // Buscar lista de preços: primeiro verificar se é um ID numérico e buscar na Edge Function
       let listaPreco = null;
       if (cliente.listaPrecos) {
-        // Verificar se listaPrecos Ã© um ID numÃ©rico (string que pode ser convertida para nÃºmero)
+        // Verificar se listaPrecos é um ID numérico (string que pode ser convertida para número)
         const listaPrecosValue = String(cliente.listaPrecos).trim();
         const isNumericId = /^\d+$/.test(listaPrecosValue);
 
         if (isNumericId) {
-          // Ã‰ um ID numÃ©rico, buscar na Edge Function
+          // É um ID numérico, buscar na Edge Function
           try {
-            console.log('[VENDAS] Buscando lista de preÃ§o via Edge Function com ID:', listaPrecosValue);
+            console.log('[VENDAS] Buscando lista de preço via Edge Function com ID:', listaPrecosValue);
             const listaPrecoCompleta = await api.getById('listas-preco', listaPrecosValue);
             if (listaPrecoCompleta) {
               listaPreco = listaPrecoCompleta;
-              // Adicionar Ã  lista local se nÃ£o estiver lÃ¡
+              // Adicionar à lista local se não estiver lá
               const jaExiste = listasPreco.find(lp => lp.id === listaPrecoCompleta.id);
               if (!jaExiste) {
                 setListasPreco(prev => [...prev, listaPrecoCompleta]);
               }
-              console.log('[VENDAS] Lista de preÃ§o encontrada na Edge Function:', listaPrecoCompleta.nome);
+              console.log('[VENDAS] Lista de preço encontrada na Edge Function:', listaPrecoCompleta.nome);
             }
           } catch (error) {
-            console.error('[VENDAS] Erro ao buscar lista de preÃ§o na Edge Function:', error);
+            console.error('[VENDAS] Erro ao buscar lista de preço na Edge Function:', error);
             // Fallback: tentar encontrar na lista local
             listaPreco = listasPreco.find(lp => lp.id === listaPrecosValue);
           }
         } else {
-          // NÃ£o Ã© um ID numÃ©rico, buscar por nome na lista local
+          // Não é um ID numérico, buscar por nome na lista local
           listaPreco = listasPreco.find(lp => lp.id === cliente.listaPrecos);
           if (!listaPreco) {
             listaPreco = listasPreco.find(lp => lp.nome === cliente.listaPrecos);
           }
           if (!listaPreco) {
-            // Busca parcial: verifica se o nome da lista contÃ©m o texto do cliente
+            // Busca parcial: verifica se o nome da lista contém o texto do cliente
             listaPreco = listasPreco.find(lp => lp.nome.toLowerCase().includes(cliente.listaPrecos.toLowerCase()));
           }
         }
@@ -1207,9 +1207,9 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         // Tentar encontrar a empresa por ID primeiro (o mais comum)
         let empresa = companies.find(c => c.id === cliente.empresaFaturamento);
 
-        // Se nÃ£o encontrou por ID, tentar por nome
+        // Se não encontrou por ID, tentar por nome
         if (!empresa) {
-          // Normalizar para comparaÃ§Ã£o (remover espaÃ§os extras, converter para maiÃºsculas)
+          // Normalizar para comparação (remover espaços extras, converter para maiúsculas)
           const empresaNormalizada = cliente.empresaFaturamento.trim().toUpperCase();
 
           // Busca exata por nome
@@ -1218,7 +1218,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             c.nomeFantasia?.trim().toUpperCase() === empresaNormalizada
           );
 
-          // Se nÃ£o encontrou, tentar busca parcial
+          // Se não encontrou, tentar busca parcial
           if (!empresa) {
             empresa = companies.find(c =>
               c.razaoSocial?.trim().toUpperCase().includes(empresaNormalizada) ||
@@ -1240,26 +1240,26 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           empresaFaturamentoId = empresa.id;
           nomeEmpresaFaturamento = empresa.razaoSocial;
         } else {
-          // âœ… FALLBACK: Usar primeira empresa disponÃ­vel se o cliente tem empresa antiga/invÃ¡lida
+          // ✅ FALLBACK: Usar primeira empresa disponível se o cliente tem empresa antiga/inválida
           if (companies.length > 0) {
             const primeiraEmpresa = companies[0];
             empresaFaturamentoId = primeiraEmpresa.id;
             nomeEmpresaFaturamento = primeiraEmpresa.razaoSocial;
-            console.log('[HANDLER] ðŸ”„ Empresa do cliente nÃ£o encontrada. Usando fallback:', {
+            console.log('[HANDLER] 🔄 Empresa do cliente não encontrada. Usando fallback:', {
               empresaCliente: cliente.empresaFaturamento,
               empresaFallback: primeiraEmpresa.razaoSocial,
               id: primeiraEmpresa.id
             });
           } else {
             nomeEmpresaFaturamento = cliente.empresaFaturamento;
-            console.error('[HANDLER] âŒ Nenhuma empresa cadastrada no sistema!');
+            console.error('[HANDLER] ❌ Nenhuma empresa cadastrada no sistema!');
           }
         }
       }
 
-      // Se nÃ£o encontrou empresa, alertar mas NÃƒO bloquear
+      // Se não encontrou empresa, alertar mas NÃO bloquear
       if (!empresaFaturamentoId && companies.length === 0) {
-        console.error('[HANDLER] âŒ CRÃTICO: Nenhuma empresa cadastrada no sistema!');
+        console.error('[HANDLER] ❌ CRÍTICO: Nenhuma empresa cadastrada no sistema!');
         toast.error('Nenhuma empresa cadastrada! Configure as empresas antes de criar pedidos.');
       }
 
@@ -1295,7 +1295,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         nomeVendedor: cliente.vendedorAtribuido?.nome || cliente.vendedoresAtribuidos?.[0]?.nome || '',
         empresaFaturamentoId: empresaFaturamentoId,
         nomeEmpresaFaturamento: nomeEmpresaFaturamento,
-        // Limpar condiÃ§Ã£o de pagamento e natureza para forÃ§ar nova seleÃ§Ã£o
+        // Limpar condição de pagamento e natureza para forçar nova seleção
         condicaoPagamentoId: '',
         nomeCondicaoPagamento: '',
         naturezaOperacaoId: '',
@@ -1312,64 +1312,64 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           updated[index] = clienteCompleto;
           return updated;
         }
-        // Se o cliente nÃ£o estÃ¡ na lista, adicionar
+        // Se o cliente não está na lista, adicionar
         return [...prev, clienteCompleto];
       });
 
-      // Mostrar campos do cliente apÃ³s seleÃ§Ã£o (apenas no modo criar)
+      // Mostrar campos do cliente após seleção (apenas no modo criar)
       if (modo === 'criar') {
         setMostrarCamposCliente(true);
       }
     } catch (error) {
       console.error('[VENDAS] Erro ao carregar dados do cliente:', error);
 
-      // Fallback: usar dados do cliente da lista local se disponÃ­vel
+      // Fallback: usar dados do cliente da lista local se disponível
       const clienteLocal = clientes.find(c => c.id === clienteId);
       if (!clienteLocal) {
-        toast.error('Cliente nÃ£o encontrado');
+        toast.error('Cliente não encontrado');
         return;
       }
 
       console.log('[VENDAS] Usando dados locais do cliente como fallback');
-      toast.info('Dados completos do cliente nÃ£o puderam ser carregados. Usando dados disponÃ­veis.');
+      toast.info('Dados completos do cliente não puderam ser carregados. Usando dados disponíveis.');
 
       // Usar clienteLocal como fallback
       const cliente = clienteLocal;
 
-      // Buscar lista de preÃ§os: primeiro verificar se Ã© um ID numÃ©rico e buscar na Edge Function
+      // Buscar lista de preços: primeiro verificar se é um ID numérico e buscar na Edge Function
       let listaPreco = null;
       if (cliente.listaPrecos) {
-        // Verificar se listaPrecos Ã© um ID numÃ©rico (string que pode ser convertida para nÃºmero)
+        // Verificar se listaPrecos é um ID numérico (string que pode ser convertida para número)
         const listaPrecosValue = String(cliente.listaPrecos).trim();
         const isNumericId = /^\d+$/.test(listaPrecosValue);
 
         if (isNumericId) {
-          // Ã‰ um ID numÃ©rico, buscar na Edge Function
+          // É um ID numérico, buscar na Edge Function
           try {
-            console.log('[HANDLER] Buscando lista de preÃ§o via Edge Function com ID:', listaPrecosValue);
+            console.log('[HANDLER] Buscando lista de preço via Edge Function com ID:', listaPrecosValue);
             const listaPrecoCompleta = await api.getById('listas-preco', listaPrecosValue);
             if (listaPrecoCompleta) {
               listaPreco = listaPrecoCompleta;
-              // Adicionar Ã  lista local se nÃ£o estiver lÃ¡
+              // Adicionar à lista local se não estiver lá
               const jaExiste = listasPreco.find(lp => lp.id === listaPrecoCompleta.id);
               if (!jaExiste) {
                 setListasPreco(prev => [...prev, listaPrecoCompleta]);
               }
-              console.log('[HANDLER] Lista de preÃ§o encontrada na Edge Function:', listaPrecoCompleta.nome);
+              console.log('[HANDLER] Lista de preço encontrada na Edge Function:', listaPrecoCompleta.nome);
             }
           } catch (error) {
-            console.error('[HANDLER] Erro ao buscar lista de preÃ§o na Edge Function:', error);
+            console.error('[HANDLER] Erro ao buscar lista de preço na Edge Function:', error);
             // Fallback: tentar encontrar na lista local
             listaPreco = listasPreco.find(lp => lp.id === listaPrecosValue);
           }
         } else {
-          // NÃ£o Ã© um ID numÃ©rico, buscar por nome na lista local
+          // Não é um ID numérico, buscar por nome na lista local
           listaPreco = listasPreco.find(lp => lp.id === cliente.listaPrecos);
           if (!listaPreco) {
             listaPreco = listasPreco.find(lp => lp.nome === cliente.listaPrecos);
           }
           if (!listaPreco) {
-            // Busca parcial: verifica se o nome da lista contÃ©m o texto do cliente
+            // Busca parcial: verifica se o nome da lista contém o texto do cliente
             listaPreco = listasPreco.find(lp => lp.nome.toLowerCase().includes(cliente.listaPrecos.toLowerCase()));
           }
         }
@@ -1383,7 +1383,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         // Tentar encontrar a empresa por ID primeiro (o mais comum)
         let empresa = companies.find(c => c.id === cliente.empresaFaturamento);
 
-        // Se nÃ£o encontrou por ID, tentar por nome
+        // Se não encontrou por ID, tentar por nome
         if (!empresa) {
           const empresaNormalizada = cliente.empresaFaturamento.trim().toUpperCase();
           empresa = companies.find(c =>
@@ -1424,7 +1424,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         nomeVendedor: cliente.vendedorAtribuido?.nome || cliente.vendedoresAtribuidos?.[0]?.nome || '',
         empresaFaturamentoId: empresaFaturamentoId,
         nomeEmpresaFaturamento: nomeEmpresaFaturamento,
-        // Limpar condiÃ§Ã£o de pagamento e natureza para forÃ§ar nova seleÃ§Ã£o
+        // Limpar condição de pagamento e natureza para forçar nova seleção
         condicaoPagamentoId: '',
         nomeCondicaoPagamento: '',
         naturezaOperacaoId: '',
@@ -1433,7 +1433,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       setClienteComboOpen(false);
       setClienteSearchTerm('');
 
-      // Mostrar campos do cliente apÃ³s seleÃ§Ã£o (apenas no modo criar)
+      // Mostrar campos do cliente após seleção (apenas no modo criar)
       if (modo === 'criar') {
         setMostrarCamposCliente(true);
       }
@@ -1451,36 +1451,36 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     }
 
     if (!formData.listaPrecoId) {
-      console.warn('[VENDAS] Cliente nÃ£o possui lista de preÃ§os associada');
-      toast.error('Cliente nÃ£o possui lista de preÃ§os associada. Verifique o cadastro do cliente.');
+      console.warn('[VENDAS] Cliente não possui lista de preços associada');
+      toast.error('Cliente não possui lista de preços associada. Verifique o cadastro do cliente.');
       return;
     }
 
     const listaPreco = listasPreco.find(lp => lp.id === formData.listaPrecoId);
     if (!listaPreco) {
-      console.warn('[VENDAS] Lista de preÃ§os nÃ£o encontrada:', formData.listaPrecoId);
-      toast.error('Lista de preÃ§os nÃ£o encontrada. Verifique o cadastro do cliente.');
+      console.warn('[VENDAS] Lista de preços não encontrada:', formData.listaPrecoId);
+      toast.error('Lista de preços não encontrada. Verifique o cadastro do cliente.');
       return;
     }
 
     const produtoPreco = listaPreco.produtos?.find(pp => pp.produtoId === selectedProdutoId);
     if (!produtoPreco) {
-      console.warn('[VENDAS] Produto nÃ£o encontrado na lista de preÃ§os:', {
+      console.warn('[VENDAS] Produto não encontrado na lista de preços:', {
         listaId: listaPreco.id,
         listaNome: listaPreco.nome,
         produtoId: selectedProdutoId,
       });
-      toast.error('Produto nÃ£o encontrado na lista de preÃ§os selecionada.');
+      toast.error('Produto não encontrado na lista de preços selecionada.');
       return;
     }
 
     const valorTabela = Number(produtoPreco.preco) || 0;
     if (valorTabela <= 0) {
-      toast.error(`Produto "${produtoPreco.descricao || selectedProdutoId}" nÃ£o possui preÃ§o cadastrado na lista "${listaPreco.nome}"`);
+      toast.error(`Produto "${produtoPreco.descricao || selectedProdutoId}" não possui preço cadastrado na lista "${listaPreco.nome}"`);
       return;
     }
 
-    console.log('[VENDAS] PreÃ§o encontrado na lista:', {
+    console.log('[VENDAS] Preço encontrado na lista:', {
       listaId: listaPreco.id,
       listaNome: listaPreco.nome,
       produtoId: produtoPreco.produtoId,
@@ -1539,37 +1539,37 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     toast.success('Item removido do pedido');
   };
 
-  // Alternar para modo ediÃ§Ã£o
+  // Alternar para modo edição
   const handleEntrarModoEdicao = () => {
     if (!podeEditar) {
-      toast.error('VocÃª nÃ£o tem permissÃ£o para editar este pedido');
+      toast.error('Você não tem permissão para editar este pedido');
       return;
     }
 
     if (pedidoBloqueado) {
-      toast.error('Este pedido jÃ¡ foi enviado ao ERP e nÃ£o pode ser editado');
+      toast.error('Este pedido já foi enviado ao ERP e não pode ser editado');
       return;
     }
 
     setModoAtual('editar');
-    toast.info('Modo de ediÃ§Ã£o ativado');
+    toast.info('Modo de edição ativado');
   };
 
-  // Cancelar ediÃ§Ã£o e voltar para modo visualizaÃ§Ã£o
+  // Cancelar edição e voltar para modo visualização
   const handleCancelarEdicao = () => {
     // Restaurar dados originais
     if (dadosOriginais) {
       setFormData(dadosOriginais);
     }
     setModoAtual('visualizar');
-    toast.info('EdiÃ§Ã£o cancelada');
+    toast.info('Edição cancelada');
   };
 
-  // FunÃ§Ã£o para renderizar os botÃµes de aÃ§Ã£o (usada no topo e no final da pÃ¡gina)
+  // Função para renderizar os botões de ação (usada no topo e no final da página)
   const renderActionButtons = () => {
     return (
       <div className="flex gap-2">
-        {/* Modo VisualizaÃ§Ã£o - Mostrar botÃ£o Editar */}
+        {/* Modo Visualização - Mostrar botão Editar */}
         {isReadOnly && modo !== 'criar' && podeEditar && !pedidoBloqueado && (
           <Button onClick={handleEntrarModoEdicao}>
             <Edit className="h-4 w-4 mr-2" />
@@ -1577,7 +1577,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           </Button>
         )}
 
-        {/* Modo EdiÃ§Ã£o - Mostrar botÃµes Cancelar, Salvar Rascunho e Enviar para AnÃ¡lise */}
+        {/* Modo Edição - Mostrar botões Cancelar, Salvar Rascunho e Enviar para Análise */}
         {!isReadOnly && !pedidoBloqueado && (
           <>
             <Button
@@ -1588,9 +1588,9 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
               Cancelar
             </Button>
 
-            {/* BotÃµes de aÃ§Ã£o baseados no modo e status */}
+            {/* Botões de ação baseados no modo e status */}
             {modoAtual === 'criar' ? (
-              // Ao CRIAR novo pedido: opÃ§Ã£o de Rascunho OU Enviar para AnÃ¡lise
+              // Ao CRIAR novo pedido: opção de Rascunho OU Enviar para Análise
               <>
                 <Button
                   variant="outline"
@@ -1602,30 +1602,30 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
                 <Button onClick={() => handleSave(false)}>
                   <Save className="h-4 w-4 mr-2" />
-                  Enviar para AnÃ¡lise
+                  Enviar para Análise
                 </Button>
               </>
             ) : modoAtual === 'editar' && formData.status === 'Rascunho' ? (
-              // Ao EDITAR rascunho: opÃ§Ã£o de manter Rascunho OU Enviar para AnÃ¡lise
+              // Ao EDITAR rascunho: opção de manter Rascunho OU Enviar para Análise
               <>
                 <Button
                   variant="outline"
                   onClick={() => handleSave(true)}
                 >
                   <Save className="h-4 w-4 mr-2" />
-                  Salvar AlteraÃ§Ãµes
+                  Salvar Alterações
                 </Button>
 
                 <Button onClick={() => handleSave(false)}>
                   <Send className="h-4 w-4 mr-2" />
-                  Enviar para AnÃ¡lise
+                  Enviar para Análise
                 </Button>
               </>
             ) : (
-              // Ao EDITAR pedido normal: apenas Salvar AlteraÃ§Ãµes
+              // Ao EDITAR pedido normal: apenas Salvar Alterações
               <Button onClick={() => handleSave(false)}>
                 <Save className="h-4 w-4 mr-2" />
-                Salvar AlteraÃ§Ãµes
+                Salvar Alterações
               </Button>
             )}
           </>
@@ -1638,16 +1638,16 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     // Marcar que houve tentativa de salvar
     setTentouSalvar(true);
 
-    // Verificar se pedido estÃ¡ bloqueado para ediÃ§Ã£o
+    // Verificar se pedido está bloqueado para edição
     if (modoAtual === 'editar' && pedidoBloqueado) {
-      toast.error('Este pedido jÃ¡ foi enviado ao ERP e nÃ£o pode ser editado');
+      toast.error('Este pedido já foi enviado ao ERP e não pode ser editado');
       return;
     }
 
-    // âœ… NOVO: ValidaÃ§Ã£o flexÃ­vel - Rascunhos nÃ£o exigem todos os campos
+    // ✅ NOVO: Validação flexível - Rascunhos não exigem todos os campos
     const erros = new Set<string>();
 
-    // Se NÃƒO for rascunho, validar todos os campos obrigatÃ³rios
+    // Se NÃO for rascunho, validar todos os campos obrigatórios
     if (!salvarComoRascunho) {
       if (!formData.clienteId) {
         erros.add('clienteId');
@@ -1656,7 +1656,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
       if (!formData.naturezaOperacaoId) {
         erros.add('naturezaOperacaoId');
-        toast.error('Selecione uma natureza de operaÃ§Ã£o');
+        toast.error('Selecione uma natureza de operação');
       }
 
       if (!formData.itens || formData.itens.length === 0) {
@@ -1666,7 +1666,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
       if (!formData.condicaoPagamentoId) {
         erros.add('condicaoPagamentoId');
-        toast.error('Selecione uma condiÃ§Ã£o de pagamento');
+        toast.error('Selecione uma condição de pagamento');
       }
 
       if (!formData.empresaFaturamentoId) {
@@ -1679,7 +1679,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         return;
       }
     } else {
-      // âœ… Para rascunho, apenas validar que tem pelo menos UM campo preenchido
+      // ✅ Para rascunho, apenas validar que tem pelo menos UM campo preenchido
       const temAlgumCampo = formData.clienteId ||
         formData.naturezaOperacaoId ||
         formData.itens?.length > 0 ||
@@ -1691,10 +1691,10 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       }
     }
 
-    // Limpar erros se passou na validaÃ§Ã£o
+    // Limpar erros se passou na validação
     setCamposComErro(new Set());
 
-    // Garantir que todos os campos de nome estÃ£o preenchidos
+    // Garantir que todos os campos de nome estão preenchidos
     const cliente = clientes.find(c => c.id === formData.clienteId);
     const condicao = condicoes.find(c => c.id === formData.condicaoPagamentoId);
     const natureza = naturezas.find(n => n.id === formData.naturezaOperacaoId);
@@ -1705,23 +1705,23 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       ...formData,
       id: vendaId || `venda-${Date.now()}`,
       numero: formData.numero || `PV-2025-${String(Date.now()).substring(7, 11)}`,
-      // âœ… NOVO: Define status baseado no tipo de salvamento
-      status: salvarComoRascunho ? 'Rascunho' : 'Em AnÃ¡lise',
+      // ✅ NOVO: Define status baseado no tipo de salvamento
+      status: salvarComoRascunho ? 'Rascunho' : 'Em Análise',
       createdAt: formData.createdAt || new Date(),
       updatedAt: new Date(),
       createdBy: usuario?.id || '',
-      // Garantir que os nomes estÃ£o salvos
+      // Garantir que os nomes estão salvos
       nomeCliente: formData.nomeCliente || cliente?.razaoSocial || cliente?.nomeFantasia || '',
       nomeListaPreco: formData.nomeListaPreco || cliente?.listaPrecos || '',
       nomeVendedor: formData.nomeVendedor || cliente?.vendedorAtribuido?.nome || '',
       nomeCondicaoPagamento: formData.nomeCondicaoPagamento || condicao?.nome || '',
       nomeNaturezaOperacao: formData.nomeNaturezaOperacao || natureza?.nome || '',
       nomeEmpresaFaturamento: formData.nomeEmpresaFaturamento || empresa?.razaoSocial || '',
-      // Incluir observaÃ§Ãµes da nota fiscal (geradas dinamicamente)
+      // Incluir observações da nota fiscal (geradas dinamicamente)
       observacoesNotaFiscal: observacoesNF,
     } as Venda;
 
-    console.log('ðŸ’¾ Salvando venda:', {
+    console.log('💾 Salvando venda:', {
       id: vendaCompleta.id,
       numero: vendaCompleta.numero,
       dataPedido: vendaCompleta.dataPedido,
@@ -1739,24 +1739,24 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       observacoesNotaFiscal: vendaCompleta.observacoesNotaFiscal,
     });
 
-    // âœ… CORREÃ‡ÃƒO: NÃƒO enviar RASCUNHOS para o ERP
-    // Se for criaÃ§Ã£o de novo pedido E NÃƒO for rascunho, verificar envio automÃ¡tico ao ERP
+    // ✅ CORREÇÃO: NÃO enviar RASCUNHOS para o ERP
+    // Se for criação de novo pedido E NÃO for rascunho, verificar envio automático ao ERP
     if (modoAtual === 'criar' && !salvarComoRascunho && formData.empresaFaturamentoId) {
-      console.log('ðŸ”„ Iniciando verificaÃ§Ã£o de envio automÃ¡tico...');
-      console.log('ðŸ”„ vendaCompleta.empresaFaturamentoId:', vendaCompleta.empresaFaturamentoId);
+      console.log('🔄 Iniciando verificação de envio automático...');
+      console.log('🔄 vendaCompleta.empresaFaturamentoId:', vendaCompleta.empresaFaturamentoId);
 
       try {
         const empresa = await companyService.getById(formData.empresaFaturamentoId);
-        console.log('ðŸ¢ Empresa encontrada:', empresa?.razaoSocial, '- ID:', formData.empresaFaturamentoId);
-        console.log('ðŸ¢ Dados da empresa:', empresa);
+        console.log('🏢 Empresa encontrada:', empresa?.razaoSocial, '- ID:', formData.empresaFaturamentoId);
+        console.log('🏢 Dados da empresa:', empresa);
 
         if (empresa) {
           const envioHabilitado = erpAutoSendService.estaHabilitado(empresa);
-          console.log('ðŸ“¤ Envio automÃ¡tico habilitado?', envioHabilitado);
+          console.log('📤 Envio automático habilitado?', envioHabilitado);
 
           if (envioHabilitado) {
-            // âœ… VALIDAÃ‡ÃƒO ADICIONAL: Verificar se tem itens ANTES de enviar
-            console.log('ðŸ” VERIFICAÃ‡ÃƒO PRÃ‰-ENVIO:', {
+            // ✅ VALIDAÇÃO ADICIONAL: Verificar se tem itens ANTES de enviar
+            console.log('🔍 VERIFICAÇÃO PRÉ-ENVIO:', {
               id: vendaCompleta.id,
               numero: vendaCompleta.numero,
               status: vendaCompleta.status,
@@ -1764,18 +1764,18 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             });
 
             if (!vendaCompleta.itens || vendaCompleta.itens.length === 0) {
-              console.error('âŒ BLOQUEIO: Tentativa de enviar pedido SEM ITENS ao ERP!');
-              toast.error('NÃ£o Ã© possÃ­vel enviar pedido sem itens ao ERP');
+              console.error('❌ BLOQUEIO: Tentativa de enviar pedido SEM ITENS ao ERP!');
+              toast.error('Não é possível enviar pedido sem itens ao ERP');
             } else {
-              console.log('âœ… Iniciando envio ao ERP');
+              console.log('✅ Iniciando envio ao ERP');
               toast.info('Enviando pedido ao ERP...');
 
               try {
                 const resultado = await erpAutoSendService.enviarVendaComRetry(vendaCompleta, empresa);
-                console.log('ðŸ“Š Resultado do envio:', resultado);
+                console.log('📊 Resultado do envio:', resultado);
 
                 if (resultado.sucesso && resultado.erpPedidoId) {
-                  // Atualizar venda com dados de integraÃ§Ã£o ANTES de adicionar ao array
+                  // Atualizar venda com dados de integração ANTES de adicionar ao array
                   vendaCompleta.integracaoERP = {
                     erpPedidoId: resultado.erpPedidoId,
                     sincronizacaoAutomatica: true,
@@ -1783,45 +1783,45 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                   };
 
                   toast.success(`Pedido enviado ao ERP com sucesso! (ID: ${resultado.erpPedidoId})`);
-                  console.log('âœ… Venda atualizada com integraÃ§Ã£o ERP:', vendaCompleta.integracaoERP);
+                  console.log('✅ Venda atualizada com integração ERP:', vendaCompleta.integracaoERP);
                 } else {
                   toast.error(`Erro ao enviar ao ERP: ${resultado.erro}`);
-                  console.error('âŒ Erro no envio automÃ¡tico:', resultado.erro);
+                  console.error('❌ Erro no envio automático:', resultado.erro);
                 }
               } catch (error) {
-                console.error('âŒ Erro inesperado no envio automÃ¡tico:', error);
+                console.error('❌ Erro inesperado no envio automático:', error);
                 toast.error('Erro inesperado ao enviar pedido ao ERP');
               }
             }
           } else {
-            console.log('âš ï¸ Envio automÃ¡tico nÃ£o estÃ¡ habilitado para esta empresa');
+            console.log('⚠️ Envio automático não está habilitado para esta empresa');
           }
         } else {
-          console.error('âŒ Empresa nÃ£o encontrada com ID:', formData.empresaFaturamentoId);
+          console.error('❌ Empresa não encontrada com ID:', formData.empresaFaturamentoId);
         }
       } catch (error) {
-        console.error('âŒ Erro ao buscar empresa:', error);
+        console.error('❌ Erro ao buscar empresa:', error);
       }
     } else if (salvarComoRascunho) {
-      // âœ… LOG: Rascunhos NÃƒO sÃ£o enviados ao ERP
-      console.log('ðŸ“ Salvando como RASCUNHO - NÃƒO serÃ¡ enviado ao ERP');
+      // ✅ LOG: Rascunhos NÃO são enviados ao ERP
+      console.log('📝 Salvando como RASCUNHO - NÃO será enviado ao ERP');
     }
 
-    // Persistir venda no Supabase (DEPOIS do envio ao ERP para jÃ¡ incluir os dados de integraÃ§Ã£o)
+    // Persistir venda no Supabase (DEPOIS do envio ao ERP para já incluir os dados de integração)
     try {
       if (modoAtual === 'criar') {
         await api.create('vendas', vendaCompleta);
-        console.log('âœ… Venda criada no Supabase:', vendaCompleta.id, 'com integraÃ§Ã£o ERP:', vendaCompleta.integracaoERP);
+        console.log('✅ Venda criada no Supabase:', vendaCompleta.id, 'com integração ERP:', vendaCompleta.integracaoERP);
       } else {
         await api.update('vendas', vendaId!, vendaCompleta);
-        console.log('âœ… Venda atualizada no Supabase:', vendaCompleta.id);
+        console.log('✅ Venda atualizada no Supabase:', vendaCompleta.id);
       }
 
-      // âœ… NOVO: Mensagem diferente para rascunho
+      // ✅ NOVO: Mensagem diferente para rascunho
       if (salvarComoRascunho) {
-        toast.success('Rascunho salvo com sucesso! VocÃª pode continuar editando depois.');
+        toast.success('Rascunho salvo com sucesso! Você pode continuar editando depois.');
       } else {
-        toast.success(modoAtual === 'criar' ? 'Pedido criado e enviado para anÃ¡lise!' : 'Pedido atualizado com sucesso!');
+        toast.success(modoAtual === 'criar' ? 'Pedido criado e enviado para análise!' : 'Pedido atualizado com sucesso!');
       }
     } catch (error: any) {
       console.error('[VENDAS] Erro ao salvar venda:', error);
@@ -1855,12 +1855,12 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         await api.statusMix.ativarPorPedido(vendaCompleta.clienteId, produtoIds);
         console.log('[STATUS MIX] Produtos ativados automaticamente:', produtoIds.length);
       } catch (error) {
-        // NÃ£o bloquear o fluxo se falhar a ativaÃ§Ã£o do status mix
+        // Não bloquear o fluxo se falhar a ativação do status mix
         console.error('[STATUS MIX] Erro ao ativar produtos automaticamente:', error);
       }
     }
 
-    // Se estava editando, atualizar dados originais e voltar para modo visualizaÃ§Ã£o
+    // Se estava editando, atualizar dados originais e voltar para modo visualização
     if (modoAtual === 'editar') {
       setDadosOriginais(vendaCompleta); // Atualizar dados originais com os novos dados salvos
       setTimeout(() => {
@@ -1872,7 +1872,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     }
   };
 
-  // Gerar observaÃ§Ãµes da NF (prÃ©-visualizaÃ§Ã£o)
+  // Gerar observações da NF (pré-visualização)
   const observacoesNF = useMemo(() => {
     const partes: string[] = [];
 
@@ -1883,13 +1883,13 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       partes.push('OC: [Aguardando]');
     }
 
-    // Buscar requisitos logÃ­sticos do cliente
+    // Buscar requisitos logísticos do cliente
     if (formData.clienteId) {
       const cliente = clientes.find(c => c.id === formData.clienteId);
       if (cliente && cliente.requisitosLogisticos) {
         const requisitos = cliente.requisitosLogisticos;
 
-        // Verificar se hÃ¡ requisitos logÃ­sticos preenchidos
+        // Verificar se há requisitos logísticos preenchidos
         const temRequisitos =
           requisitos.entregaAgendada ||
           requisitos.horarioRecebimentoHabilitado ||
@@ -1900,7 +1900,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         if (temRequisitos) {
           const instrucoesLogistica: string[] = [];
 
-          // HorÃ¡rio de Recebimento
+          // Horário de Recebimento
           if (
             requisitos.horarioRecebimentoHabilitado &&
             requisitos.horariosRecebimento?.length > 0
@@ -1908,13 +1908,13 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             requisitos.horariosRecebimento.forEach((horario) => {
               if (horario.diasSemana.length > 0 && horario.horarioInicial1 && horario.horarioFinal1) {
                 const dias = horario.diasSemana.join(', ');
-                let horarioTexto = `${dias}: ${horario.horarioInicial1} Ã s ${horario.horarioFinal1}`;
+                let horarioTexto = `${dias}: ${horario.horarioInicial1} às ${horario.horarioFinal1}`;
 
                 if (horario.temIntervalo && horario.horarioInicial2 && horario.horarioFinal2) {
-                  horarioTexto += ` e ${horario.horarioInicial2} Ã s ${horario.horarioFinal2}`;
+                  horarioTexto += ` e ${horario.horarioInicial2} às ${horario.horarioFinal2}`;
                 }
 
-                instrucoesLogistica.push(`HorÃ¡rio de Recebimento: ${horarioTexto}`);
+                instrucoesLogistica.push(`Horário de Recebimento: ${horarioTexto}`);
               }
             });
           }
@@ -1939,17 +1939,17 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             }
           }
 
-          // Tipo de VeÃ­culo EspecÃ­fico
+          // Tipo de Veículo Específico
           if (requisitos.tipoVeiculoEspecifico && requisitos.tipoVeiculo) {
-            instrucoesLogistica.push(`Tipo de VeÃ­culo: ${requisitos.tipoVeiculo}`);
+            instrucoesLogistica.push(`Tipo de Veículo: ${requisitos.tipoVeiculo}`);
           }
 
           // 1 SKU por Caixa
           if (requisitos.umSkuPorCaixa) {
-            instrucoesLogistica.push('AtenÃ§Ã£o: 1 SKU/EAN por caixa.');
+            instrucoesLogistica.push('Atenção: 1 SKU/EAN por caixa.');
           }
 
-          // ObservaÃ§Ãµes obrigatÃ³rias
+          // Observações obrigatórias
           if (requisitos.observacoesObrigatorias) {
             requisitos.observacoesObrigatorias
               .filter((obs) => obs.trim())
@@ -1959,7 +1959,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           }
 
           if (instrucoesLogistica.length > 0) {
-            partes.push('***INSTRUÃ‡Ã•ES LOGÃSTICA:***');
+            partes.push('***INSTRUÇÕES LOGÍSTICA:***');
             partes.push(instrucoesLogistica.join(' // '));
           }
         }
@@ -1969,12 +1969,12 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     return partes.join('\n\n');
   }, [formData.ordemCompraCliente, formData.clienteId, clientes]);
 
-  // FunÃ§Ã£o auxiliar para verificar se um campo tem erro
+  // Função auxiliar para verificar se um campo tem erro
   const campoTemErro = (nomeCampo: string) => {
     return tentouSalvar && camposComErro.has(nomeCampo);
   };
 
-  // FunÃ§Ã£o auxiliar para obter classes CSS de campos com erro
+  // Função auxiliar para obter classes CSS de campos com erro
   const getErrorClasses = (nomeCampo: string) => {
     return campoTemErro(nomeCampo)
       ? 'border-destructive focus-visible:ring-destructive'
@@ -2016,7 +2016,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                 {modo === 'criar' ? 'Novo Pedido de Venda' :
                   modoAtual === 'editar' ? 'Editar Pedido de Venda' :
                     'Visualizar Pedido de Venda'}
-                {/* âœ… NOVO: Badge indicando Rascunho */}
+                {/* ✅ NOVO: Badge indicando Rascunho */}
                 {formData.status === 'Rascunho' && (
                   <Badge variant="outline" className="text-gray-500">
                     Rascunho
@@ -2024,12 +2024,12 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                 )}
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
-                {formData.numero || 'Preencha as informaÃ§Ãµes do pedido'}
+                {formData.numero || 'Preencha as informações do pedido'}
               </p>
             </div>
           </div>
 
-          {/* BotÃµes de aÃ§Ã£o */}
+          {/* Botões de ação */}
           {renderActionButtons()}
         </div>
 
@@ -2037,20 +2037,20 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         {pedidoBloqueado && (
           <Alert variant="destructive">
             <Lock className="h-4 w-4" />
-            <AlertTitle>Pedido Bloqueado para EdiÃ§Ã£o</AlertTitle>
+            <AlertTitle>Pedido Bloqueado para Edição</AlertTitle>
             <AlertDescription>
-              Este pedido jÃ¡ foi enviado ao ERP (ID: {formData.integracaoERP?.erpPedidoId}) e nÃ£o pode mais ser editado.
-              Para fazer alteraÃ§Ãµes, entre em contato com o backoffice.
+              Este pedido já foi enviado ao ERP (ID: {formData.integracaoERP?.erpPedidoId}) e não pode mais ser editado.
+              Para fazer alterações, entre em contato com o backoffice.
             </AlertDescription>
           </Alert>
         )}
 
-        {/* InformaÃ§Ãµes do Cliente */}
+        {/* Informações do Cliente */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <User className="h-5 w-5" />
-              InformaÃ§Ãµes do Cliente
+              Informações do Cliente
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -2085,7 +2085,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                       {/* Campo de busca */}
                       <div className="flex items-center border-b px-3 py-2">
                         <Input
-                          placeholder="Buscar por nome, razÃ£o social, fantasia, grupo/rede, CNPJ ou cÃ³digo..."
+                          placeholder="Buscar por nome, razão social, fantasia, grupo/rede, CNPJ ou código..."
                           value={clienteSearchTerm}
                           onChange={(e) => handleClienteSearchChange(e.target.value)}
                           className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -2131,17 +2131,17 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                                     <div className="flex flex-wrap gap-2 text-xs text-muted-foreground mt-1">
                                       {cliente.cpfCnpj && (
                                         <span>
-                                          {cliente.tipoPessoa === 'Pessoa FÃ­sica' ? 'CPF' : 'CNPJ'}: {' '}
-                                          {cliente.tipoPessoa === 'Pessoa FÃ­sica'
+                                          {cliente.tipoPessoa === 'Pessoa Física' ? 'CPF' : 'CNPJ'}: {' '}
+                                          {cliente.tipoPessoa === 'Pessoa Física'
                                             ? formatCPF(cliente.cpfCnpj)
                                             : formatCNPJ(cliente.cpfCnpj)}
                                         </span>
                                       )}
                                       {cliente.nomeFantasia && cliente.razaoSocial && (
-                                        <span>â€¢ {cliente.nomeFantasia}</span>
+                                        <span>• {cliente.nomeFantasia}</span>
                                       )}
                                       {cliente.grupoRede && (
-                                        <span>â€¢ Grupo: {cliente.grupoRede}</span>
+                                        <span>• Grupo: {cliente.grupoRede}</span>
                                       )}
                                     </div>
                                   </div>
@@ -2164,7 +2164,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                   <p className="text-xs text-muted-foreground">
                     Cliente selecionado: {formData.nomeCliente} - {(() => {
                       const clienteSelecionado = clientes.find(c => c.id === formData.clienteId);
-                      if (clienteSelecionado?.tipoPessoa === 'Pessoa FÃ­sica') {
+                      if (clienteSelecionado?.tipoPessoa === 'Pessoa Física') {
                         return formatCPF(formData.cnpjCliente || '');
                       }
                       return formatCNPJ(formData.cnpjCliente || '');
@@ -2183,18 +2183,18 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                 </div>
               )}
 
-              {/* Campos que aparecem apÃ³s selecionar o cliente */}
+              {/* Campos que aparecem após selecionar o cliente */}
               {mostrarCamposCliente && !isLoadingCliente && (
                 <>
                   <div className="space-y-2">
-                    <Label>Lista de PreÃ§o</Label>
+                    <Label>Lista de Preço</Label>
                     <Input
                       value={(() => {
-                        // Se jÃ¡ temos o nome, usar ele
+                        // Se já temos o nome, usar ele
                         if (formData.nomeListaPreco) {
                           return formData.nomeListaPreco;
                         }
-                        // Se temos o ID, buscar o nome na lista de preÃ§os
+                        // Se temos o ID, buscar o nome na lista de preços
                         if (formData.listaPrecoId) {
                           const listaPreco = listasPreco.find(lp => lp.id === formData.listaPrecoId);
                           if (listaPreco?.nome) {
@@ -2209,7 +2209,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Desconto PadrÃ£o (%)</Label>
+                    <Label>Desconto Padrão (%)</Label>
                     <Input
                       value={formData.percentualDescontoPadrao || 0}
                       disabled
@@ -2221,13 +2221,13 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                     <Label>
                       {(() => {
                         const clienteSelecionado = clientes.find(c => c.id === formData.clienteId);
-                        return clienteSelecionado?.tipoPessoa === 'Pessoa FÃ­sica' ? 'CPF' : 'CNPJ';
+                        return clienteSelecionado?.tipoPessoa === 'Pessoa Física' ? 'CPF' : 'CNPJ';
                       })()}
                     </Label>
                     <Input
                       value={(() => {
                         const clienteSelecionado = clientes.find(c => c.id === formData.clienteId);
-                        if (clienteSelecionado?.tipoPessoa === 'Pessoa FÃ­sica') {
+                        if (clienteSelecionado?.tipoPessoa === 'Pessoa Física') {
                           return formatCPF(formData.cnpjCliente || '');
                         }
                         return formatCNPJ(formData.cnpjCliente || '');
@@ -2238,7 +2238,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>InscriÃ§Ã£o Estadual</Label>
+                    <Label>Inscrição Estadual</Label>
                     <Input
                       value={formData.inscricaoEstadualCliente || ''}
                       disabled
@@ -2291,15 +2291,15 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                     )}
                     {!campoTemErro('empresaFaturamentoId') && !isBackoffice && (
                       <p className="text-xs text-muted-foreground">
-                        Apenas usuÃ¡rios backoffice podem alterar
+                        Apenas usuários backoffice podem alterar
                       </p>
                     )}
                   </div>
 
-                  {/* Natureza de OperaÃ§Ã£o - Ãšltima linha da seÃ§Ã£o, ocupando toda a largura */}
+                  {/* Natureza de Operação - Última linha da seção, ocupando toda a largura */}
                   <div className="md:col-span-3 space-y-2">
                     <Label className={campoTemErro('naturezaOperacaoId') ? 'text-destructive' : ''}>
-                      Natureza da OperaÃ§Ã£o *
+                      Natureza da Operação *
                     </Label>
                     <Select
                       value={formData.naturezaOperacaoId || ''}
@@ -2312,7 +2312,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                           nomeNaturezaOperacao: natureza?.nome || '',
                         });
 
-                        // Mostrar demais campos apÃ³s selecionar natureza (apenas no modo criar)
+                        // Mostrar demais campos após selecionar natureza (apenas no modo criar)
                         if (modo === 'criar') {
                           setMostrarDemaisCampos(true);
                         }
@@ -2333,7 +2333,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                     {campoTemErro('naturezaOperacaoId') && (
                       <p className="text-xs text-destructive flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
-                        Por favor, selecione uma natureza de operaÃ§Ã£o
+                        Por favor, selecione uma natureza de operação
                       </p>
                     )}
                   </div>
@@ -2343,15 +2343,15 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           </CardContent>
         </Card>
 
-        {/* Demais cards - Apenas apÃ³s selecionar natureza de operaÃ§Ã£o */}
+        {/* Demais cards - Apenas após selecionar natureza de operação */}
         {mostrarDemaisCampos && (
           <>
-            {/* Dados NFe Vinculada - Apenas em modo visualizaÃ§Ã£o e status especÃ­ficos */}
+            {/* Dados NFe Vinculada - Apenas em modo visualização e status específicos */}
             {(() => {
               const statusComNotaFiscal = ['Faturado', 'Pronto para envio', 'Enviado', 'Entregue', 'Não Entregue', 'Cancelado'];
               const deveExibirNFe = statusComNotaFiscal.includes(formData.status || '');
 
-              console.log('[DEBUG NFe] Verificando exibiÃ§Ã£o da seÃ§Ã£o:', {
+              console.log('[DEBUG NFe] Verificando exibição da seção:', {
                 isReadOnly,
                 mostrarDemaisCampos,
                 status: formData.status,
@@ -2369,7 +2369,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                       Dados NFe Vinculada
                     </CardTitle>
                     <CardDescription>
-                      InformaÃ§Ãµes da nota fiscal emitida no ERP para este pedido
+                      Informações da nota fiscal emitida no ERP para este pedido
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -2380,10 +2380,10 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                       </div>
                     ) : dadosNFe ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {/* SituaÃ§Ã£o da NF */}
+                        {/* Situação da NF */}
                         {dadosNFe.situacao && (
                           <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">SituaÃ§Ã£o SEFAZ</Label>
+                            <Label className="text-xs text-muted-foreground">Situação SEFAZ</Label>
                             <div className="flex items-center gap-2">
                               <div className={`h-2 w-2 rounded-full ${dadosNFe.situacao.includes('Autorizada') ? 'bg-green-500' :
                                 dadosNFe.situacao.includes('Cancelada') ? 'bg-red-500' :
@@ -2395,18 +2395,18 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                           </div>
                         )}
 
-                        {/* NÃºmero da NF */}
+                        {/* Número da NF */}
                         {dadosNFe.numero && (
                           <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">NÃºmero da NF</Label>
+                            <Label className="text-xs text-muted-foreground">Número da NF</Label>
                             <p className="font-medium">{dadosNFe.numero}</p>
                           </div>
                         )}
 
-                        {/* SÃ©rie da NF */}
+                        {/* Série da NF */}
                         {dadosNFe.serie && (
                           <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">SÃ©rie</Label>
+                            <Label className="text-xs text-muted-foreground">Série</Label>
                             <p className="font-medium">{dadosNFe.serie}</p>
                           </div>
                         )}
@@ -2415,16 +2415,16 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                         {dadosNFe.tipo && (
                           <div className="space-y-1">
                             <Label className="text-xs text-muted-foreground">Tipo de NF</Label>
-                            <Badge variant={dadosNFe.tipo === 'SaÃ­da' ? 'default' : 'secondary'}>
+                            <Badge variant={dadosNFe.tipo === 'Saída' ? 'default' : 'secondary'}>
                               {dadosNFe.tipo}
                             </Badge>
                           </div>
                         )}
 
-                        {/* Data de EmissÃ£o */}
+                        {/* Data de Emissão */}
                         {dadosNFe.dataEmissao && (() => {
                           try {
-                            // FunÃ§Ã£o para converter data brasileira (DD/MM/YYYY) para Date
+                            // Função para converter data brasileira (DD/MM/YYYY) para Date
                             const parseDataBrasileira = (dataStr: string): { data: Date | null, temHora: boolean } => {
                               // Tentar formato ISO primeiro (YYYY-MM-DD ou ISO completo)
                               if (dataStr.includes('-') || dataStr.includes('T')) {
@@ -2458,13 +2458,13 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                             const { data, temHora } = parseDataBrasileira(dadosNFe.dataEmissao);
 
                             if (!data || isNaN(data.getTime())) {
-                              console.error('[DADOS NFE] Data invÃ¡lida:', dadosNFe.dataEmissao);
+                              console.error('[DADOS NFE] Data inválida:', dadosNFe.dataEmissao);
                               return null;
                             }
 
                             return (
                               <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Data de EmissÃ£o</Label>
+                                <Label className="text-xs text-muted-foreground">Data de Emissão</Label>
                                 <p className="font-medium">
                                   {temHora ? (
                                     data.toLocaleDateString('pt-BR', {
@@ -2490,10 +2490,10 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                           }
                         })()}
 
-                        {/* Natureza de OperaÃ§Ã£o da NF */}
+                        {/* Natureza de Operação da NF */}
                         {dadosNFe.naturezaOperacao && (
                           <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Natureza de OperaÃ§Ã£o</Label>
+                            <Label className="text-xs text-muted-foreground">Natureza de Operação</Label>
                             <p className="font-medium">{dadosNFe.naturezaOperacao}</p>
                           </div>
                         )}
@@ -2511,9 +2511,9 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                     ) : (
                       <Alert>
                         <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>Dados nÃ£o disponÃ­veis</AlertTitle>
+                        <AlertTitle>Dados não disponíveis</AlertTitle>
                         <AlertDescription>
-                          NÃ£o foi possÃ­vel carregar os dados completos da nota fiscal.
+                          Não foi possível carregar os dados completos da nota fiscal.
                           Verifique se a NFe foi emitida corretamente no ERP.
                         </AlertDescription>
                       </Alert>
@@ -2539,7 +2539,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                 </div>
               </CardHeader>
               <CardContent>
-                {/* Se estiver em modo visualizaÃ§Ã£o E tiver integraÃ§Ã£o com ERP, mostrar abas */}
+                {/* Se estiver em modo visualização E tiver integração com ERP, mostrar abas */}
                 {isReadOnly && formData.integracaoERP?.erpPedidoId ? (
                   <Tabs defaultValue="solicitados" className="w-full">
                     <TabsList className="grid w-full grid-cols-2">
@@ -2555,8 +2555,8 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-12">NÂº</TableHead>
-                            <TableHead>DescriÃ§Ã£o</TableHead>
+                            <TableHead className="w-12">Nº</TableHead>
+                            <TableHead>Descrição</TableHead>
                             <TableHead>SKU</TableHead>
                             <TableHead>EAN</TableHead>
                             <TableHead className="text-right">Vlr. Tabela</TableHead>
@@ -2604,18 +2604,18 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                       ) : itensFaturados.length === 0 ? (
                         <Alert>
                           <AlertCircle className="h-4 w-4" />
-                          <AlertTitle>Itens faturados nÃ£o disponÃ­veis</AlertTitle>
+                          <AlertTitle>Itens faturados não disponíveis</AlertTitle>
                           <AlertDescription>
-                            NÃ£o foi possÃ­vel carregar os itens efetivamente faturados no ERP.
-                            Isso pode ocorrer se o pedido ainda nÃ£o foi faturado ou se a nota fiscal ainda nÃ£o foi vinculada ao pedido.
+                            Não foi possível carregar os itens efetivamente faturados no ERP.
+                            Isso pode ocorrer se o pedido ainda não foi faturado ou se a nota fiscal ainda não foi vinculada ao pedido.
                           </AlertDescription>
                         </Alert>
                       ) : (
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead className="w-12">NÂº</TableHead>
-                              <TableHead>DescriÃ§Ã£o</TableHead>
+                              <TableHead className="w-12">Nº</TableHead>
+                              <TableHead>Descrição</TableHead>
                               <TableHead>SKU</TableHead>
                               <TableHead>EAN</TableHead>
                               <TableHead className="text-right">Vlr. Unit.</TableHead>
@@ -2649,19 +2649,19 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                             </span>
                           </div>
                           <p className="text-xs text-muted-foreground mt-2">
-                            * Este Ã© o valor base para cÃ¡lculo das comissÃµes de vendas
+                            * Este é o valor base para cálculo das comissões de vendas
                           </p>
                         </div>
                       )}
                     </TabsContent>
                   </Tabs>
                 ) : (
-                  /* Tabela simples para modos de criaÃ§Ã£o e ediÃ§Ã£o */
+                  /* Tabela simples para modos de criação e edição */
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-12">NÂº</TableHead>
-                        <TableHead>DescriÃ§Ã£o</TableHead>
+                        <TableHead className="w-12">Nº</TableHead>
+                        <TableHead>Descrição</TableHead>
                         <TableHead>SKU</TableHead>
                         <TableHead>EAN</TableHead>
                         <TableHead className="text-right">Vlr. Tabela</TableHead>
@@ -2741,7 +2741,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                     <p>{(formData.pesoBrutoTotal || 0).toFixed(2)}</p>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-muted-foreground">Peso LÃ­quido (kg)</Label>
+                    <Label className="text-muted-foreground">Peso Líquido (kg)</Label>
                     <p>{(formData.pesoLiquidoTotal || 0).toFixed(2)}</p>
                   </div>
                   <div className="space-y-1">
@@ -2779,7 +2779,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                       onChange={(e) => setFormData({ ...formData, dataPedido: criarDataLocal(e.target.value) })}
                       disabled={isReadOnly || pedidoBloqueado}
                     />
-                    <p className="text-xs text-muted-foreground">Data de emissÃ£o do pedido pelo cliente</p>
+                    <p className="text-xs text-muted-foreground">Data de emissão do pedido pelo cliente</p>
                   </div>
 
                   <div className="space-y-2">
@@ -2794,14 +2794,14 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
                   <div className="space-y-2">
                     <Label className={campoTemErro('condicaoPagamentoId') ? 'text-destructive' : ''}>
-                      CondiÃ§Ã£o de Pagamento *
+                      Condição de Pagamento *
                     </Label>
                     <Select
                       value={formData.condicaoPagamentoId || ''}
                       onValueChange={(value) => {
                         limparErro('condicaoPagamentoId');
                         const condicao = condicoes.find(c => c.id === value);
-                        console.log('[VENDAS] CondiÃ§Ã£o de pagamento selecionada:', {
+                        console.log('[VENDAS] Condição de pagamento selecionada:', {
                           id: value,
                           nome: condicao?.nome,
                           descontoExtra: condicao?.descontoExtra
@@ -2830,12 +2830,12 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                     {campoTemErro('condicaoPagamentoId') && (
                       <p className="text-xs text-destructive flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
-                        Por favor, selecione uma condiÃ§Ã£o de pagamento
+                        Por favor, selecione uma condição de pagamento
                       </p>
                     )}
                     {!campoTemErro('condicaoPagamentoId') && condicoesPagamentoDisponiveis.length === 0 && formData.clienteId && (
                       <p className="text-xs text-muted-foreground text-destructive">
-                        Nenhuma condiÃ§Ã£o disponÃ­vel (verifique pedido mÃ­nimo)
+                        Nenhuma condição disponível (verifique pedido mínimo)
                       </p>
                     )}
                   </div>
@@ -2843,28 +2843,28 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
               </CardContent>
             </Card>
 
-            {/* ObservaÃ§Ãµes */}
+            {/* Observações */}
             <Card>
               <CardHeader>
-                <CardTitle>ObservaÃ§Ãµes</CardTitle>
+                <CardTitle>Observações</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label>ObservaÃ§Ãµes da Nota Fiscal (PrÃ©-VisualizaÃ§Ã£o)</Label>
+                  <Label>Observações da Nota Fiscal (Pré-Visualização)</Label>
                   <Textarea
                     value={observacoesNF}
                     disabled
                     className="bg-muted min-h-[100px]"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Estas observaÃ§Ãµes serÃ£o impressas na nota fiscal
+                    Estas observações serão impressas na nota fiscal
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label>ObservaÃ§Ãµes Internas</Label>
+                  <Label>Observações Internas</Label>
                   <Textarea
-                    placeholder="ObservaÃ§Ãµes internas do pedido (nÃ£o serÃ£o impressas na NF)"
+                    placeholder="Observações internas do pedido (não serão impressas na NF)"
                     value={formData.observacoesInternas || ''}
                     onChange={(e) => setFormData({ ...formData, observacoesInternas: e.target.value })}
                     disabled={isReadOnly || pedidoBloqueado}
@@ -2874,7 +2874,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
               </CardContent>
             </Card>
 
-            {/* BotÃµes de aÃ§Ã£o no final da pÃ¡gina */}
+            {/* Botões de ação no final da página */}
             <div className="flex justify-end pt-6 border-t">
               {renderActionButtons()}
             </div>
@@ -2955,9 +2955,9 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
                   {selectedProdutoId && (
                     <div className="border rounded-lg p-4 bg-muted overflow-x-hidden">
-                      <h4 className="mb-2">InformaÃ§Ãµes do Produto</h4>
+                      <h4 className="mb-2">Informações do Produto</h4>
                       {(() => {
-                        // Buscar produto na lista de preÃ§os primeiro
+                        // Buscar produto na lista de preços primeiro
                         let produtoPreco: any = null;
                         let produto: any = null;
 
@@ -2968,12 +2968,12 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                           }
                         }
 
-                        // Se nÃ£o encontrou na lista de preÃ§os, buscar na lista geral de produtos
+                        // Se não encontrou na lista de preços, buscar na lista geral de produtos
                         if (!produtoPreco) {
                           produto = produtos.find(p => p.id === selectedProdutoId);
                         }
 
-                        // Buscar preÃ§o do produto na lista de preÃ§os do cliente
+                        // Buscar preço do produto na lista de preços do cliente
                         let valorTabela = 0;
                         let mensagemErro = '';
                         let descricao = '';
@@ -2991,16 +2991,16 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                               ean = produtoPreco.codigoEan || '';
 
                               if (valorTabela <= 0) {
-                                mensagemErro = 'Produto sem preÃ§o cadastrado nesta lista';
+                                mensagemErro = 'Produto sem preço cadastrado nesta lista';
                               }
                             } else {
-                              mensagemErro = 'Produto nÃ£o encontrado nesta lista de preÃ§os';
+                              mensagemErro = 'Produto não encontrado nesta lista de preços';
                             }
                           } else {
-                            mensagemErro = 'Lista de preÃ§os nÃ£o encontrada';
+                            mensagemErro = 'Lista de preços não encontrada';
                           }
                         } else {
-                          mensagemErro = 'Cliente sem lista de preÃ§os associada';
+                          mensagemErro = 'Cliente sem lista de preços associada';
                         }
 
                         const percentualDesconto = formData.percentualDescontoPadrao || 0;
@@ -3018,7 +3018,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                                 <div className="text-sm space-y-1 min-w-0 break-words overflow-x-hidden">
                                   {descricao && (
                                     <div className="min-w-0 break-words">
-                                      <span className="text-muted-foreground">DescriÃ§Ã£o:</span> {descricao}
+                                      <span className="text-muted-foreground">Descrição:</span> {descricao}
                                     </div>
                                   )}
                                   {sku && (
@@ -3039,10 +3039,10 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
                         return (
                           <div className="space-y-3">
-                            {/* InformaÃ§Ãµes do produto */}
+                            {/* Informações do produto */}
                             {(descricao || sku || ean) && (
                               <div className="text-sm space-y-1 pb-2 border-b min-w-0 break-words overflow-x-hidden">
-                                {descricao && <div className="min-w-0 break-words"><span className="text-muted-foreground">DescriÃ§Ã£o:</span> {descricao}</div>}
+                                {descricao && <div className="min-w-0 break-words"><span className="text-muted-foreground">Descrição:</span> {descricao}</div>}
                                 {sku && <div className="min-w-0 break-words"><span className="text-muted-foreground">SKU:</span> {sku}</div>}
                                 {ean && <div className="min-w-0 break-words"><span className="text-muted-foreground">EAN:</span> {ean}</div>}
                               </div>
@@ -3059,7 +3059,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                                 <p className="font-medium">{percentualDesconto}%</p>
                               </div>
                               <div>
-                                <span className="text-muted-foreground">Valor UnitÃ¡rio:</span>
+                                <span className="text-muted-foreground">Valor Unitário:</span>
                                 <p className="font-medium">{formatCurrency(valorUnitario)}</p>
                               </div>
                               <div>

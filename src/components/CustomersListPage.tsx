@@ -81,11 +81,11 @@ export function CustomersListPage({
   onVisualizarCliente,
   onEditarCliente,
 }: CustomersListPageProps) {
-  const SEARCH_DEBOUNCE_MS = 700;
   const { usuario, temPermissao, ehBackoffice } = useAuth();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [appliedSearchTerm, setAppliedSearchTerm] = useState('');
   const [situacaoFiltro, setSituacaoFiltro] = useState<string>('todos');
   const [segmentoFiltro, setSegmentoFiltro] = useState<string>('todos');
   const [clienteParaExcluir, setClienteParaExcluir] = useState<Cliente | null>(null);
@@ -105,13 +105,6 @@ export function CustomersListPage({
       setSegmentos(Array.isArray(data) ? data : []);
     }).catch(() => setSegmentos([]));
   }, []);
-
-  // Busca com debounce (declarado antes de carregarClientes para evitar "before initialization")
-  const [searchDebounced, setSearchDebounced] = useState('');
-  useEffect(() => {
-    const t = setTimeout(() => setSearchDebounced(searchTerm), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(t);
-  }, [searchTerm, SEARCH_DEBOUNCE_MS]);
 
   // Mapear situação (UI) para status_aprovacao (API)
   const situacaoToStatusAprovacao = useCallback((situacao: string): string | undefined => {
@@ -133,7 +126,7 @@ export function CustomersListPage({
       const params: Record<string, string | number | undefined> = {
         page: paginaAtual,
         limit: itensPorPagina,
-        search: searchDebounced.trim() || undefined,
+        search: appliedSearchTerm || undefined,
         status_aprovacao: statusAprovacao,
         vendedor: ehBackoffice() ? undefined : usuario?.id,
       };
@@ -166,7 +159,7 @@ export function CustomersListPage({
         setLoading(false);
       }
     }
-  }, [paginaAtual, itensPorPagina, searchDebounced, situacaoFiltro, situacaoToStatusAprovacao, ehBackoffice, usuario]);
+  }, [paginaAtual, itensPorPagina, appliedSearchTerm, situacaoFiltro, situacaoToStatusAprovacao, ehBackoffice, usuario]);
 
   useEffect(() => {
     carregarClientes();
@@ -175,7 +168,25 @@ export function CustomersListPage({
   // Reset para página 1 quando filtros mudam
   useEffect(() => {
     setPaginaAtual(1);
-  }, [itensPorPagina, situacaoFiltro, searchTerm]);
+  }, [itensPorPagina, situacaoFiltro]);
+
+  const aplicarBusca = useCallback(() => {
+    const termoNormalizado = searchTerm.trim();
+    const termoMudou = termoNormalizado !== appliedSearchTerm;
+
+    if (paginaAtual !== 1) {
+      setPaginaAtual(1);
+    }
+
+    if (termoMudou) {
+      setAppliedSearchTerm(termoNormalizado);
+      return;
+    }
+
+    if (paginaAtual === 1) {
+      carregarClientes();
+    }
+  }, [searchTerm, appliedSearchTerm, paginaAtual, carregarClientes]);
 
   const goToPage = (page: number) => {
     setPaginaAtual(Math.max(1, Math.min(page, totalPaginas)));
@@ -348,14 +359,25 @@ export function CustomersListPage({
                   <div className="flex flex-wrap items-end gap-4">
                     <div className="flex-1 min-w-[200px] space-y-1.5">
                       <label className="text-sm font-medium text-muted-foreground">Buscar</label>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Nome, CNPJ/CPF, e-mail..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="pl-10"
-                        />
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            placeholder="Nome, CNPJ/CPF, e-mail..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                aplicarBusca();
+                              }
+                            }}
+                            className="pl-10"
+                          />
+                        </div>
+                        <Button onClick={aplicarBusca} disabled={loading}>
+                          Buscar
+                        </Button>
                       </div>
                     </div>
                     <div className="space-y-1.5">

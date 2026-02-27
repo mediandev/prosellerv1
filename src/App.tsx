@@ -62,6 +62,7 @@ import { Sheet, SheetContent, SheetTitle, VisuallyHidden } from "./components/ui
 import { Toaster } from "./components/ui/sonner";
 // Dashboard agora usa dados reais do Supabase via dashboardDataService [updated: 2025-11-16]
 import { Transaction } from "./services/dashboardDataService";
+import type { DashboardSnapshot } from "./services/dashboardSnapshotService";
 import { ListaPreco } from "./types/listaPreco";
 import { Produto } from "./types/produto";
 import { toast } from "sonner@2.0.3";
@@ -263,6 +264,7 @@ function AppContent() {
 
   // 🆕 NOVO: Estado para armazenar TODAS as transações SEM filtro de período (para Curva ABC)
   const [dashboardRawTransactions, setDashboardRawTransactions] = useState<Transaction[]>([]);
+  const [dashboardSnapshot, setDashboardSnapshot] = useState<DashboardSnapshot | null>(null);
 
   // Check if data needs initialization - DESABILITADO
   // useEffect(() => {
@@ -748,6 +750,7 @@ function AppContent() {
               onTransactionsChange={setDashboardTransactions}
               onAllTransactionsChange={setDashboardAllTransactions}
               onRawTransactionsChange={setDashboardRawTransactions}
+              onDashboardSnapshotChange={setDashboardSnapshot}
             />
             
             {/* Linha 2 - Gráfico Performance de Vendas + Card Top Vendedores */}
@@ -756,6 +759,7 @@ function AppContent() {
                 period={dashboardPeriod} 
                 filters={dashboardFilters} 
                 transactions={dashboardTransactions}
+                metaOverride={dashboardSnapshot?.summary?.metaMensal ?? null}
               />
               {usuario?.tipo !== 'vendedor' && (
                 <TopSellersCard 
@@ -773,6 +777,7 @@ function AppContent() {
                 currentFilters={dashboardFilters}
                 onFilterChange={setDashboardFilters}
                 vendedorNome={getVendedorNomeForPositivation()}
+                dashboardWallet={dashboardSnapshot?.customerWallet ?? null}
               />
               <SegmentSalesCard 
                 transactions={getFilteredTransactions()} 

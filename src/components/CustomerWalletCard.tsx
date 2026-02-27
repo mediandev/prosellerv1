@@ -9,12 +9,14 @@ import {
 } from "../services/dashboardDataService";
 import { Users } from "lucide-react";
 import { DashboardFilters } from "./DashboardMetrics";
+import type { DashboardSnapshot } from "../services/dashboardSnapshotService";
 
 interface CustomerWalletCardProps {
   transactions: Transaction[];
   currentFilters: DashboardFilters;
   onFilterChange: (filters: DashboardFilters) => void;
   vendedorNome?: string; // Nome do vendedor para filtrar (se aplicável)
+  dashboardWallet?: DashboardSnapshot["customerWallet"] | null;
 }
 
 interface CustomerDistribution {
@@ -25,7 +27,7 @@ interface CustomerDistribution {
   inactivePercentage: string;
 }
 
-export function CustomerWalletCard({ transactions, currentFilters, onFilterChange, vendedorNome }: CustomerWalletCardProps) {
+export function CustomerWalletCard({ transactions, currentFilters, onFilterChange, vendedorNome, dashboardWallet }: CustomerWalletCardProps) {
   // Estado para positivação
   const [positivation, setPositivation] = useState({
     positivatedCount: 0,
@@ -44,21 +46,29 @@ export function CustomerWalletCard({ transactions, currentFilters, onFilterChang
   
   // Carregar positivação quando transactions ou vendedorNome mudarem
   useEffect(() => {
+    if (dashboardWallet?.positivation) {
+      setPositivation(dashboardWallet.positivation);
+      return;
+    }
     async function loadPositivation() {
       const pos = await calculatePositivation(transactions, vendedorNome);
       setPositivation(pos);
     }
     loadPositivation();
-  }, [transactions, vendedorNome]);
+  }, [transactions, vendedorNome, dashboardWallet]);
   
   // Carregar distribuição de clientes
   useEffect(() => {
+    if (dashboardWallet?.distribution) {
+      setDistribution(dashboardWallet.distribution);
+      return;
+    }
     async function loadDistribution() {
       const dist = await calculateCustomerDistribution(vendedorNome);
       setDistribution(dist);
     }
     loadDistribution();
-  }, [vendedorNome]);
+  }, [vendedorNome, dashboardWallet]);
   
   // Estado local para rastrear qual fatia está selecionada (se houver)
   const selectedStatus = currentFilters.statusClientes.length === 1 ? currentFilters.statusClientes[0] : null;
