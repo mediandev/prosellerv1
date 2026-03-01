@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { HistoricoAlteracao } from '../types/history';
-import { historyService } from '../services/historyService';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
@@ -21,15 +20,15 @@ import { ptBR } from 'date-fns@4.1.0/locale';
 
 interface CustomerHistoryTabProps {
   clienteId: string;
+  historicoInicial?: HistoricoAlteracao[];
 }
 
-export function CustomerHistoryTab({ clienteId }: CustomerHistoryTabProps) {
+export function CustomerHistoryTab({ clienteId, historicoInicial = [] }: CustomerHistoryTabProps) {
   const [historico, setHistorico] = useState<HistoricoAlteracao[]>([]);
 
   useEffect(() => {
-    const hist = historyService.getHistoricoByEntidade('cliente', clienteId);
-    setHistorico(hist);
-  }, [clienteId]);
+    setHistorico(Array.isArray(historicoInicial) ? historicoInicial : []);
+  }, [clienteId, historicoInicial]);
 
   const getTipoIcon = (tipo: string) => {
     const icons: Record<string, any> = {

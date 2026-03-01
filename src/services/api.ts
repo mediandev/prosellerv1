@@ -508,6 +508,25 @@ function mapClienteFromApi(item: any): any {
     condicoesPagamentoAssociadas = item.condicoesPagamentoIds.map((id: any) => String(id));
   }
 
+  const historico = Array.isArray(item.historico)
+    ? item.historico.map((registro: any) => ({
+        id: String(registro.id ?? ''),
+        entidadeTipo: registro.entidadeTipo ?? 'cliente',
+        entidadeId: String(registro.entidadeId ?? item.id ?? item.cliente_id ?? ''),
+        tipo: registro.tipo ?? 'edicao',
+        descricao: registro.descricao ?? '',
+        camposAlterados: Array.isArray(registro.camposAlterados)
+          ? registro.camposAlterados
+          : Array.isArray(registro.campos_alterados)
+            ? registro.campos_alterados
+            : [],
+        usuarioId: String(registro.usuarioId ?? registro.usuario_id ?? ''),
+        usuarioNome: registro.usuarioNome ?? registro.usuario_nome ?? 'Sistema',
+        dataHora: registro.dataHora ?? registro.data_hora ?? '',
+        metadados: registro.metadados ?? undefined,
+      }))
+    : [];
+
   return {
     id: String(item.id ?? item.cliente_id ?? ''),
     codigo: item.codigo ?? '',
@@ -549,6 +568,8 @@ function mapClienteFromApi(item: any): any {
     listaPrecos: item.listaPrecos ?? '',
     descontoPadrao: Number(item.descontoPadrao ?? item.desconto ?? 0),
     descontoFinanceiro: Number(item.descontoFinanceiro ?? item.desconto_financeiro ?? 0),
+    requisitosLogisticos: item.requisitosLogisticos ?? item.requisitos_logisticos ?? undefined,
+    historico,
     condicoesPagamentoAssociadas,
     // Incluir dados completos de condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes_cliente e conta_corrente_cliente se disponÃƒÆ’Ã‚Â­veis
     condicoesCliente: item.condicoesCliente ?? item.condicoes_cliente ?? [],

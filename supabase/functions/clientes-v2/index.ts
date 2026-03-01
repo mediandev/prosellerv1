@@ -117,6 +117,30 @@ function extractCondicaoPagamentoId(cond: any): string | null {
   return id && id !== 'undefined' ? id : null
 }
 
+function hasOwn(obj: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key)
+}
+
+function extractRequisitosLogisticos(body: Record<string, unknown>): {
+  hasValue: boolean
+  value: Record<string, unknown> | null
+} {
+  if (!hasOwn(body, 'requisitosLogisticos') && !hasOwn(body, 'requisitos_logisticos')) {
+    return { hasValue: false, value: null }
+  }
+
+  const raw = (body.requisitosLogisticos ?? body.requisitos_logisticos) as unknown
+  if (raw == null) {
+    return { hasValue: true, value: null }
+  }
+
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('requisitosLogisticos deve ser um objeto JSON')
+  }
+
+  return { hasValue: true, value: raw as Record<string, unknown> }
+}
+
 function mapClienteCompleto(rpc: {
   cliente?: Record<string, unknown>
   contato?: Record<string, unknown> | null
@@ -124,6 +148,7 @@ function mapClienteCompleto(rpc: {
   vendedores?: unknown[]
   condicoes_cliente?: unknown[]
   conta_corrente_cliente?: unknown[]
+  historico?: unknown[]
 }): Record<string, unknown> {
   const c = rpc.cliente ?? {}
   const statusAprovacao = (c as any).status_aprovacao ?? (c as any).statusAprovacao ?? 'pendente'
@@ -160,6 +185,7 @@ function mapClienteCompleto(rpc: {
     descontoPadrao: Number((c as any).desconto ?? (c as any).descontoPadrao ?? 0),
     descontoFinanceiro: Number((c as any).desconto_financeiro ?? (c as any).descontoFinanceiro ?? 0),
     pedidoMinimo: Number((c as any).pedido_minimo ?? (c as any).pedidoMinimo ?? 0),
+    requisitosLogisticos: (c as any).requisitos_logisticos ?? (c as any).requisitosLogisticos ?? null,
     condicoesPagamentoAssociadas: Array.isArray((c as any).condicoesdisponiveis)
       ? (c as any).condicoesdisponiveis.map((x: unknown) => String(x))
       : Array.isArray(rpc.condicoes_cliente)
@@ -202,6 +228,7 @@ function mapClienteCompleto(rpc: {
     municipio: (endereco as any).cidade ?? (endereco as any).municipio ?? '',
     condicoesCliente: rpc.condicoes_cliente ?? [],
     contaCorrenteCliente: rpc.conta_corrente_cliente ?? [],
+    historico: Array.isArray(rpc.historico) ? rpc.historico : [],
     createdAt: (c as any).created_at ?? (c as any).createdAt,
     updatedAt: (c as any).updated_at ?? (c as any).updatedAt,
   }
@@ -285,6 +312,7 @@ serve(async (req) => {
       const body = await req.json().catch(() => ({}))
       const nome = body.nome ?? body.razaoSocial ?? ''
       if (!nome || String(nome).trim().length < 2) throw new Error('Nome deve ter pelo menos 2 caracteres')
+      const requisitosLogisticos = extractRequisitosLogisticos(body)
 
       // Extrair grupo_id (UUID) do grupoRede
       let grupoId: string | null = null
@@ -334,12 +362,15 @@ serve(async (req) => {
         p_codigo: body.codigo ?? null,
         p_grupo_id: grupoId,
         p_lista_de_preco: body.listaPrecos ?? body.lista_de_preco != null ? Number(body.listaPrecos ?? body.lista_de_preco) : null,
+        p_desconto: body.descontoPadrao ?? 0,
         p_desconto_financeiro: body.descontoFinanceiro ?? body.desconto_financeiro ?? 0,
         p_pedido_minimo: body.pedidoMinimo ?? body.pedido_minimo ?? 0,
         p_vendedoresatribuidos: body.vendedoresAtribuidos ?? body.vendedoresatribuidos ?? (body.vendedorAtribuido?.id ? [body.vendedorAtribuido.id] : null),
         p_observacao_interna: body.observacoesInternas ?? body.observacao_interna ?? null,
         p_segmento_id: body.segmentoId ?? body.segmento_id != null ? Number(body.segmentoId ?? body.segmento_id) : null,
         p_telefone: body.telefoneFixoPrincipal ?? body.telefone ?? body.contato?.telefoneFixoPrincipal ?? null,
+        p_telefone_adicional: body.telefoneCelularPrincipal,
+        p_website: body.site,
         p_email: body.emailPrincipal ?? body.email ?? body.contato?.emailPrincipal ?? null,
         p_cep: body.cep ?? body.endereco?.cep ?? null,
         p_rua: body.logradouro ?? body.endereco?.logradouro ?? body.rua ?? null,
@@ -348,6 +379,7 @@ serve(async (req) => {
         p_cidade: body.municipio ?? body.endereco?.municipio ?? body.cidade ?? null,
         p_uf: body.uf ?? body.endereco?.uf ?? null,
         p_criado_por: user.id,
+        p_requisitos_logisticos: requisitosLogisticos.value,
       }
       const { data: rpcData, error: rpcError } = await supabase.rpc('create_cliente_v2', p)
       if (rpcError) throw new Error(rpcError.message)
@@ -365,6 +397,7 @@ serve(async (req) => {
       if (isNaN(idNum) || idNum <= 0) throw new Error('ID invalido')
       const nome = body.nome ?? body.razaoSocial ?? ''
       if (!nome || String(nome).trim().length < 2) throw new Error('Nome deve ter pelo menos 2 caracteres')
+      const requisitosLogisticos = extractRequisitosLogisticos(body)
 
       // Extrair grupo_id (UUID) do grupoRede
       let grupoId: string | null = null
@@ -509,6 +542,7 @@ serve(async (req) => {
         p_codigo: body.codigo ?? null,
         p_grupo_id: grupoId,
         p_lista_de_preco: body.listaPrecos ?? body.lista_de_preco != null ? Number(body.listaPrecos ?? body.lista_de_preco) : null,
+        p_desconto: body.descontoPadrao ?? 0,
         p_desconto_financeiro: body.descontoFinanceiro ?? body.desconto_financeiro ?? null,
         p_pedido_minimo: body.pedidoMinimo ?? body.pedido_minimo ?? null,
         p_vendedoresatribuidos: vendedoresAtribuidosArray,
@@ -519,6 +553,12 @@ serve(async (req) => {
         p_ref_situacao_id: refSituacaoId,
         p_status_aprovacao: statusAprovacao,
         p_atualizado_por: user.id,
+        p_set_requisitos_logisticos: requisitosLogisticos.hasValue,
+        p_requisitos_logisticos: requisitosLogisticos.value,
+        p_telefone: body.telefoneFixoPrincipal ?? body.telefone ?? body.contato?.telefoneFixoPrincipal ?? null,
+        p_telefone_adicional: body.telefoneCelularPrincipal ?? '',
+        p_website: body.site ?? '',
+        p_email: body.emailPrincipal ?? body.email ?? body.contato?.emailPrincipal ?? '',
       })
       if (rpcError) throw new Error(rpcError.message)
       const row = Array.isArray(rpcData) && rpcData[0] ? rpcData[0] : rpcData

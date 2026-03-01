@@ -21,6 +21,7 @@ import { historyService } from '../services/historyService';
 import { customerCodeService } from '../services/customerCodeService';
 import { emailService } from '../services/emailService';
 import { api } from '../services/api';
+import { HistoricoAlteracao } from '../types/history';
 
 interface CustomerFormPageProps {
   clienteId?: string; // Se fornecido, é edição
@@ -71,6 +72,7 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
     },
   });
   const [formDataOriginal, setFormDataOriginal] = useState<Partial<Cliente> | null>(null);
+  const [historicoCliente, setHistoricoCliente] = useState<HistoricoAlteracao[]>([]);
 
   useEffect(() => {
     if (clienteId && modo !== 'criar') {
@@ -113,6 +115,7 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
         endereco: endereco,
         emailPrincipal_direto: clienteData.emailPrincipal,
         emailPrincipal_contato: contato.emailPrincipal,
+        historico: Array.isArray(clienteData.historico) ? clienteData.historico.length : 0,
       });
       
       const clienteCompleto: Partial<Cliente> = {
@@ -163,6 +166,7 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
 
       setFormData(clienteCompleto);
       setFormDataOriginal(clienteCompleto);
+      setHistoricoCliente(Array.isArray(clienteData.historico) ? clienteData.historico : []);
     } catch (error: any) {
       console.error('[CUSTOMER-FORM] Erro ao carregar cliente completo:', error);
       toast.error('Erro ao carregar dados do cliente: ' + (error.message || 'Erro desconhecido'));
@@ -862,7 +866,7 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
                 </TabsContent>
 
                 <TabsContent value="historico" className="mt-6">
-                  <CustomerHistoryTab clienteId={clienteId} />
+                  <CustomerHistoryTab clienteId={clienteId} historicoInicial={historicoCliente} />
                 </TabsContent>
               </>
             )}
