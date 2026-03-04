@@ -1481,7 +1481,7 @@ export function CommissionsManagement({
             <Button variant="outline" onClick={() => setDialogLancamento(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSalvarLancamento} disabled={!canEditComissoes}>
+            <Button onClick={handleSalvarLancamento} disabled={!canManageComissoes}>
               Salvar Lançamento
             </Button>
           </DialogFooter>
@@ -1578,7 +1578,7 @@ export function CommissionsManagement({
             <Button variant="outline" onClick={() => setDialogPagamento(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSalvarPagamento} disabled={!canEditComissoes}>
+            <Button onClick={handleSalvarPagamento} disabled={!canManageComissoes}>
               Registrar Pagamento
             </Button>
           </DialogFooter>

@@ -149,8 +149,55 @@ serve(async (req) => {
           throw new Error('Pedido não encontrado')
         }
 
+        const pedido = rpcData.pedido as Record<string, unknown>
+        const clienteId = Number(pedido?.clienteId)
+        let descontoCliente = Number(pedido?.percentualDescontoPadrao ?? 0)
+        let condicoesCliente: Array<Record<string, unknown>> = []
+
+        if (!Number.isNaN(clienteId) && clienteId > 0) {
+          const [
+            { data: clienteData, error: clienteError },
+            { data: condicoesData, error: condicoesError },
+          ] = await Promise.all([
+            supabase
+              .from('cliente')
+              .select('desconto')
+              .eq('cliente_id', clienteId)
+              .maybeSingle(),
+            supabase
+              .from('condições_cliente')
+              .select('id, "ID_condições", "ID_cliente"')
+              .eq('ID_cliente', clienteId),
+          ])
+
+          if (clienteError) {
+            console.error('[PEDIDO-VENDA-V2] Error loading cliente desconto:', clienteError)
+          } else if (clienteData?.desconto != null) {
+            descontoCliente = Number(clienteData.desconto)
+          }
+
+          if (condicoesError) {
+            console.error('[PEDIDO-VENDA-V2] Error loading condicoes_cliente:', condicoesError)
+          } else if (Array.isArray(condicoesData)) {
+            condicoesCliente = condicoesData.map((item) => ({
+              ...item,
+              descricao: null,
+            }))
+          }
+        }
+
+        const payload = {
+          ...rpcData,
+          pedido: {
+            ...pedido,
+            desconto: descontoCliente,
+            percentualDescontoPadrao: descontoCliente,
+            condicoesCliente,
+          },
+        }
+
         const duration = Date.now() - startTime
-        return createHttpSuccessResponse(rpcData, 200, { userId: user.id, duration: `${duration}ms` })
+        return createHttpSuccessResponse(payload, 200, { userId: user.id, duration: `${duration}ms` })
       } else {
         // GET /pedido-venda-v2 - Listar todos
         console.log('[PEDIDO-VENDA-V2] Listing pedidos...')

@@ -129,7 +129,7 @@ function Sidebar({ currentPage, onPageChange }: SidebarProps) {
 
 function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.13";
+  const systemVersion = "V 1.14";
   
   if (!usuario) return null;
   

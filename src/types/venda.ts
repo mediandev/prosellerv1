@@ -141,6 +141,7 @@ export interface Venda {
   ordemCompraCliente?: string; // O.C. Cliente
   condicaoPagamentoId: string;
   nomeCondicaoPagamento: string;
+  condicoesCliente?: Array<Record<string, unknown>>;
   
   // Observações
   observacoesNotaFiscal: string; // Pré-visualização (não editável)

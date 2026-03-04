@@ -340,10 +340,32 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   const condicoesPagamentoDisponiveis = useMemo(() => {
     if (!formData.clienteId) return [];
 
-    const cliente = clientes.find(c => c.id === formData.clienteId);
-    if (!cliente) return [];
+    const cliente = clientes.find(c => c.id === formData.clienteId) ?? {
+      id: String(formData.clienteId),
+      razaoSocial: formData.nomeCliente || '',
+      condicoesPagamentoAssociadas: [],
+      condicoesCliente: Array.isArray(formData.condicoesCliente) ? formData.condicoesCliente : [],
+    } as Cliente;
 
-    const condicoesIds = cliente.condicoesPagamentoAssociadas || [];
+    const condicoesClienteDoPayload =
+      Array.isArray(formData.condicoesCliente) && String(formData.clienteId) === String(cliente.id)
+        ? formData.condicoesCliente
+        : Array.isArray(cliente.condicoesCliente)
+          ? cliente.condicoesCliente
+          : [];
+
+    const condicoesIds = condicoesClienteDoPayload.length > 0
+      ? condicoesClienteDoPayload
+        .map((item) => {
+          const raw =
+            (item as any)?.['ID_condições'] ??
+            (item as any)?.['ID_condiÃ§Ãµes'] ??
+            (item as any)?.ID_condicoes ??
+            (item as any)?.id_condicao;
+          return raw != null ? String(raw) : null;
+        })
+        .filter((id): id is string => Boolean(id))
+      : (cliente.condicoesPagamentoAssociadas || []).map(id => String(id));
 
     // Converter IDs para string para garantir comparação correta
     const condicoesIdsStr = condicoesIds.map(id => String(id));
@@ -351,6 +373,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     console.log('[VENDAS] Debug condições de pagamento:', {
       clienteId: cliente.id,
       clienteNome: cliente.razaoSocial,
+      condicoesClienteDoPayload: condicoesClienteDoPayload.length,
       condicoesAssociadas: condicoesIds,
       condicoesAssociadasStr: condicoesIdsStr,
       todasCondicoes: condicoes.length,
@@ -2072,6 +2095,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                         <span className="truncate">
                           {clientes.find(c => c.id === formData.clienteId)?.razaoSocial ||
                             clientes.find(c => c.id === formData.clienteId)?.nomeFantasia ||
+                            formData.nomeCliente ||
                             'Cliente selecionado'}
                         </span>
                       ) : (

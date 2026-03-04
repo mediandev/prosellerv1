@@ -144,6 +144,7 @@ export interface Cliente {
   listaPrecos?: string;
   descontoPadrao: number;
   descontoFinanceiro: number;
+  condicoesCliente?: Array<Record<string, unknown>>;
   condicoesPagamentoAssociadas: string[]; // IDs das condições de pagamento
   pedidoMinimo: number;
   

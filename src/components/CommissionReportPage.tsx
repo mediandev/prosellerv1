@@ -133,6 +133,8 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
   const canManageVendasComissao = ehBackoffice();
   const canEditComissoes = ehBackoffice() && temPermissao('comissoes.lancamentos.editar');
   const canDeleteComissoes = ehBackoffice() && temPermissao('comissoes.lancamentos.excluir');
+  const canSalvarLancamento = modoLancamento === 'novo' ? canManageComissoes : canEditComissoes;
+  const canSalvarPagamento = modoPagamento === 'novo' ? canManageComissoes : canEditComissoes;
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline", icon: any, label: string }> = {
       aberto: { variant: "secondary", icon: Clock, label: "Aberto" },
@@ -709,7 +711,7 @@ Equipe de Vendas`;
   };
 
   const handleSalvarLancamento = async () => {
-    if (!canEditComissoes) {
+    if (!canSalvarLancamento) {
       toast.error("Você não tem permissão para criar/editar lançamentos");
       return;
     }
@@ -760,7 +762,7 @@ Equipe de Vendas`;
   };
 
   const handleSalvarPagamento = async () => {
-    if (!canEditComissoes) {
+    if (!canSalvarPagamento) {
       toast.error("Você não tem permissão para registrar/editar pagamentos");
       return;
     }
@@ -1413,7 +1415,7 @@ Equipe de Vendas`;
                 <Button variant="outline" onClick={() => setDialogLancamento(false)}>
                   Cancelar
                 </Button>
-                <Button onClick={handleSalvarLancamento} disabled={!canEditComissoes}>
+                <Button onClick={handleSalvarLancamento} disabled={!canSalvarLancamento}>
                   Salvar {modoLancamento === 'editar' ? 'Alterações' : 'Lançamento'}
                 </Button>
               </>
@@ -1807,7 +1809,7 @@ Equipe de Vendas`;
                 <Button variant="outline" onClick={() => setDialogPagamento(false)}>
                   Cancelar
                 </Button>
-                <Button onClick={handleSalvarPagamento} disabled={!canEditComissoes}>
+                <Button onClick={handleSalvarPagamento} disabled={!canSalvarPagamento}>
                   {modoPagamento === 'editar' ? 'Salvar Alterações' : 'Registrar Pagamento'}
                 </Button>
               </>
