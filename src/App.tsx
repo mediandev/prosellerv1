@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, 
   Users, 
@@ -136,7 +136,7 @@ function Sidebar({ currentPage, onPageChange, canAccessPage }: SidebarProps) {
 
 function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.14";
+  const systemVersion = "V 1.15";
   
   if (!usuario) return null;
   
