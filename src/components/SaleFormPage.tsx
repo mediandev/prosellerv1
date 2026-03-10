@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+﻿import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompanies } from '../hooks/useCompanies';
 import { Venda, ItemVenda, StatusVenda, ItemFaturado } from '../types/venda';
@@ -359,7 +359,6 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         .map((item) => {
           const raw =
             (item as any)?.['ID_condições'] ??
-            (item as any)?.['ID_condiÃ§Ãµes'] ??
             (item as any)?.ID_condicoes ??
             (item as any)?.id_condicao;
           return raw != null ? String(raw) : null;

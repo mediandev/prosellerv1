@@ -12,6 +12,7 @@ interface AuthenticatedUser {
   email: string
   tipo: 'backoffice' | 'vendedor'
   ativo: boolean
+  permissoes: string[]
 }
 
 // Helper: Valida JWT
@@ -31,7 +32,7 @@ async function validateJWT(
     if (authError || !authUser) return { user: null, error: 'Invalid or expired token' }
     const { data: userData, error: userError } = await supabase
       .from('user')
-      .select('user_id, email, tipo, ativo')
+      .select('user_id, email, tipo, ativo, permissoes')
       .eq('user_id', authUser.id)
       .eq('ativo', true)
       .is('deleted_at', null)
@@ -43,6 +44,9 @@ async function validateJWT(
         email: userData.email || authUser.email || '',
         tipo: userData.tipo as 'backoffice' | 'vendedor',
         ativo: userData.ativo,
+        permissoes: Array.isArray(userData.permissoes)
+          ? userData.permissoes.filter((permissionId: unknown) => typeof permissionId === 'string')
+          : [],
       },
       error: null
     }
@@ -58,6 +62,17 @@ function createAuthErrorResponse(message: string, statusCode: number = 401): Res
   )
 }
 
+function createPermissionErrorResponse(message: string): Response {
+  return new Response(
+    JSON.stringify({ success: false, error: message, timestamp: new Date().toISOString() }),
+    { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+function hasPermission(user: AuthenticatedUser, permissionId: string): boolean {
+  if (user.tipo === 'backoffice') return true
+  return user.permissoes.includes(permissionId)
+}
 function createHttpSuccessResponse<T>(data: T, status: number = 200, meta?: Record<string, any>): Response {
   return new Response(
     JSON.stringify({ success: true, data, meta: { timestamp: new Date().toISOString(), ...meta } }),
@@ -131,6 +146,19 @@ serve(async (req) => {
 
     console.log('[PRODUTOS-V2] Action:', action)
 
+    const requiredPermissionByAction: Record<string, string> = {
+      list: 'produtos.visualizar',
+      get: 'produtos.visualizar',
+      list_import_logs: 'produtos.visualizar',
+      create: 'produtos.criar',
+      register_import_log: 'produtos.criar',
+      update: 'produtos.editar',
+      delete: 'produtos.excluir',
+    }
+    const requiredPermission = requiredPermissionByAction[action]
+    if (requiredPermission && !hasPermission(user, requiredPermission)) {
+      return createPermissionErrorResponse(`Sem permissao para ${requiredPermission}`)
+    }
     switch (action) {
       case 'list': {
         console.log('[PRODUTOS-V2] Listing produtos...')
@@ -711,7 +739,7 @@ serve(async (req) => {
         const status = body?.status || (Number(body?.erros || 0) === 0 ? 'sucesso' : (Number(body?.sucessos || 0) > 0 ? 'sucesso_parcial' : 'erro'))
 
         if (!body?.tipo) {
-          throw new Error('Tipo de importação é obrigatório')
+          throw new Error('Tipo de importaÃ§Ã£o Ã© obrigatÃ³rio')
         }
 
         const { data: inserted, error: insertError } = await supabase
@@ -725,7 +753,7 @@ serve(async (req) => {
             status,
             detalhes_erros: detalhesErros,
             usuario_uuid: user.id,
-            usuario_nome: body.usuarioNome || user.email || 'Usuário',
+            usuario_nome: body.usuarioNome || user.email || 'UsuÃ¡rio',
             can_undo: false,
           })
           .select('*')
@@ -775,7 +803,7 @@ serve(async (req) => {
           status: log.status,
           detalhesErros: Array.isArray(log.detalhes_erros) ? log.detalhes_erros : [],
           usuarioId: log.usuario_uuid || '',
-          usuarioNome: log.usuario_nome || 'Usuário',
+          usuarioNome: log.usuario_nome || 'UsuÃ¡rio',
           dataImportacao: log.created_at,
           canUndo: Boolean(log.can_undo),
         }))
@@ -796,3 +824,5 @@ serve(async (req) => {
     return formatErrorResponse(error)
   }
 })
+
+

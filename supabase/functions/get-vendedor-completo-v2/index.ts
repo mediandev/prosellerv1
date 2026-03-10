@@ -1,4 +1,4 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+﻿import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -13,6 +13,11 @@ interface AuthenticatedUser {
   email: string
   tipo: 'backoffice' | 'vendedor'
   ativo: boolean
+}
+
+function normalizePermissionIds(input: unknown): string[] {
+  if (!Array.isArray(input)) return []
+  return input.filter((permission): permission is string => typeof permission === 'string')
 }
 
 // Helper: Valida JWT
@@ -98,9 +103,9 @@ serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     console.log('[GET-VENDEDOR-COMPLETO-V2] OPTIONS request, returning CORS headers')
-    return new Response('ok', { 
+    return new Response('ok', {
       status: 200,
-      headers: corsHeaders 
+      headers: corsHeaders
     })
   }
 
@@ -150,11 +155,27 @@ serve(async (req) => {
       throw new Error('Vendedor não encontrado')
     }
 
+    const { data: userPermissionRow, error: userPermissionError } = await supabase
+      .from('user')
+      .select('permissoes')
+      .eq('user_id', userId)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (userPermissionError) {
+      console.warn('[GET-VENDEDOR-COMPLETO-V2] Warning reading permissoes:', userPermissionError.message)
+    }
+
+    const payload = {
+      ...(rpcData as Record<string, unknown>),
+      permissoes: normalizePermissionIds(userPermissionRow?.permissoes),
+    }
+
     const duration = Date.now() - startTime
     console.log(`[GET-VENDEDOR-COMPLETO-V2] SUCCESS: Vendedor data retrieved for ${userId} (${duration}ms)`)
 
     return createHttpSuccessResponse(
-      rpcData,
+      payload,
       200,
       { userId: user.id, duration: `${duration}ms` }
     )

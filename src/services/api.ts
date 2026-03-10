@@ -1,7 +1,7 @@
-﻿// API Service - IntegraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o com Supabase Edge Functions
-// Sistema migrado para usar arquitetura em camadas (Edge Functions ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ RPC ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Tabelas)
+// API Service - Integração com Supabase Edge Functions
+// Sistema migrado para usar arquitetura em camadas (Edge Functions -> RPC -> Tabelas)
 
-// Importar dados mock para fallback (serÃƒÆ’Ã‚Â£o removidos gradualmente)
+// Importar dados mock para fallback (serão removidos gradualmente)
 import { clientes as mockClientes } from '../data/mockCustomers';
 import { mockSellers } from '../data/mockSellers';
 import { mockProdutos } from '../data/mockProdutos';
@@ -17,16 +17,22 @@ import { carregarVendasDoLocalStorage, salvarVendasNoLocalStorage, vendasIniciai
 import { mockComissoesVendas } from '../data/mockComissoes';
 import type { TipoUsuario } from '../types/user';
 import type { Seller } from '../types/seller';
+import {
+  getDefaultSellerPermissionIds,
+  getDefaultSellerPermissionMatrix,
+  permissionIdsToSellerPermissionMatrix,
+  sellerPermissionMatrixToIds,
+} from '../utils/sellerPermissions';
 
-// ConfiguraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o do Supabase
-// Usa variÃƒÆ’Ã‚Â¡veis de ambiente com fallback para valores padrÃƒÆ’Ã‚Â£o
+// Configuração do Supabase
+// Usa variáveis de ambiente com fallback para valores padrão
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://xxoiqfraeolsqsmsheue.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4b2lxZnJhZW9sc3FzbXNoZXVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjY1ODQ5MDIsImV4cCI6MjA0MjE2MDkwMn0.m8A1mUf3GyAl_17FjltxkgBr-xRQYZw9YEDUVUBdttA';
 
-// Helper para obter permissÃƒÆ’Ã‚Âµes padrÃƒÆ’Ã‚Â£o baseadas no tipo
+// Helper para obter permissões padrão baseadas no tipo
 function resolveUserPermissoes(user: any): string[] {
   const explicit = user?.permissoes;
-  if (Array.isArray(explicit) && explicit.length > 0) {
+  if (Array.isArray(explicit)) {
     return explicit.filter((p: any) => typeof p === 'string');
   }
   return getDefaultPermissoes(user?.tipo as TipoUsuario);
@@ -58,21 +64,18 @@ function getDefaultPermissoes(tipo: TipoUsuario): string[] {
       'contacorrente.criar',
       'contacorrente.editar',
       'contacorrente.excluir',
+      'produtos.visualizar',
+      'produtos.criar',
+      'produtos.editar',
+      'produtos.excluir',
+      'comissoes.visualizar',
+      'comissoes.lancamentos.editar',
+      'comissoes.lancamentos.excluir',
       'configuracoes.editar',
       'configuracoes.excluir',
     ];
   } else {
-    return [
-      'clientes.visualizar',
-      'clientes.criar',
-      'clientes.editar',
-      'vendas.visualizar',
-      'vendas.criar',
-      'vendas.editar',
-      'relatorios.visualizar',
-      'contacorrente.visualizar',
-      'contacorrente.criar',
-    ];
+    return getDefaultSellerPermissionIds();
   }
 }
 
@@ -110,7 +113,7 @@ const getCachedOptions = <T>(key: string): T | null => {
     }
     localStorage.removeItem(`options_cache:${key}`);
   } catch (error) {
-    console.warn('[API] Erro ao ler cache de opÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes:', error);
+    console.warn('[API] Erro ao ler cache de opções:', error);
   }
   return null;
 };
@@ -122,7 +125,7 @@ const setCachedOptions = (key: string, value: any, ttlMs: number = OPTIONS_CACHE
   try {
     localStorage.setItem(`options_cache:${key}`, JSON.stringify({ expiresAt, value }));
   } catch (error) {
-    console.warn('[API] Erro ao gravar cache de opÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes:', error);
+    console.warn('[API] Erro ao gravar cache de opções:', error);
   }
 };
 
@@ -142,7 +145,7 @@ const clearOptionsCache = (prefix: string) => {
       }
     }
   } catch (error) {
-    console.warn('[API] Erro ao limpar cache de opÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes:', error);
+    console.warn('[API] Erro ao limpar cache de opções:', error);
   }
 };
 
@@ -150,7 +153,7 @@ export const setAuthToken = (token: string | null, refresh?: string | null, expi
   authToken = token;
   if (token) {
     localStorage.setItem('auth_token', token);
-    // Calcular tempo de expiraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o (geralmente 1 hora = 3600 segundos)
+    // Calcular tempo de expiração (geralmente 1 hora = 3600 segundos)
     if (expiresIn) {
       tokenExpiryTime = Date.now() + (expiresIn * 1000);
       localStorage.setItem('auth_token_expiry', tokenExpiryTime.toString());
@@ -191,11 +194,11 @@ export const getRefreshToken = () => {
   return refreshToken;
 };
 
-// Verificar se o token estÃƒÆ’Ã‚Â¡ prÃƒÆ’Ã‚Â³ximo de expirar (menos de 5 minutos)
+// Verificar se o token está próximo de expirar (menos de 5 minutos)
 export const isTokenExpiringSoon = (): boolean => {
   if (!tokenExpiryTime) {
     const expiry = localStorage.getItem('auth_token_expiry');
-    if (!expiry) return true; // Se nÃƒÆ’Ã‚Â£o tem expiraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o, considerar como expirado
+    if (!expiry) return true; // Se não tem expiração, considerar como expirado
     tokenExpiryTime = parseInt(expiry, 10);
   }
 
@@ -206,11 +209,11 @@ export const isTokenExpiringSoon = (): boolean => {
   return timeUntilExpiry < fiveMinutes;
 };
 
-// FunÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o para fazer refresh do token
+// Função para fazer refresh do token
 export const refreshAuthToken = async (): Promise<boolean> => {
   const currentRefreshToken = getRefreshToken();
   if (!currentRefreshToken) {
-    console.log('[AUTH] Nenhum refresh token disponÃƒÆ’Ã‚Â­vel');
+    console.log('[AUTH] Nenhum refresh token disponível');
     return false;
   }
 
@@ -231,7 +234,7 @@ export const refreshAuthToken = async (): Promise<boolean> => {
 
     if (!response.ok) {
       console.error('[AUTH] Erro ao fazer refresh:', data);
-      // Se o refresh token tambÃƒÆ’Ã‚Â©m expirou, limpar tudo
+      // Se o refresh token também expirou, limpar tudo
       setAuthToken(null);
       return false;
     }
@@ -247,7 +250,7 @@ export const refreshAuthToken = async (): Promise<boolean> => {
   }
 };
 
-// Helper para chamadas ÃƒÆ’Ã‚Â s Edge Functions com retry automÃƒÆ’Ã‚Â¡tico em caso de token expirado
+// Helper para chamadas às Edge Functions com retry automático em caso de token expirado
 async function callEdgeFunction(
   functionName: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
@@ -256,9 +259,9 @@ async function callEdgeFunction(
   queryParams?: Record<string, any>,
   retryOn401: boolean = true
 ): Promise<any> {
-  // Verificar se o token estÃƒÆ’Ã‚Â¡ prÃƒÆ’Ã‚Â³ximo de expirar e fazer refresh preventivo
+  // Verificar se o token está próximo de expirar e fazer refresh preventivo
   if (isTokenExpiringSoon()) {
-    console.log('[API] Token prÃƒÆ’Ã‚Â³ximo de expirar, fazendo refresh preventivo...');
+    console.log('[API] Token próximo de expirar, fazendo refresh preventivo...');
     await refreshAuthToken();
   }
 
@@ -350,8 +353,8 @@ async function callEdgeFunction(
         }
       }
 
-      // Se nÃƒÆ’Ã‚Â£o conseguiu fazer refresh, retornar erro 401
-      throw new Error(data.error || data.message || 'Token expirado. FaÃƒÆ’Ã‚Â§a login novamente.');
+      // Se não conseguiu fazer refresh, retornar erro 401
+      throw new Error(data.error || data.message || 'Token expirado. Faça login novamente.');
     }
 
     if (!response.ok) {
@@ -388,7 +391,7 @@ function getStoredData<T>(key: string, initialData: T[]): T[] {
     const stored = localStorage.getItem(key);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Converter strings de data de volta para Date se necessÃƒÆ’Ã‚Â¡rio
+      // Converter strings de data de volta para Date se necessário
       return parsed.map((item: any) => {
         if (item.createdAt) item.createdAt = new Date(item.createdAt);
         if (item.updatedAt) item.updatedAt = new Date(item.updatedAt);
@@ -415,10 +418,10 @@ function saveStoredData<T>(key: string, data: T[]): void {
   }
 }
 
-// Helper: normaliza resposta da API de lista de preÃƒÆ’Ã‚Â§o para formato ListaPreco do frontend
+// Helper: normaliza resposta da API de lista de preço para formato ListaPreco do frontend
 function mapListaPrecoFromApi(item: any): any {
   if (!item) return item;
-  // Aceitar vÃƒÆ’Ã‚Â¡rios nomes que a edge function pode retornar para a lista de produtos
+  // Aceitar vários nomes que a edge function pode retornar para a lista de produtos
   const produtosRaw =
     item.produtos ??
     item.produtos_preco ??
@@ -435,7 +438,7 @@ function mapListaPrecoFromApi(item: any): any {
       preco: Number(
         p.preco ?? p.valor ?? p.price ?? p.preco_unitario ?? p.valor_unitario ?? 0
       ),
-      // Incluir informaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes completas do produto se disponÃƒÆ’Ã‚Â­veis
+      // Incluir informações completas do produto se disponíveis
       descricao: p.descricao ?? p.descricao_produto ?? null,
       codigoSku: p.codigoSku ?? p.codigo_sku ?? p.sku ?? null,
       codigoEan: p.codigoEan ?? p.codigo_ean ?? p.ean ?? p.gtin ?? null,
@@ -487,14 +490,14 @@ function mapClienteFromApi(item: any): any {
   if (statusAprovacao === 'aprovado') situacao = 'Ativo';
   else if (statusAprovacao === 'rejeitado') situacao = 'Reprovado';
   else if (statusAprovacao === 'pendente') situacao = 'Análise';
-  if (typeof situacao === 'string' && (situacao.includes('Ã') || situacao.toLowerCase() === 'analise')) {
+  if (typeof situacao === 'string' && (situacao.includes('?') || situacao.toLowerCase() === 'analise')) {
     situacao = 'Análise';
   }
 
-  // Mapear condi??es_cliente (array de objetos) para condicoesPagamentoAssociadas (array de IDs)
+  // Mapear condições_cliente (array de objetos) para condicoesPagamentoAssociadas (array de IDs)
   let condicoesPagamentoAssociadas: string[] = [];
   if (Array.isArray(item.condicoesCliente)) {
-    // Extrair IDs das condi??es de pagamento do cliente
+    // Extrair IDs das condições de pagamento do cliente
     condicoesPagamentoAssociadas = item.condicoesCliente
       .map((c: any) => extractCondicaoPagamentoIdFromVinculo(c))
       .filter((id: string) => id && id !== 'undefined');
@@ -535,7 +538,7 @@ function mapClienteFromApi(item: any): any {
     codigoTinyIdExterno: item.codigoTinyIdExterno ?? item.codigo_tiny_id_externo ?? undefined,
     codigoTinyIntegrationRef: item.codigoTinyIntegrationRef ?? item.codigo_tiny_integration_ref ?? undefined,
     codigoGeradoEm: item.codigoGeradoEm ?? item.codigo_gerado_em ?? undefined,
-    tipoPessoa: item.tipoPessoa ?? (item.cpfCnpj?.length === 11 || item.cpf_cnpj?.length === 11 ? 'Pessoa FÃƒÆ’Ã‚Â­sica' : 'Pessoa JurÃƒÆ’Ã‚Â­dica'),
+    tipoPessoa: item.tipoPessoa ?? (item.cpfCnpj?.length === 11 || item.cpf_cnpj?.length === 11 ? 'Pessoa Física' : 'Pessoa Jurídica'),
     refTipoPessoaId: item.refTipoPessoaId ?? item.ref_tipo_pessoa_id ?? item.ref_tipo_pessoa_id_FK != null ? Number(item.ref_tipo_pessoa_id_FK) : undefined,
     cpfCnpj: item.cpfCnpj ?? item.cpf_cnpj ?? '',
     razaoSocial: item.razaoSocial ?? item.nome ?? '',
@@ -571,7 +574,7 @@ function mapClienteFromApi(item: any): any {
     requisitosLogisticos: item.requisitosLogisticos ?? item.requisitos_logisticos ?? undefined,
     historico,
     condicoesPagamentoAssociadas,
-    // Incluir dados completos de condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes_cliente e conta_corrente_cliente se disponÃƒÆ’Ã‚Â­veis
+    // Incluir dados completos de condições_cliente e conta_corrente_cliente se disponíveis
     condicoesCliente: item.condicoesCliente ?? item.condicoes_cliente ?? [],
     contaCorrenteCliente: item.contaCorrenteCliente ?? item.conta_corrente_cliente ?? [],
     pedidoMinimo: Number(item.pedidoMinimo ?? item.pedido_minimo ?? 0),
@@ -584,7 +587,7 @@ function mapClienteFromApi(item: any): any {
   };
 }
 
-// Helper: Converte usuÃƒÆ’Ã‚Â¡rio (tipo=vendedor) para formato Seller
+// Helper: Converte usuário (tipo=vendedor) para formato Seller
 function usuarioToSeller(user: any): Seller {
   const generateInitials = (nome: string): string => {
     const parts = nome.trim().split(' ');
@@ -598,7 +601,7 @@ function usuarioToSeller(user: any): Seller {
     id: user.user_id || user.id,
     nome: user.nome || '',
     iniciais: generateInitials(user.nome || ''),
-    cpf: '', // SerÃƒÆ’Ã‚Â¡ preenchido quando houver dados_vendedor
+    cpf: '', // Será preenchido quando houver dados_vendedor
     email: user.email || '',
     telefone: '',
     dataAdmissao: user.data_cadastro ? new Date(user.data_cadastro).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
@@ -644,18 +647,7 @@ function usuarioToSeller(user: any): Seller {
       conviteEnviado: false,
       senhaDefinida: true,
       requisitosSeguranca: true,
-      permissoes: {
-        dashboard: { visualizar: true, criar: false, editar: false, excluir: false },
-        vendas: { visualizar: true, criar: true, editar: true, excluir: false },
-        pipeline: { visualizar: true, criar: true, editar: true, excluir: false },
-        clientes: { visualizar: true, criar: true, editar: true, excluir: false },
-        metas: { visualizar: true, criar: false, editar: false, excluir: false },
-        comissoes: { visualizar: true, criar: false, editar: false, excluir: false },
-        produtos: { visualizar: true, criar: false, editar: false, excluir: false },
-        relatorios: { visualizar: true, criar: false, editar: false, excluir: false },
-        equipe: { visualizar: false, criar: false, editar: false, excluir: false },
-        configuracoes: { visualizar: false, criar: false, editar: false, excluir: false },
-      },
+      permissoes: permissionIdsToSellerPermissionMatrix(resolveUserPermissoes(user)),
     },
     integracoes: [],
     vendas: {
@@ -687,7 +679,7 @@ const entityMap: Record<string, { data: any[], storageKey: string }> = {
   'naturezas-operacao': { data: mockNaturezasOperacao, storageKey: 'mockNaturezasOperacao' },
   'conta-corrente': { data: compromissosMock, storageKey: 'mockContaCorrente' },
   'notificacoes': { data: notificacoesMock, storageKey: 'mockNotificacoes' },
-  'vendas': { data: [], storageKey: 'mockVendas' }, // Vendas sÃƒÆ’Ã‚Â£o carregadas de forma especial
+  'vendas': { data: [], storageKey: 'mockVendas' }, // Vendas são carregadas de forma especial
   'comissoes': { data: mockComissoesVendas, storageKey: 'mockComissoes' },
 };
 
@@ -699,7 +691,7 @@ export const api = {
       console.log('[API] Signup via Supabase Auth:', { email, nome, tipo });
 
       try {
-        // 1. Criar usuÃƒÆ’Ã‚Â¡rio no Supabase Auth
+        // 1. Criar usuário no Supabase Auth
         const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
           method: 'POST',
           headers: {
@@ -716,14 +708,14 @@ export const api = {
         const authData = await authResponse.json();
 
         if (!authResponse.ok) {
-          throw new Error(authData.message || 'Erro ao criar usuÃƒÆ’Ã‚Â¡rio');
+          throw new Error(authData.message || 'Erro ao criar usuário');
         }
 
         // 2. Criar registro na tabela user via Edge Function
         // IMPORTANTE: Passar o auth_user_id para garantir que user_id = auth.id
         const token = authData.access_token;
         const refresh = authData.refresh_token;
-        const expiresIn = authData.expires_in || 3600; // Default 1 hora se nÃƒÆ’Ã‚Â£o fornecido
+        const expiresIn = authData.expires_in || 3600; // Default 1 hora se não fornecido
         setAuthToken(token, refresh, expiresIn);
 
         const userResponse = await callEdgeFunction('create-user-v2', 'POST', {
@@ -733,7 +725,7 @@ export const api = {
           auth_user_id: authData.user?.id,  // Passar ID do Supabase Auth
         });
 
-        // callEdgeFunction jÃƒÆ’Ã‚Â¡ retorna data.data
+        // callEdgeFunction já retorna data.data
         const user = userResponse.user || userResponse;
 
         return {
@@ -749,7 +741,7 @@ export const api = {
         };
       } catch (error: any) {
         console.error('[API] Signup error:', error);
-        throw new Error(error.message || 'Erro ao criar usuÃƒÆ’Ã‚Â¡rio');
+        throw new Error(error.message || 'Erro ao criar usuário');
       }
     },
 
@@ -773,19 +765,19 @@ export const api = {
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.error_description || data.error || 'Email ou senha invÃƒÆ’Ã‚Â¡lidos');
+          throw new Error(data.error_description || data.error || 'Email ou senha inválidos');
         }
 
         // Armazenar access_token, refresh_token e expires_in
         const token = data.access_token;
         const refresh = data.refresh_token;
-        const expiresIn = data.expires_in || 3600; // Default 1 hora se nÃƒÆ’Ã‚Â£o fornecido
+        const expiresIn = data.expires_in || 3600; // Default 1 hora se não fornecido
         setAuthToken(token, refresh, expiresIn);
 
-        // Buscar dados do usuÃƒÆ’Ã‚Â¡rio via Edge Function
+        // Buscar dados do usuário via Edge Function
         const userResponse = await callEdgeFunction('get-user-v2', 'GET', undefined, data.user.id);
 
-        // callEdgeFunction jÃƒÆ’Ã‚Â¡ retorna data.data
+        // callEdgeFunction já retorna data.data
         const user = userResponse.user || userResponse;
 
         return {
@@ -810,7 +802,7 @@ export const api = {
     me: async () => {
       const token = getAuthToken();
       if (!token) {
-        throw new Error('NÃƒÆ’Ã‚Â£o autenticado');
+        throw new Error('Não autenticado');
       }
 
       try {
@@ -825,13 +817,13 @@ export const api = {
         const authUser = await response.json();
 
         if (!response.ok || !authUser.id) {
-          throw new Error('Token invÃƒÆ’Ã‚Â¡lido');
+          throw new Error('Token inválido');
         }
 
         // Buscar dados completos via Edge Function
         const userResponse = await callEdgeFunction('get-user-v2', 'GET', undefined, authUser.id);
 
-        // callEdgeFunction jÃƒÆ’Ã‚Â¡ retorna data.data
+        // callEdgeFunction já retorna data.data
         const user = userResponse.user || userResponse;
 
         return {
@@ -846,7 +838,7 @@ export const api = {
         };
       } catch (error: any) {
         console.error('[API] Me error:', error);
-        throw new Error(error.message || 'Erro ao buscar usuÃƒÆ’Ã‚Â¡rio');
+        throw new Error(error.message || 'Erro ao buscar usuário');
       }
     },
 
@@ -863,7 +855,7 @@ export const api = {
     },
   },
 
-  // UsuÃƒÆ’Ã‚Â¡rios - Usa Supabase Edge Functions (v2)
+  // Usuários - Usa Supabase Edge Functions (v2)
   usuarios: {
     list: async (filters?: { tipo?: string; ativo?: boolean; search?: string; page?: number; limit?: number }) => {
       try {
@@ -888,7 +880,7 @@ export const api = {
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.error || data.message || 'Erro ao listar usuÃƒÆ’Ã‚Â¡rios');
+          throw new Error(data.error || data.message || 'Erro ao listar usuários');
         }
 
         // Edge Functions retornam { success: true, data: { users: [...], pagination: {...} } }
@@ -908,7 +900,7 @@ export const api = {
 
         return users;
       } catch (error: any) {
-        console.error('[API] Erro ao listar usuÃƒÆ’Ã‚Â¡rios:', error);
+        console.error('[API] Erro ao listar usuários:', error);
         throw error;
       }
     },
@@ -928,7 +920,7 @@ export const api = {
           permissoes: resolveUserPermissoes(userResponse.user),
         };
       } catch (error: any) {
-        console.error('[API] Erro ao buscar usuÃƒÆ’Ã‚Â¡rio:', error);
+        console.error('[API] Erro ao buscar usuário:', error);
         throw error;
       }
     },
@@ -959,7 +951,7 @@ export const api = {
           };
         }
       } catch (error: any) {
-        console.error('[API] Erro ao criar usuÃƒÆ’Ã‚Â¡rio:', error);
+        console.error('[API] Erro ao criar usuário:', error);
         throw error;
       }
     },
@@ -974,7 +966,7 @@ export const api = {
           permissoes: userData.permissoes,
         }, userId);
 
-        // callEdgeFunction jÃƒÆ’Ã‚Â¡ retorna data.data
+        // callEdgeFunction já retorna data.data
         const user = userResponse.user || userResponse;
 
         return {
@@ -988,7 +980,7 @@ export const api = {
           permissoes: resolveUserPermissoes(user),
         };
       } catch (error: any) {
-        console.error('[API] Erro ao atualizar usuÃƒÆ’Ã‚Â¡rio:', error);
+        console.error('[API] Erro ao atualizar usuário:', error);
         throw error;
       }
     },
@@ -998,24 +990,24 @@ export const api = {
         await callEdgeFunction('delete-user-v2', 'DELETE', undefined, userId);
         return true;
       } catch (error: any) {
-        console.error('[API] Erro ao excluir usuÃƒÆ’Ã‚Â¡rio:', error);
+        console.error('[API] Erro ao excluir usuário:', error);
         throw error;
       }
     },
   },
 
-  // ComissÃƒÆ’Ã‚Âµes - Usa Supabase Edge Functions (v2)
+  // Comissões - Usa Supabase Edge Functions (v2)
   comissoes: {
     getRelatorio: async (periodo: string, vendedorId?: string) => {
       try {
         const params: Record<string, string> = { periodo };
         if (vendedorId) params.vendedorId = vendedorId;
 
-        console.log('[API] Buscando relatÃƒÆ’Ã‚Â³rio de comissÃƒÆ’Ã‚Âµes:', params);
+        console.log('[API] Buscando relatório de comissões:', params);
         const response = await callEdgeFunction('comissoes-v2/relatorios', 'GET', undefined, undefined, params);
         return response.data || response;
       } catch (error) {
-        console.error('[API] Erro ao buscar relatÃƒÆ’Ã‚Â³rio de comissÃƒÆ’Ã‚Âµes:', error);
+        console.error('[API] Erro ao buscar relatório de comissões:', error);
         throw error;
       }
     },
@@ -1026,7 +1018,7 @@ export const api = {
         if (periodo) params.periodo = periodo;
         if (vendedorId) params.vendedorId = vendedorId;
 
-        console.log('[API] Buscando vendas com comissÃƒÆ’Ã‚Â£o:', params);
+        console.log('[API] Buscando vendas com comissão:', params);
         const response = await callEdgeFunction('comissoes-v2/vendas', 'GET', undefined, undefined, params);
         return response.data || response;
       } catch (error) {
@@ -1041,22 +1033,22 @@ export const api = {
         if (periodo) params.periodo = periodo;
         if (vendedorId) params.vendedorId = vendedorId;
 
-        console.log('[API] Buscando lanÃƒÆ’Ã‚Â§amentos de comissÃƒÆ’Ã‚Âµes:', params);
+        console.log('[API] Buscando lançamentos de comissões:', params);
         const response = await callEdgeFunction('comissoes-v2/lancamentos', 'GET', undefined, undefined, params);
         return response.data || response;
       } catch (error) {
-        console.error('[API] Erro ao buscar lanÃƒÆ’Ã‚Â§amentos:', error);
+        console.error('[API] Erro ao buscar lançamentos:', error);
         throw error;
       }
     },
 
     createLancamento: async (data: { vendedor_uuid: string, tipo: 'credito' | 'debito', valor: number, descricao: string, periodo: string }) => {
       try {
-        console.log('[API] Criando lanÃƒÆ’Ã‚Â§amento de comissÃƒÆ’Ã‚Â£o:', data);
+        console.log('[API] Criando lançamento de comissão:', data);
         const response = await callEdgeFunction('comissoes-v2/lancamentos', 'POST', data);
         return response.data || response;
       } catch (error) {
-        console.error('[API] Erro ao criar lanÃƒÆ’Ã‚Â§amento:', error);
+        console.error('[API] Erro ao criar lançamento:', error);
         throw error;
       }
     },
@@ -1067,7 +1059,7 @@ export const api = {
         if (periodo) params.periodo = periodo;
         if (vendedorId) params.vendedorId = vendedorId;
 
-        console.log('[API] Buscando pagamentos de comissÃƒÆ’Ã‚Âµes:', params);
+        console.log('[API] Buscando pagamentos de comissões:', params);
         const response = await callEdgeFunction('comissoes-v2/pagamentos', 'GET', undefined, undefined, params);
         return response.data || response;
       } catch (error) {
@@ -1078,7 +1070,7 @@ export const api = {
 
     createPagamento: async (data: { vendedor_uuid: string, valor: number, periodo: string, forma_pagamento: string, comprovante_url?: string, observacoes?: string }) => {
       try {
-        console.log('[API] Registrando pagamento de comissÃƒÆ’Ã‚Â£o:', data);
+        console.log('[API] Registrando pagamento de comissão:', data);
         const response = await callEdgeFunction('comissoes-v2/pagamentos', 'POST', data);
         return response.data || response;
       } catch (error) {
@@ -1089,29 +1081,29 @@ export const api = {
 
     updateLancamento: async (data: { id: string, tipo: 'credito' | 'debito', valor: number, descricao: string, periodo: string }) => {
       try {
-        console.log('[API] Atualizando lanÃƒÆ’Ã‚Â§amento de comissÃƒÆ’Ã‚Â£o:', data);
+        console.log('[API] Atualizando lançamento de comissão:', data);
         const response = await callEdgeFunction('comissoes-v2/lancamentos', 'PUT', data);
         return response.data || response;
       } catch (error) {
-        console.error('[API] Erro ao atualizar lanÃƒÆ’Ã‚Â§amento:', error);
+        console.error('[API] Erro ao atualizar lançamento:', error);
         throw error;
       }
     },
 
     deleteLancamento: async (id: string) => {
       try {
-        console.log('[API] Excluindo lanÃƒÆ’Ã‚Â§amento de comissÃƒÆ’Ã‚Â£o:', id);
+        console.log('[API] Excluindo lançamento de comissão:', id);
         const response = await callEdgeFunction('comissoes-v2/lancamentos', 'DELETE', undefined, undefined, { id });
         return response.data || response;
       } catch (error) {
-        console.error('[API] Erro ao excluir lanÃƒÆ’Ã‚Â§amento:', error);
+        console.error('[API] Erro ao excluir lançamento:', error);
         throw error;
       }
     },
 
     updatePagamento: async (data: { id: string, valor: number, periodo: string, forma_pagamento: string, comprovante_url?: string, observacoes?: string }) => {
       try {
-        console.log('[API] Atualizando pagamento de comissÃƒÆ’Ã‚Â£o:', data);
+        console.log('[API] Atualizando pagamento de comissão:', data);
         const response = await callEdgeFunction('comissoes-v2/pagamentos', 'PUT', data);
         return response.data || response;
       } catch (error) {
@@ -1122,7 +1114,7 @@ export const api = {
 
     deletePagamento: async (id: string) => {
       try {
-        console.log('[API] Excluindo pagamento de comissÃƒÆ’Ã‚Â£o:', id);
+        console.log('[API] Excluindo pagamento de comissão:', id);
         const response = await callEdgeFunction('comissoes-v2/pagamentos', 'DELETE', undefined, undefined, { id });
         return response.data || response;
       } catch (error) {
@@ -1133,36 +1125,36 @@ export const api = {
 
     updateVenda: async (data: { id: string, periodo: string, observacoes?: string }) => {
       try {
-        console.log('[API] Atualizando comissÃƒÆ’Ã‚Â£o de venda:', data);
+        console.log('[API] Atualizando comissão de venda:', data);
         const response = await callEdgeFunction('comissoes-v2/vendas', 'PUT', data);
         return response.data || response;
       } catch (error) {
-        console.error('[API] Erro ao atualizar comissÃƒÆ’Ã‚Â£o de venda:', error);
+        console.error('[API] Erro ao atualizar comissão de venda:', error);
         throw error;
       }
     },
 
     deleteVenda: async (id: string) => {
       try {
-        console.log('[API] Excluindo comissÃƒÆ’Ã‚Â£o de venda:', id);
+        console.log('[API] Excluindo comissão de venda:', id);
         const response = await callEdgeFunction('comissoes-v2/vendas', 'DELETE', undefined, undefined, { id });
         return response.data || response;
       } catch (error) {
-        console.error('[API] Erro ao excluir comissÃƒÆ’Ã‚Â£o de venda:', error);
+        console.error('[API] Erro ao excluir comissão de venda:', error);
         throw error;
       }
     },
 
     fecharPeriodo: async (vendedorId: string, periodo: string) => {
       try {
-        console.log('[API] Fechando perÃƒÆ’Ã‚Â­odo de comissÃƒÆ’Ã‚Â£o:', { vendedorId, periodo });
+        console.log('[API] Fechando período de comissão:', { vendedorId, periodo });
         const response = await callEdgeFunction('comissoes-v2/fechar-periodo', 'POST', {
           vendedor_uuid: vendedorId,
           periodo
         });
         return response.data || response;
       } catch (error) {
-        console.error('[API] Erro ao fechar perÃƒÆ’Ã‚Â­odo:', error);
+        console.error('[API] Erro ao fechar período:', error);
         throw error;
       }
     },
@@ -1172,10 +1164,10 @@ export const api = {
   get: async (entity: string, options?: { params?: Record<string, any> }) => {
     console.log(`[API] GET /${entity}`, options?.params);
 
-    // Caso especial para vendedores - buscar usuÃƒÆ’Ã‚Â¡rios tipo vendedor
+    // Caso especial para vendedores - buscar usuários tipo vendedor
     if (entity === 'vendedores') {
       try {
-        // Se um ID especÃƒÆ’Ã‚Â­fico foi fornecido, buscar dados completos do vendedor
+        // Se um ID específico foi fornecido, buscar dados completos do vendedor
         if (options?.params?.id) {
           console.log('[API] Buscando vendedor completo via Edge Function get-vendedor-completo-v2...', options.params.id);
           const response = await callEdgeFunction('get-vendedor-completo-v2', 'GET', undefined, options.params.id);
@@ -1243,18 +1235,7 @@ export const api = {
               conviteEnviado: false,
               senhaDefinida: !response.first_login,
               requisitosSeguranca: true,
-              permissoes: {
-                dashboard: { visualizar: true, criar: false, editar: false, excluir: false },
-                vendas: { visualizar: true, criar: true, editar: true, excluir: false },
-                pipeline: { visualizar: true, criar: true, editar: true, excluir: false },
-                clientes: { visualizar: true, criar: true, editar: true, excluir: false },
-                metas: { visualizar: true, criar: false, editar: false, excluir: false },
-                comissoes: { visualizar: true, criar: false, editar: false, excluir: false },
-                produtos: { visualizar: true, criar: false, editar: false, excluir: false },
-                relatorios: { visualizar: true, criar: false, editar: false, excluir: false },
-                equipe: { visualizar: false, criar: false, editar: false, excluir: false },
-                configuracoes: { visualizar: false, criar: false, editar: false, excluir: false },
-              },
+              permissoes: permissionIdsToSellerPermissionMatrix(response.permissoes),
             },
             integracoes: [],
             vendas: {
@@ -1283,9 +1264,9 @@ export const api = {
         });
 
         const users = response.users || [];
-        console.log(`[API] ${users.length} usuÃƒÆ’Ã‚Â¡rios vendedores encontrados`);
+        console.log(`[API] ${users.length} usuários vendedores encontrados`);
 
-        // Converter usuÃƒÆ’Ã‚Â¡rios para formato Seller
+        // Converter usuários para formato Seller
         const sellers = users.map((user: any) => usuarioToSeller(user));
 
         // Aplicar filtros adicionais se fornecidos
@@ -1334,16 +1315,16 @@ export const api = {
       }
     }
 
-    // Caso especial para condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes de pagamento - usar edge function com action
+    // Caso especial para condições de pagamento - usar edge function com action
     if (entity === 'condicoes-pagamento') {
       try {
-        console.log('[API] Buscando condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes de pagamento via Edge Function condicoes-pagamento-v2...');
+        console.log('[API] Buscando condições de pagamento via Edge Function condicoes-pagamento-v2...');
         const response = await callEdgeFunction('condicoes-pagamento-v2', 'GET', undefined, undefined, { action: 'list' });
 
         // A resposta vem no formato { success: true, data: { condicoes: [...], total: ... } }
         const condicoes = response.condicoes || response.data?.condicoes || [];
 
-        console.log(`[API] ${condicoes.length} condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes de pagamento encontradas`);
+        console.log(`[API] ${condicoes.length} condições de pagamento encontradas`);
 
         // Mapear para o formato esperado pelo frontend
         return condicoes.map((cond: any) => ({
@@ -1359,13 +1340,13 @@ export const api = {
           descontoExtra: cond.desconto || 0,
           valorPedidoMinimo: cond.valorMinimo || 0,
           valorMinimo: cond.valorMinimo || 0,
-          ativo: true, // Por padrÃƒÆ’Ã‚Â£o, todas as condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes retornadas estÃƒÆ’Ã‚Â£o ativas
+          ativo: true, // Por padrão, todas as condições retornadas estão ativas
           parcelamento: cond.parcelamento || false,
           condicaoCredito: cond.condicaoCredito || false,
           intervaloParcela: cond.intervaloParcela || [],
         }));
       } catch (error) {
-        console.error('[API] Erro ao buscar condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes de pagamento, usando mock:', error);
+        console.error('[API] Erro ao buscar condições de pagamento, usando mock:', error);
         // Fallback para mock em caso de erro
         const entityConfig = entityMap[entity];
         return getStoredData(entityConfig.storageKey, entityConfig.data);
@@ -1392,11 +1373,11 @@ export const api = {
           limit: options?.params?.limit?.toString(),
         });
 
-        // callEdgeFunction jÃƒÆ’Ã‚Â¡ retorna data.data (o objeto com segmentos e pagination)
+        // callEdgeFunction já retorna data.data (o objeto com segmentos e pagination)
         // A resposta vem no formato { segmentos: [...], pagination: {...} }
         console.log('[API] Resposta bruta da Edge Function:', response);
 
-        // Verificar se response ÃƒÆ’Ã‚Â© um array diretamente ou se tem a propriedade segmentos
+        // Verificar se response é um array diretamente ou se tem a propriedade segmentos
         const segmentos = Array.isArray(response)
           ? response
           : (response?.segmentos || response?.data?.segmentos || []);
@@ -1431,8 +1412,8 @@ export const api = {
         const raw = response?.clientes ?? (Array.isArray(response) ? response : []);
         const listas = (Array.isArray(raw) ? raw : []).map((item: any) => mapClienteFromApi(item));
         const pagination = response?.pagination ?? null;
-        console.log(`[API] ${listas.length} clientes encontrados`, pagination ? `(pÃƒÆ’Ã‚Â¡gina ${pagination.page}/${pagination.total_pages})` : '');
-        // Se foi pedido com paginaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o, retornar objeto com clientes e pagination
+        console.log(`[API] ${listas.length} clientes encontrados`, pagination ? `(página ${pagination.page}/${pagination.total_pages})` : '');
+        // Se foi pedido com paginação, retornar objeto com clientes e pagination
         if (options?.params?.page != null || options?.params?.limit != null) {
           return {
             clientes: listas,
@@ -1456,8 +1437,8 @@ export const api = {
         console.log('[API] Listando produtos via Edge Function produtos-v2...');
         const response = await callEdgeFunction('produtos-v2', 'GET', undefined, undefined, { action: 'list' });
 
-        // callEdgeFunction jÃƒÆ’Ã‚Â¡ retorna data.data (o array), mas pode retornar o objeto completo em alguns casos
-        // Verificar se response ÃƒÆ’Ã‚Â© um array diretamente ou se tem a propriedade data
+        // callEdgeFunction já retorna data.data (o array), mas pode retornar o objeto completo em alguns casos
+        // Verificar se response é um array diretamente ou se tem a propriedade data
         const produtos = Array.isArray(response) ? response : (response?.data || []);
 
         console.log(`[API] ${produtos.length} produtos encontrados`);
@@ -1524,7 +1505,7 @@ export const api = {
         const cached = getCachedOptions<any[]>(cacheKey);
         if (cached) return cached;
 
-        console.log('[API] Listando condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes de pagamento via Edge Function condicoes-pagamento-v2...');
+        console.log('[API] Listando condições de pagamento via Edge Function condicoes-pagamento-v2...');
         const response = await callEdgeFunction('condicoes-pagamento-v2', 'GET');
 
         // A resposta vem no formato { success: true, data: { condicoes: [...], total: N } }
@@ -1532,11 +1513,11 @@ export const api = {
           ? response
           : (response?.data?.condicoes || response?.condicoes || response?.data || []);
 
-        console.log(`[API] ${condicoes.length} condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes de pagamento encontradas`);
+        console.log(`[API] ${condicoes.length} condições de pagamento encontradas`);
         setCachedOptions(cacheKey, condicoes);
         return condicoes;
       } catch (error) {
-        console.error('[API] Erro ao listar condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes de pagamento:', error);
+        console.error('[API] Erro ao listar condições de pagamento:', error);
         // Fallback para mock em caso de erro
         const entityConfig = entityMap[entity];
         if (entityConfig) {
@@ -1594,17 +1575,17 @@ export const api = {
         const cacheKey = getOptionsCacheKey('ref-situacao');
         const cached = getCachedOptions<any>(cacheKey);
         if (cached) return cached;
-        console.log('[API] Listando situaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes via Edge Function ref-situacao-v2...');
+        console.log('[API] Listando situações via Edge Function ref-situacao-v2...');
         const response = await callEdgeFunction('ref-situacao-v2', 'GET');
 
         if (Array.isArray(response)) {
           setCachedOptions(cacheKey, response);
           setCachedOptions(cacheKey, response);
-          console.log(`[API] ${response.length} situaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes encontradas`);
+          console.log(`[API] ${response.length} situações encontradas`);
           return response;
         } else if (response && typeof response === 'object' && 'data' in response) {
           setCachedOptions(cacheKey, response.data || response);
-          console.log(`[API] ${response.data?.length || 0} situaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes encontradas`);
+          console.log(`[API] ${response.data?.length || 0} situações encontradas`);
           return response.data || response;
         } else {
           setCachedOptions(cacheKey, response);
@@ -1612,7 +1593,7 @@ export const api = {
           return response;
         }
       } catch (error) {
-        console.error('[API] Erro ao listar situaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes:', error);
+        console.error('[API] Erro ao listar situações:', error);
         return [];
       }
     }
@@ -1637,14 +1618,14 @@ export const api = {
 
         const response = await callEdgeFunction('grupos-redes-v2', 'GET', undefined, undefined, queryParams);
 
-        // A resposta pode vir como array direto ou objeto com paginaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o
+        // A resposta pode vir como array direto ou objeto com paginação
         if (Array.isArray(response)) {
           setCachedOptions(cacheKey, response);
           console.log(`[API] ${response.length} grupos/redes encontrados`);
           return response;
         } else if (response && typeof response === 'object' && 'grupos' in response) {
           setCachedOptions(cacheKey, response);
-          // Resposta com paginaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o do backend
+          // Resposta com paginação do backend
           console.log(`[API] ${response.grupos?.length || 0} grupos/redes encontrados (total: ${response.total || 0})`);
           return response;
         } else {
@@ -1657,16 +1638,16 @@ export const api = {
       }
     }
 
-    // Caso especial para tipos de veÃƒÆ’Ã‚Â­culo - usar edge function
+    // Caso especial para tipos de veículo - usar edge function
     if (entity === 'tipos-veiculo') {
       try {
-        console.log('[API] Listando tipos de veÃƒÆ’Ã‚Â­culo via Edge Function tipos-veiculo-v2...');
+        console.log('[API] Listando tipos de veículo via Edge Function tipos-veiculo-v2...');
         const response = await callEdgeFunction('tipos-veiculo-v2', 'GET');
         const tipos = Array.isArray(response) ? response : [];
-        console.log(`[API] ${tipos.length} tipos de veÃƒÆ’Ã‚Â­culo encontrados`);
+        console.log(`[API] ${tipos.length} tipos de veículo encontrados`);
         return tipos;
       } catch (error) {
-        console.error('[API] Erro ao listar tipos de veÃƒÆ’Ã‚Â­culo:', error);
+        console.error('[API] Erro ao listar tipos de veículo:', error);
         return [];
       }
     }
@@ -1731,9 +1712,9 @@ export const api = {
         const estatisticas = response?.estatisticas || {};
 
         console.log(`[API] ${compromissos.length} compromissos encontrados`);
-        console.log('[API] EstatÃƒÆ’Ã‚Â­sticas:', estatisticas);
+        console.log('[API] Estatísticas:', estatisticas);
 
-        // Retornar objeto com compromissos, paginaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o e estatÃƒÆ’Ã‚Â­sticas
+        // Retornar objeto com compromissos, paginação e estatísticas
         return {
           compromissos,
           pagination,
@@ -1749,17 +1730,17 @@ export const api = {
       }
     }
 
-    // Caso especial para listas de preÃƒÆ’Ã‚Â§o - usar edge function listas-preco-v2
+    // Caso especial para listas de preço - usar edge function listas-preco-v2
     if (entity === 'listas-preco') {
       try {
-        console.log('[API] Listando listas de preÃƒÆ’Ã‚Â§o via Edge Function listas-preco-v2...');
+        console.log('[API] Listando listas de preço via Edge Function listas-preco-v2...');
         const response = await callEdgeFunction('listas-preco-v2', 'GET');
         const raw = Array.isArray(response) ? response : (response?.items ?? response?.data ?? []);
         const listas = (Array.isArray(raw) ? raw : []).map((item: any) => mapListaPrecoFromApi(item));
-        console.log(`[API] ${listas.length} listas de preÃƒÆ’Ã‚Â§o encontradas`);
+        console.log(`[API] ${listas.length} listas de preço encontradas`);
         return listas;
       } catch (error) {
-        console.error('[API] Erro ao listar listas de preÃƒÆ’Ã‚Â§o, usando mock:', error);
+        console.error('[API] Erro ao listar listas de preço, usando mock:', error);
         const entityConfig = entityMap[entity];
         if (entityConfig) {
           return getStoredData(entityConfig.storageKey, entityConfig.data);
@@ -1794,7 +1775,7 @@ export const api = {
         console.log('[API] Buscando vendas via Edge Function pedido-venda-v2...');
         const queryParams: Record<string, string> = {
           page: '1',
-          limit: '1000', // Buscar todas (limite mÃƒÆ’Ã‚Â¡ximo)
+          limit: '1000', // Buscar todas (limite máximo)
         };
 
         if (options?.params) {
@@ -1873,7 +1854,7 @@ export const api = {
               tentativasSincronizacao: 0,
             }
             : undefined,
-          itens: [], // Produtos serÃƒÆ’Ã‚Â£o carregados separadamente se necessÃƒÆ’Ã‚Â¡rio
+          itens: [], // Produtos serão carregados separadamente se necessário
           geraReceita: p.geraReceita,
         }));
       } catch (error) {
@@ -1887,13 +1868,13 @@ export const api = {
     // Outras entidades
     const entityConfig = entityMap[entity];
     if (!entityConfig) {
-      console.warn(`[API] Entidade nÃƒÆ’Ã‚Â£o encontrada: ${entity}, retornando array vazio`);
+      console.warn(`[API] Entidade não encontrada: ${entity}, retornando array vazio`);
       return [];
     }
 
     const data = getStoredData(entityConfig.storageKey, entityConfig.data);
 
-    // Aplicar filtros bÃƒÆ’Ã‚Â¡sicos se fornecidos
+    // Aplicar filtros básicos se fornecidos
     if (options?.params) {
       let filtered = [...data];
       const params = options.params;
@@ -1940,7 +1921,7 @@ export const api = {
         const data = getStoredData(entityConfig.storageKey, entityConfig.data);
         const item = data.find((item: any) => item.id === id);
         if (!item) {
-          throw new Error(`Produto ${id} nÃƒÆ’Ã‚Â£o encontrado`);
+          throw new Error(`Produto ${id} não encontrado`);
         }
         return item;
       }
@@ -1970,14 +1951,14 @@ export const api = {
       }
     }
 
-    // Caso especial para listas de preÃƒÆ’Ã‚Â§o - usar edge function listas-preco-v2
+    // Caso especial para listas de preço - usar edge function listas-preco-v2
     if (entity === 'listas-preco') {
       try {
-        console.log('[API] Buscando lista de preÃƒÆ’Ã‚Â§o via Edge Function listas-preco-v2...');
+        console.log('[API] Buscando lista de preço via Edge Function listas-preco-v2...');
         const response = await callEdgeFunction('listas-preco-v2', 'GET', undefined, id);
         return mapListaPrecoFromApi(response?.data ?? response);
       } catch (error) {
-        console.error('[API] Erro ao buscar lista de preÃƒÆ’Ã‚Â§o:', error);
+        console.error('[API] Erro ao buscar lista de preço:', error);
         throw error;
       }
     }
@@ -1993,7 +1974,7 @@ export const api = {
         const produtos = response?.produtos || [];
 
         if (!pedidoData) {
-          throw new Error(`Venda ${id} nÃƒÆ’Ã‚Â£o encontrada`);
+          throw new Error(`Venda ${id} não encontrada`);
         }
 
         // Mapear para formato Venda esperado pelo frontend
@@ -2063,7 +2044,7 @@ export const api = {
         const vendas = carregarVendasDoLocalStorage();
         const venda = vendas.find(v => v.id === id);
         if (!venda) {
-          throw new Error(`Venda ${id} nÃƒÆ’Ã‚Â£o encontrada`);
+          throw new Error(`Venda ${id} não encontrada`);
         }
         return venda;
       }
@@ -2080,7 +2061,7 @@ export const api = {
         const pagamentos = response?.pagamentos || [];
 
         if (!compromisso) {
-          throw new Error(`Compromisso ${id} nÃƒÆ’Ã‚Â£o encontrado`);
+          throw new Error(`Compromisso ${id} não encontrado`);
         }
 
         return {
@@ -2095,14 +2076,14 @@ export const api = {
 
     const entityConfig = entityMap[entity];
     if (!entityConfig) {
-      throw new Error(`Entidade ${entity} nÃƒÆ’Ã‚Â£o encontrada`);
+      throw new Error(`Entidade ${entity} não encontrada`);
     }
 
     const data = getStoredData(entityConfig.storageKey, entityConfig.data);
     const item = data.find((item: any) => item.id === id);
 
     if (!item) {
-      throw new Error(`${entity} ${id} nÃƒÆ’Ã‚Â£o encontrado`);
+      throw new Error(`${entity} ${id} não encontrado`);
     }
 
     return item;
@@ -2111,10 +2092,10 @@ export const api = {
   create: async (entity: string, data: any) => {
     console.log(`[API] POST /${entity}:`, data);
 
-    // Caso especial para condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes de pagamento - usar edge function com action
+    // Caso especial para condições de pagamento - usar edge function com action
     if (entity === 'condicoes-pagamento') {
       try {
-        console.log('[API] Criando condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de pagamento via Edge Function condicoes-pagamento-v2...');
+        console.log('[API] Criando condição de pagamento via Edge Function condicoes-pagamento-v2...');
         const response = await callEdgeFunction('condicoes-pagamento-v2', 'POST', {
           action: 'create',
           ...data,
@@ -2143,7 +2124,7 @@ export const api = {
           intervaloParcela: condicao.intervaloParcela || [],
         };
       } catch (error) {
-        console.error('[API] Erro ao criar condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de pagamento:', error);
+        console.error('[API] Erro ao criar condição de pagamento:', error);
         throw error;
       }
     }
@@ -2230,10 +2211,10 @@ export const api = {
       }
     }
 
-    // Caso especial para listas de preÃƒÆ’Ã‚Â§o - usar edge function listas-preco-v2
+    // Caso especial para listas de preço - usar edge function listas-preco-v2
     if (entity === 'listas-preco') {
       try {
-        console.log('[API] Criando lista de preÃƒÆ’Ã‚Â§o via Edge Function listas-preco-v2...');
+        console.log('[API] Criando lista de preço via Edge Function listas-preco-v2...');
         const payload = {
           nome: data.nome,
           produtos: data.produtos ?? [],
@@ -2245,7 +2226,7 @@ export const api = {
         const response = await callEdgeFunction('listas-preco-v2', 'POST', payload);
         return mapListaPrecoFromApi(response?.data ?? response);
       } catch (error) {
-        console.error('[API] Erro ao criar lista de preÃƒÆ’Ã‚Â§o, usando mock:', error);
+        console.error('[API] Erro ao criar lista de preço, usando mock:', error);
         const entityConfig = entityMap['listas-preco'];
         if (entityConfig) {
           const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
@@ -2332,17 +2313,17 @@ export const api = {
       }
     }
 
-    // Caso especial para tipos de veÃƒÆ’Ã‚Â­culo - usar edge function
+    // Caso especial para tipos de veículo - usar edge function
     if (entity === 'tipos-veiculo') {
       try {
-        console.log('[API] Criando tipo de veÃƒÆ’Ã‚Â­culo via Edge Function tipos-veiculo-v2...');
+        console.log('[API] Criando tipo de veículo via Edge Function tipos-veiculo-v2...');
         const response = await callEdgeFunction('tipos-veiculo-v2', 'POST', {
           nome: data.nome,
           descricao: data.descricao,
         });
         return response;
       } catch (error) {
-        console.error('[API] Erro ao criar tipo de veÃƒÆ’Ã‚Â­culo:', error);
+        console.error('[API] Erro ao criar tipo de veículo:', error);
         throw error;
       }
     }
@@ -2433,25 +2414,29 @@ export const api = {
       }
     }
 
-    // Caso especial para vendedores - criar usuÃƒÆ’Ã‚Â¡rio tipo vendedor e dados_vendedor
+    // Caso especial para vendedores - criar usuário tipo vendedor e dados_vendedor
     if (entity === 'vendedores') {
       try {
         console.log('[API] Criando vendedor via Edge Function create-user-v2...');
+        const sellerPermissionIds = sellerPermissionMatrixToIds(
+          data?.usuario?.permissoes ?? getDefaultSellerPermissionMatrix()
+        );
 
-        // Criar usuÃƒÆ’Ã‚Â¡rio com tipo vendedor
+        // Criar usuário com tipo vendedor
         const userData = {
           email: data.email || data.emailAcesso || '',
           nome: data.nome || '',
           tipo: 'vendedor' as const,
           user_login: data.email || data.emailAcesso || '',
+          permissoes: sellerPermissionIds,
         };
 
         const userResponse = await callEdgeFunction('create-user-v2', 'POST', userData);
         const createdUser = userResponse.user || userResponse;
 
-        console.log('[API] UsuÃƒÆ’Ã‚Â¡rio vendedor criado:', createdUser.user_id);
+        console.log('[API] Usuário vendedor criado:', createdUser.user_id);
 
-        // Se hÃƒÆ’Ã‚Â¡ dados adicionais do vendedor, atualizar dados_vendedor
+        // Se há dados adicionais do vendedor, atualizar dados_vendedor
         const hasVendedorData = data.iniciais !== undefined || data.cpf !== undefined || data.telefone !== undefined ||
           data.dataAdmissao !== undefined || data.status !== undefined || data.cnpj !== undefined ||
           data.razaoSocial !== undefined || data.nomeFantasia !== undefined || data.inscricaoEstadual !== undefined ||
@@ -2481,13 +2466,13 @@ export const api = {
           if (data.dadosBancarios !== undefined) dadosVendedorData.dadosBancarios = data.dadosBancarios;
           if (data.contatosAdicionais !== undefined) dadosVendedorData.contatosAdicionais = data.contatosAdicionais;
 
-          // Atualizar dados_vendedor usando update-user-v2 (que tambÃƒÆ’Ã‚Â©m atualiza dados_vendedor)
+          // Atualizar dados_vendedor usando update-user-v2 (que também atualiza dados_vendedor)
           try {
             await callEdgeFunction('update-user-v2', 'PUT', dadosVendedorData, createdUser.user_id);
             console.log('[API] Registro dados_vendedor criado/atualizado');
           } catch (dadosVendedorError) {
-            console.warn('[API] Aviso: Erro ao criar dados_vendedor, mas usuÃƒÆ’Ã‚Â¡rio foi criado:', dadosVendedorError);
-            // NÃƒÆ’Ã‚Â£o falhar completamente, apenas logar o aviso
+            console.warn('[API] Aviso: Erro ao criar dados_vendedor, mas usuário foi criado:', dadosVendedorError);
+            // Não falhar completamente, apenas logar o aviso
           }
         }
 
@@ -2580,15 +2565,15 @@ export const api = {
         };
       } catch (error) {
         console.error('[API] Erro ao criar venda:', error);
-        // Importante: nÃƒÆ’Ã‚Â£o fazer fallback silencioso aqui.
-        // O fluxo da UI (ex: SaleFormPage) precisa tratar o erro e nÃƒÆ’Ã‚Â£o navegar como se tivesse salvo.
+        // Importante: não fazer fallback silencioso aqui.
+        // O fluxo da UI (ex: SaleFormPage) precisa tratar o erro e não navegar como se tivesse salvo.
         throw error;
       }
     }
 
     const entityConfig = entityMap[entity];
     if (!entityConfig) {
-      throw new Error(`Entidade ${entity} nÃƒÆ’Ã‚Â£o encontrada`);
+      throw new Error(`Entidade ${entity} não encontrada`);
     }
 
     const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
@@ -2627,7 +2612,7 @@ export const api = {
         const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
         const index = storedData.findIndex((item: any) => item.id === id);
         if (index === -1) {
-          throw new Error(`Produto ${id} nÃƒÆ’Ã‚Â£o encontrado`);
+          throw new Error(`Produto ${id} não encontrado`);
         }
         storedData[index] = {
           ...storedData[index],
@@ -2660,7 +2645,7 @@ export const api = {
         const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
         const index = storedData.findIndex((item: any) => item.id === id);
         if (index === -1) {
-          throw new Error(`${entity} ${id} nÃƒÆ’Ã‚Â£o encontrado`);
+          throw new Error(`${entity} ${id} não encontrado`);
         }
         storedData[index] = {
           ...storedData[index],
@@ -2725,10 +2710,10 @@ export const api = {
       }
     }
 
-    // Caso especial para listas de preÃƒÆ’Ã‚Â§o - usar edge function listas-preco-v2
+    // Caso especial para listas de preço - usar edge function listas-preco-v2
     if (entity === 'listas-preco') {
       try {
-        console.log('[API] Atualizando lista de preÃƒÆ’Ã‚Â§o via Edge Function listas-preco-v2...');
+        console.log('[API] Atualizando lista de preço via Edge Function listas-preco-v2...');
         const payload = {
           nome: data.nome,
           produtos: data.produtos ?? [],
@@ -2740,7 +2725,7 @@ export const api = {
         const response = await callEdgeFunction('listas-preco-v2', 'PUT', payload, id);
         return mapListaPrecoFromApi(response?.data ?? response);
       } catch (error) {
-        console.error('[API] Erro ao atualizar lista de preÃƒÆ’Ã‚Â§o:', error);
+        console.error('[API] Erro ao atualizar lista de preço:', error);
         throw error;
       }
     }
@@ -2779,17 +2764,17 @@ export const api = {
       }
     }
 
-    // Caso especial para tipos de veÃƒÆ’Ã‚Â­culo - usar edge function
+    // Caso especial para tipos de veículo - usar edge function
     if (entity === 'tipos-veiculo') {
       try {
-        console.log('[API] Atualizando tipo de veÃƒÆ’Ã‚Â­culo via Edge Function tipos-veiculo-v2...');
+        console.log('[API] Atualizando tipo de veículo via Edge Function tipos-veiculo-v2...');
         const response = await callEdgeFunction('tipos-veiculo-v2', 'PUT', {
           nome: data.nome,
           descricao: data.descricao,
         }, id);
         return response;
       } catch (error) {
-        console.error('[API] Erro ao atualizar tipo de veÃƒÆ’Ã‚Â­culo:', error);
+        console.error('[API] Erro ao atualizar tipo de veículo:', error);
         throw error;
       }
     }
@@ -2851,12 +2836,12 @@ export const api = {
       }
     }
 
-    // Caso especial para vendedores - atualizar usuÃƒÆ’Ã‚Â¡rio e dados_vendedor
+    // Caso especial para vendedores - atualizar usuário e dados_vendedor
     if (entity === 'vendedores') {
       try {
         console.log('[API] Atualizando vendedor via Edge Function update-user-v2...');
 
-        // Preparar dados completos para atualizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o
+        // Preparar dados completos para atualização
         const userData: any = {};
 
         // Campos da tabela user
@@ -2868,6 +2853,11 @@ export const api = {
           userData.ativo = data.status === 'ativo';
         }
         if (data.tipo !== undefined) userData.tipo = data.tipo;
+        if (data.usuario?.permissoes !== undefined) {
+          userData.permissoes = sellerPermissionMatrixToIds(data.usuario.permissoes);
+        } else if (Array.isArray(data.permissoes)) {
+          userData.permissoes = data.permissoes.filter((perm: unknown): perm is string => typeof perm === 'string');
+        }
 
         // Campos da tabela dados_vendedor
         if (data.iniciais !== undefined) userData.iniciais = data.iniciais;
@@ -2884,7 +2874,7 @@ export const api = {
         if (data.dadosBancarios !== undefined) userData.dadosBancarios = data.dadosBancarios;
         if (data.contatosAdicionais !== undefined) userData.contatosAdicionais = data.contatosAdicionais;
 
-        console.log('[API] Dados completos para atualizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o:', {
+        console.log('[API] Dados completos para atualização:', {
           userFields: Object.keys(userData).filter(k => ['nome', 'email', 'tipo', 'ativo'].includes(k)),
           vendedorFields: Object.keys(userData).filter(k => !['nome', 'email', 'tipo', 'ativo'].includes(k))
         });
@@ -2892,7 +2882,7 @@ export const api = {
         const userResponse = await callEdgeFunction('update-user-v2', 'PUT', userData, id);
         const updatedUser = userResponse.user || userResponse;
 
-        console.log('[API] UsuÃƒÆ’Ã‚Â¡rio vendedor atualizado:', updatedUser.user_id);
+        console.log('[API] Usuário vendedor atualizado:', updatedUser.user_id);
 
         // Converter para formato Seller e mesclar dados adicionais
         const seller = usuarioToSeller(updatedUser);
@@ -2988,14 +2978,14 @@ export const api = {
 
     const entityConfig = entityMap[entity];
     if (!entityConfig) {
-      throw new Error(`Entidade ${entity} nÃƒÆ’Ã‚Â£o encontrada`);
+      throw new Error(`Entidade ${entity} não encontrada`);
     }
 
     const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
     const index = storedData.findIndex((item: any) => item.id === id);
 
     if (index === -1) {
-      throw new Error(`${entity} ${id} nÃƒÆ’Ã‚Â£o encontrado`);
+      throw new Error(`${entity} ${id} não encontrado`);
     }
 
     storedData[index] = {
@@ -3011,7 +3001,7 @@ export const api = {
   },
 
   delete: async (entityOrPath: string, id?: string, body?: any) => {
-    // Se id nÃƒÆ’Ã‚Â£o foi fornecido, assumir que entityOrPath ÃƒÆ’Ã‚Â© um path completo (ex: "formas-pagamento/123")
+    // Se id não foi fornecido, assumir que entityOrPath é um path completo (ex: "formas-pagamento/123")
     let entity: string
     let entityId: string
 
@@ -3027,13 +3017,13 @@ export const api = {
     console.log(`[API] DELETE /${entity}/${entityId}`);
 
     if (!entityId) {
-      throw new Error('ID ÃƒÆ’Ã‚Â© obrigatÃƒÆ’Ã‚Â³rio para exclusÃƒÆ’Ã‚Â£o')
+      throw new Error('ID é obrigatório para exclusão')
     }
 
-    // Caso especial para condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes de pagamento - usar edge function com action
+    // Caso especial para condições de pagamento - usar edge function com action
     if (entity === 'condicoes-pagamento') {
       try {
-        console.log('[API] Excluindo condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de pagamento via Edge Function condicoes-pagamento-v2...');
+        console.log('[API] Excluindo condição de pagamento via Edge Function condicoes-pagamento-v2...');
         await callEdgeFunction('condicoes-pagamento-v2', 'DELETE', {
           action: 'delete',
           id: entityId,
@@ -3041,7 +3031,7 @@ export const api = {
         });
         return { success: true };
       } catch (error) {
-        console.error('[API] Erro ao excluir condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de pagamento:', error);
+        console.error('[API] Erro ao excluir condição de pagamento:', error);
         throw error;
       }
     }
@@ -3102,14 +3092,14 @@ export const api = {
       }
     }
 
-    // Caso especial para listas de preÃƒÆ’Ã‚Â§o - usar edge function listas-preco-v2
+    // Caso especial para listas de preço - usar edge function listas-preco-v2
     if (entity === 'listas-preco') {
       try {
-        console.log('[API] Excluindo lista de preÃƒÆ’Ã‚Â§o via Edge Function listas-preco-v2...');
+        console.log('[API] Excluindo lista de preço via Edge Function listas-preco-v2...');
         await callEdgeFunction('listas-preco-v2', 'DELETE', undefined, entityId);
         return { success: true };
       } catch (error) {
-        console.error('[API] Erro ao excluir lista de preÃƒÆ’Ã‚Â§o:', error);
+        console.error('[API] Erro ao excluir lista de preço:', error);
         throw error;
       }
     }
@@ -3163,14 +3153,14 @@ export const api = {
       }
     }
 
-    // Caso especial para tipos de veÃƒÆ’Ã‚Â­culo - usar edge function
+    // Caso especial para tipos de veículo - usar edge function
     if (entity === 'tipos-veiculo') {
       try {
-        console.log('[API] Excluindo tipo de veÃƒÆ’Ã‚Â­culo via Edge Function tipos-veiculo-v2...');
+        console.log('[API] Excluindo tipo de veículo via Edge Function tipos-veiculo-v2...');
         await callEdgeFunction('tipos-veiculo-v2', 'DELETE', undefined, entityId);
         return { success: true };
       } catch (error) {
-        console.error('[API] Erro ao excluir tipo de veÃƒÆ’Ã‚Â­culo:', error);
+        console.error('[API] Erro ao excluir tipo de veículo:', error);
         throw error;
       }
     }
@@ -3188,9 +3178,9 @@ export const api = {
     }
 
     // Caso especial para conta corrente - usar edge function conta-corrente-v2
-    // Nota: DELETE nÃƒÆ’Ã‚Â£o estÃƒÆ’Ã‚Â¡ implementado (tabela nÃƒÆ’Ã‚Â£o possui deleted_at)
+    // Nota: DELETE não está implementado (tabela não possui deleted_at)
     if (entity === 'conta-corrente') {
-      throw new Error('ExclusÃƒÆ’Ã‚Â£o de compromisso nÃƒÆ’Ã‚Â£o estÃƒÆ’Ã‚Â¡ implementada. A tabela nÃƒÆ’Ã‚Â£o possui campo deleted_at.');
+      throw new Error('Exclusão de compromisso não está implementada. A tabela não possui campo deleted_at.');
     }
 
     // Caso especial para empresas - usar edge function
@@ -3217,7 +3207,7 @@ export const api = {
         const vendas = carregarVendasDoLocalStorage();
         const index = vendas.findIndex(v => v.id === entityId);
         if (index === -1) {
-          throw new Error(`Venda ${entityId} nÃƒÆ’Ã‚Â£o encontrada`);
+          throw new Error(`Venda ${entityId} não encontrada`);
         }
         vendas.splice(index, 1);
         salvarVendasNoLocalStorage(vendas);
@@ -3227,14 +3217,14 @@ export const api = {
 
     const entityConfig = entityMap[entity];
     if (!entityConfig) {
-      throw new Error(`Entidade ${entity} nÃƒÆ’Ã‚Â£o encontrada`);
+      throw new Error(`Entidade ${entity} não encontrada`);
     }
 
     const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
     const index = storedData.findIndex((item: any) => item.id === entityId);
 
     if (index === -1) {
-      throw new Error(`${entity} ${entityId} nÃƒÆ’Ã‚Â£o encontrado`);
+      throw new Error(`${entity} ${entityId} não encontrado`);
     }
 
     storedData.splice(index, 1);
@@ -3273,7 +3263,7 @@ export const api = {
     const id = parts[1];
 
     if (!id) {
-      throw new Error('ID ÃƒÆ’Ã‚Â© obrigatÃƒÆ’Ã‚Â³rio para atualizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o');
+      throw new Error('ID é obrigatório para atualização');
     }
 
     return api.update(entity, id, data);
@@ -3290,7 +3280,7 @@ export const api = {
       const clientes = getStoredData('mockClientes', mockClientes);
       const index = clientes.findIndex((c: any) => c.id === id);
       if (index === -1) {
-        throw new Error(`Cliente ${id} nÃƒÆ’Ã‚Â£o encontrado`);
+        throw new Error(`Cliente ${id} não encontrado`);
       }
       clientes[index] = {
         ...clientes[index],
@@ -3305,7 +3295,7 @@ export const api = {
       const clientes = getStoredData('mockClientes', mockClientes);
       const index = clientes.findIndex((c: any) => c.id === id);
       if (index === -1) {
-        throw new Error(`Cliente ${id} nÃƒÆ’Ã‚Â£o encontrado`);
+        throw new Error(`Cliente ${id} não encontrado`);
       }
       clientes[index] = {
         ...clientes[index],
@@ -3409,7 +3399,7 @@ export const api = {
           mes: mes.toString(),
         });
 
-        // callEdgeFunction jÃƒÆ’Ã‚Â¡ extrai o data, entÃƒÆ’Ã‚Â£o response jÃƒÆ’Ã‚Â¡ ÃƒÆ’Ã‚Â© { total: 0, ano: 2026, mes: 2 }
+        // callEdgeFunction já extrai o data, então response já é { total: 0, ano: 2026, mes: 2 }
         let total = 0;
         if (typeof response === 'number') {
           total = response;
@@ -3442,7 +3432,7 @@ export const api = {
         console.log('[API] Buscando todas as metas via Edge Function metas-vendedor-v2...', { ano, mes });
         const queryParams: Record<string, string> = {
           page: '1',
-          limit: '1000', // Buscar todas (limite mÃƒÆ’Ã‚Â¡ximo)
+          limit: '1000', // Buscar todas (limite máximo)
         };
 
         if (ano !== undefined) {
@@ -3456,17 +3446,17 @@ export const api = {
 
         console.log('[API] Resposta bruta do callEdgeFunction:', response);
         console.log('[API] Tipo da resposta:', typeof response);
-        console.log('[API] ÃƒÆ’Ã¢â‚¬Â° array?', Array.isArray(response));
+        console.log('[API] É array?', Array.isArray(response));
         console.log('[API] Chaves do objeto (se for objeto):', response && typeof response === 'object' ? Object.keys(response) : 'N/A');
 
-        // callEdgeFunction jÃƒÆ’Ã‚Â¡ extrai o data, entÃƒÆ’Ã‚Â£o response jÃƒÆ’Ã‚Â¡ ÃƒÆ’Ã‚Â© { metas: [...], pagination: {...} }
+        // callEdgeFunction já extrai o data, então response já é { metas: [...], pagination: {...} }
         // ou pode ser diretamente o array se a Edge Function retornar de forma diferente
         let metas: any[] = [];
 
         if (Array.isArray(response)) {
-          // Se jÃƒÆ’Ã‚Â¡ ÃƒÆ’Ã‚Â© um array, usar diretamente
+          // Se já é um array, usar diretamente
           metas = response;
-          console.log('[API] Resposta jÃƒÆ’Ã‚Â¡ ÃƒÆ’Ã‚Â© um array, usando diretamente');
+          console.log('[API] Resposta já é um array, usando diretamente');
         } else if (response && typeof response === 'object') {
           // Verificar se tem a propriedade 'metas'
           if ('metas' in response) {
@@ -3475,10 +3465,10 @@ export const api = {
             if (Array.isArray(metasValue)) {
               metas = metasValue;
             } else {
-              console.warn('[API] Propriedade metas nÃƒÆ’Ã‚Â£o ÃƒÆ’Ã‚Â© um array:', metasValue);
+              console.warn('[API] Propriedade metas não é um array:', metasValue);
             }
           }
-          // Fallback: verificar se tem 'data' (caso callEdgeFunction nÃƒÆ’Ã‚Â£o tenha extraÃƒÆ’Ã‚Â­do)
+          // Fallback: verificar se tem 'data' (caso callEdgeFunction não tenha extraído)
           else if ('data' in response) {
             const data = (response as any).data;
             console.log('[API] Propriedade data encontrada:', { tipo: typeof data, isArray: Array.isArray(data) });
@@ -3491,17 +3481,17 @@ export const api = {
               }
             }
           }
-          // Se response ÃƒÆ’Ã‚Â© um objeto mas nÃƒÆ’Ã‚Â£o tem 'metas', pode ser que seja o array diretamente
+          // Se response é um objeto mas não tem 'metas', pode ser que seja o array diretamente
           // ou pode ser que seja um objeto vazio
           else {
-            console.warn('[API] Resposta nÃƒÆ’Ã‚Â£o contÃƒÆ’Ã‚Â©m propriedade metas ou data:', response);
-            console.warn('[API] Chaves disponÃƒÆ’Ã‚Â­veis:', Object.keys(response));
+            console.warn('[API] Resposta não contém propriedade metas ou data:', response);
+            console.warn('[API] Chaves disponíveis:', Object.keys(response));
           }
         } else {
-          console.warn('[API] Resposta nÃƒÆ’Ã‚Â£o ÃƒÆ’Ã‚Â© array nem objeto:', response);
+          console.warn('[API] Resposta não é array nem objeto:', response);
         }
 
-        console.log(`[API] ${metas.length} metas extraÃƒÆ’Ã‚Â­das da resposta`);
+        console.log(`[API] ${metas.length} metas extraídas da resposta`);
         if (metas.length > 0) {
           console.log('[API] Primeira meta:', metas[0]);
         }
@@ -3524,7 +3514,7 @@ export const api = {
           periodoReferencia: data.periodoReferencia,
         });
 
-        // A resposta jÃƒÆ’Ã‚Â¡ vem no formato esperado pelo frontend
+        // A resposta já vem no formato esperado pelo frontend
         return response;
       } catch (error: any) {
         console.error('[API] Erro ao salvar meta:', error);
@@ -3548,7 +3538,7 @@ export const api = {
         );
 
         if (!metaExistente || !metaExistente.id) {
-          throw new Error('Meta nÃƒÆ’Ã‚Â£o encontrada para atualizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o');
+          throw new Error('Meta não encontrada para atualização');
         }
 
         const response = await callEdgeFunction('metas-vendedor-v2', 'PUT', {
@@ -3583,7 +3573,7 @@ export const api = {
         );
 
         if (!metaExistente || !metaExistente.id) {
-          throw new Error('Meta nÃƒÆ’Ã‚Â£o encontrada para exclusÃƒÆ’Ã‚Â£o');
+          throw new Error('Meta não encontrada para exclusão');
         }
 
         await callEdgeFunction('metas-vendedor-v2', 'DELETE', undefined, metaExistente.id);
@@ -3600,7 +3590,7 @@ export const api = {
         console.log('[API] Copiando metas via Edge Function metas-vendedor-v2/copiar...');
 
         // O frontend envia: { deAno, deMes, paraAno, paraMes }
-        // Usar path 'copiar' e body com os parÃƒÆ’Ã‚Â¢metros
+        // Usar path 'copiar' e body com os parâmetros
         const response = await callEdgeFunction('metas-vendedor-v2', 'POST', {
           deAno: data.deAno || data.de_ano,
           deMes: data.deMes || data.de_mes,
@@ -3659,7 +3649,7 @@ export const api = {
         const pagination = response?.pagination || {};
         const stats = response?.stats || {};
 
-        console.log('[API] Pedidos extraÃƒÆ’Ã‚Â­dos:', pedidos.length);
+        console.log('[API] Pedidos extraídos:', pedidos.length);
         console.log('[API] Primeiro pedido:', pedidos[0]);
 
         // Mapear pedidos para formato Venda esperado pelo frontend
@@ -3713,7 +3703,7 @@ export const api = {
               tentativasSincronizacao: 0,
             }
             : undefined,
-          itens: [], // Produtos serÃƒÆ’Ã‚Â£o carregados separadamente se necessÃƒÆ’Ã‚Â¡rio
+          itens: [], // Produtos serão carregados separadamente se necessário
           geraReceita: p.geraReceita,
         }));
 
@@ -3755,7 +3745,7 @@ export const api = {
         const produtos = response?.produtos || [];
 
         if (!pedidoData) {
-          throw new Error(`Venda ${id} nÃƒÆ’Ã‚Â£o encontrada`);
+          throw new Error(`Venda ${id} não encontrada`);
         }
 
         // Mapear para formato Venda esperado pelo frontend
@@ -4062,7 +4052,7 @@ export const api = {
     },
   },
 
-  // Naturezas de operaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o - Usa Edge Function natureza-operacao-v2
+  // Naturezas de operação - Usa Edge Function natureza-operacao-v2
   naturezasOperacao: {
     list: async (filters?: { search?: string; apenasAtivas?: boolean; page?: number; limit?: number }) => {
       try {
@@ -4167,18 +4157,18 @@ export const api = {
     },
   },
 
-  // Sync vendedores with usuarios - busca usuÃƒÆ’Ã‚Â¡rios tipo vendedor
+  // Sync vendedores with usuarios - busca usuários tipo vendedor
   syncVendedores: async () => {
     try {
-      console.log('[API] syncVendedores: Buscando usuÃƒÆ’Ã‚Â¡rios tipo vendedor...');
+      console.log('[API] syncVendedores: Buscando usuários tipo vendedor...');
 
-      // Buscar todos os usuÃƒÆ’Ã‚Â¡rios tipo vendedor
+      // Buscar todos os usuários tipo vendedor
       const response = await callEdgeFunction('list-users-v2', 'GET', undefined, undefined, {
         tipo: 'vendedor',
       });
 
       const users = response.users || [];
-      console.log(`[API] ${users.length} usuÃƒÆ’Ã‚Â¡rios vendedores encontrados`);
+      console.log(`[API] ${users.length} usuários vendedores encontrados`);
 
       return {
         success: true,
@@ -4224,7 +4214,7 @@ export const api = {
 
   testTinyConnection: async (token: string) => {
     console.log('[API] testTinyConnection (mockado)');
-    return { success: true, message: 'ConexÃƒÆ’Ã‚Â£o mockada - sempre retorna sucesso' };
+    return { success: true, message: 'Conexão mockada - sempre retorna sucesso' };
   },
 
   tinyListarProdutos: async (empresaId: string) => {
@@ -4317,7 +4307,7 @@ export const api = {
         const response = await callEdgeFunction('produtos-v2', 'GET', undefined, undefined, params);
         return Array.isArray(response) ? response : [];
       } catch (error) {
-        console.error('[API] Erro ao listar logs de importaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o:', error);
+        console.error('[API] Erro ao listar logs de importação:', error);
         return [];
       }
     },
@@ -4340,7 +4330,7 @@ export const api = {
 
         return response;
       } catch (error) {
-        console.error('[API] Erro ao registrar log de importaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o:', error);
+        console.error('[API] Erro ao registrar log de importação:', error);
         return null;
       }
     },

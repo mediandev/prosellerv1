@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+﻿import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
@@ -47,7 +47,7 @@ export function ProductsListPage({
   const [sortField, setSortField] = useState<keyof Produto | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const canCreateProduto = temPermissao('produtos.criar') || ehBackoffice();
-  const canVisualizarProduto = temPermissao('produtos.visualizar') || ehBackoffice() || ehVendedor();
+  const canVisualizarProduto = temPermissao('produtos.visualizar') || ehBackoffice();
   const canEditarProduto = temPermissao('produtos.editar') || ehBackoffice();
   const canExcluirProduto = temPermissao('produtos.excluir') || ehBackoffice();
 

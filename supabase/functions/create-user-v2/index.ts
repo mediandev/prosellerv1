@@ -23,6 +23,29 @@ interface CreateUserBody {
   permissoes?: string[]
 }
 
+const SUPPORTED_SELLER_PERMISSION_IDS = new Set<string>([
+  'clientes.visualizar',
+  'clientes.criar',
+  'clientes.editar',
+  'clientes.excluir',
+  'vendas.visualizar',
+  'vendas.criar',
+  'vendas.editar',
+  'vendas.excluir',
+  'relatorios.visualizar',
+  'contacorrente.visualizar',
+  'contacorrente.criar',
+  'contacorrente.editar',
+  'contacorrente.excluir',
+  'produtos.visualizar',
+  'produtos.criar',
+  'produtos.editar',
+  'produtos.excluir',
+  'comissoes.visualizar',
+  'comissoes.lancamentos.editar',
+  'comissoes.lancamentos.excluir',
+])
+
 // Helper: Valida JWT e retorna usuÃ¡rio autenticado
 async function validateJWT(
   req: Request,
@@ -245,6 +268,24 @@ function sanitizeInput(input: string): string {
   return input.trim().replace(/[<>]/g, '').replace(/javascript:/gi, '').replace(/on\w+=/gi, '')
 }
 
+function sanitizeAndValidatePermissionIds(permissionIds: string[]): string[] {
+  const sanitizedPermissions = permissionIds
+    .filter((permissionId) => typeof permissionId === 'string')
+    .map((permissionId) => sanitizeInput(permissionId).trim())
+    .filter((permissionId) => permissionId.length > 0)
+
+  const uniquePermissions = Array.from(new Set(sanitizedPermissions))
+  const invalidPermissions = uniquePermissions.filter(
+    (permissionId) => !SUPPORTED_SELLER_PERMISSION_IDS.has(permissionId)
+  )
+
+  if (invalidPermissions.length > 0) {
+    throw new ValidationError(`Permissoes invalidas: ${invalidPermissions.join(', ')}`)
+  }
+
+  return uniquePermissions
+}
+
 // Helper: Valida nÃ£o vazio
 function validateNotEmpty(value: string | null | undefined): boolean {
   return value !== null && value !== undefined && value.trim().length > 0
@@ -350,6 +391,10 @@ serve(async (req) => {
       console.error('[CREATE-USER-V2] Validation error: Invalid email format')
       throw new ValidationError('Formato de email invÃ¡lido')
     }
+    if (body.permissoes !== undefined && !Array.isArray(body.permissoes)) {
+      console.error('[CREATE-USER-V2] Validation error: permissoes must be an array')
+      throw new ValidationError('permissoes deve ser um array de strings')
+    }
 
     console.log('[CREATE-USER-V2] Input validation passed')
 
@@ -362,11 +407,8 @@ serve(async (req) => {
       ref_user_role_id: body.ref_user_role_id || null,
       user_login: body.user_login ? sanitizeInput(body.user_login).trim() : null,
       auth_user_id: body.auth_user_id || null,
-      permissoes: Array.isArray(body.permissoes)
-        ? body.permissoes
-          .filter((p) => typeof p === 'string')
-          .map((p) => sanitizeInput(p).trim())
-          .filter((p) => p.length > 0)
+      permissoes: body.permissoes !== undefined
+        ? sanitizeAndValidatePermissionIds(body.permissoes)
         : null,
     }
 
@@ -386,6 +428,7 @@ serve(async (req) => {
         headers: { Authorization: req.headers.get('Authorization') || '' },
       },
     })
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
     const { data: rpcData, error: rpcError } = await supabase.rpc('create_user_v2', {
       p_email: sanitizedData.email,
@@ -417,17 +460,30 @@ serve(async (req) => {
       throw new Error('Failed to create user')
     }
     if (sanitizedData.permissoes) {
-      const { error: permsError } = await supabase
+      const targetUserId = typeof rpcData[0].user_id === 'string' && rpcData[0].user_id.length > 0
+        ? rpcData[0].user_id
+        : null
+
+      if (!targetUserId) {
+        throw new Error('Created user_id not returned for permissions update')
+      }
+
+      const { data: permissionsRow, error: permsError } = await supabaseAdmin
         .from('user')
         .update({ permissoes: sanitizedData.permissoes })
-        .eq('user_id', rpcData[0].user_id)
+        .eq('user_id', targetUserId)
+        .select('user_id, permissoes')
+        .maybeSingle()
 
       if (permsError) {
         console.error('[CREATE-USER-V2] ERROR updating user permissions:', permsError)
         throw new Error(`Database operation failed: ${permsError.message}`)
       }
+      if (!permissionsRow) {
+        throw new Error(`Permissions update affected 0 rows for user_id ${targetUserId}`)
+      }
 
-      rpcData[0].permissoes = sanitizedData.permissoes
+      rpcData[0].permissoes = permissionsRow.permissoes
     }
 
     // 6. RESPOSTA

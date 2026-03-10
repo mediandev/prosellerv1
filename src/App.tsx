@@ -84,20 +84,27 @@ const menuItems: Array<{ id: Page; icon: any; label: string; backofficeOnly?: bo
   { id: "equipe", icon: Users, label: "Equipe", backofficeOnly: true },
   { id: "metas", icon: Target, label: "Metas", backofficeOnly: true },
   { id: "comissoes", icon: Wallet, label: "Comissões" },
-  { id: "contacorrente", icon: DollarSign, label: "Conta Corrente", backofficeOnly: true },
+  { id: "contacorrente", icon: DollarSign, label: "Conta Corrente" },
   { id: "relatorios", icon: BarChart3, label: "Relatórios" },
   { id: "configuracoes", icon: Settings, label: "Configurações", backofficeOnly: true },
 ];
 
+const PAGE_VIEW_PERMISSION: Partial<Record<Page, string>> = {
+  vendas: "vendas.visualizar",
+  clientes: "clientes.visualizar",
+  produtos: "produtos.visualizar",
+  comissoes: "comissoes.visualizar",
+  contacorrente: "contacorrente.visualizar",
+  relatorios: "relatorios.visualizar",
+};
+
 interface SidebarProps {
   currentPage: Page;
   onPageChange: (page: Page) => void;
+  canAccessPage: (page: Page) => boolean;
 }
 
-function Sidebar({ currentPage, onPageChange }: SidebarProps) {
-  const { usuario } = useAuth();
-  const ehBackoffice = usuario?.tipo === 'backoffice';
-  
+function Sidebar({ currentPage, onPageChange, canAccessPage }: SidebarProps) {
   return (
     <div className="flex flex-col h-full bg-card border-r">
       <div className="px-6 py-4 border-b flex-shrink-0 h-[72px] flex items-center justify-center">
@@ -106,7 +113,7 @@ function Sidebar({ currentPage, onPageChange }: SidebarProps) {
       
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {menuItems
-          .filter(item => !item.backofficeOnly || ehBackoffice)
+          .filter(item => canAccessPage(item.id))
           .map((item) => (
             <Button
               key={item.id}
@@ -259,10 +266,10 @@ function AppContent() {
   // Estado para armazenar transações filtradas vindas do DashboardMetrics
   const [dashboardTransactions, setDashboardTransactions] = useState<Transaction[]>([]);
 
-  // 🆕 NOVO: Estado para armazenar TODAS as transações (incluindo canceladas) para CanceledSalesTable
+  // [NOVO] Estado para armazenar TODAS as transações (incluindo canceladas) para CanceledSalesTable
   const [dashboardAllTransactions, setDashboardAllTransactions] = useState<Transaction[]>([]);
 
-  // 🆕 NOVO: Estado para armazenar TODAS as transações SEM filtro de período (para Curva ABC)
+  // [NOVO] Estado para armazenar TODAS as transações SEM filtro de período (para Curva ABC)
   const [dashboardRawTransactions, setDashboardRawTransactions] = useState<Transaction[]>([]);
   const [dashboardSnapshot, setDashboardSnapshot] = useState<DashboardSnapshot | null>(null);
 
@@ -304,23 +311,23 @@ function AppContent() {
     }
   }, [usuario, dataInitialized]);
 
-  // 🔧 Inicializar modo Tiny ERP na primeira carga
+  // Inicializar modo Tiny ERP na primeira carga
   useEffect(() => {
     // Verificar se já tem modo configurado
     const modoSalvo = localStorage.getItem('tinyERPMode');
     const modoWindow = (window as any).__TINY_API_MODE__;
     
-    console.log('🔍 Verificando modo Tiny ERP:', { modoSalvo, modoWindow });
+    console.log('[APP] Verificando modo Tiny ERP:', { modoSalvo, modoWindow });
     
     // Se não tem nenhum modo configurado, iniciar em REAL como padrão
     if (!modoSalvo && !modoWindow) {
-      console.log('🔧 Tiny ERP: Inicializando em modo REAL (padrão)');
+      console.log('[APP] Tiny ERP: Inicializando em modo REAL (padrão)');
       localStorage.setItem('tinyERPMode', 'REAL');
       (window as any).__TINY_API_MODE__ = 'REAL';
     } else {
       // Usar o modo salvo
       const modoAtual = modoSalvo || modoWindow || 'REAL';
-      console.log(`✅ Tiny ERP: Modo ${modoAtual} carregado`);
+      console.log(`[APP] Tiny ERP: Modo ${modoAtual} carregado`);
       
       // Sincronizar localStorage e window
       if (modoSalvo !== modoWindow) {
@@ -360,10 +367,10 @@ function AppContent() {
         // Iniciar polling automático de 24h
         tinyERPSyncService.iniciarPolling();
         
-        console.log(`[APP] ✅ Polling de sincronização iniciado (intervalo: 24 horas)`);
-        console.log(`[APP] 📊 ${vendas.length} vendas carregadas para sincronização`);
+        console.log(`[APP] Polling de sincronização iniciado (intervalo: 24 horas)`);
+        console.log(`[APP] ${vendas.length} vendas carregadas para sincronização`);
       } catch (error) {
-        console.error('[APP] ❌ Erro ao iniciar sincronização:', error);
+        console.error('[APP] Erro ao iniciar sincronização:', error);
       }
     };
     
@@ -388,7 +395,7 @@ function AppContent() {
     statusClientes: [],
     ufs: [],
     statusVendas: "todas", // CORRIGIDO: Dashboard inicia com "todas" por padrão
-    curvasABC: [], // 🆕 NOVO: Filtro de Curva ABC de Clientes
+    curvasABC: [], // [NOVO] Filtro de Curva ABC de Clientes
   });
   
   // Estados para período de vendas
@@ -427,9 +434,48 @@ function AppContent() {
   // Estados para navegação de relatórios
   const [reportView, setReportView] = useState<ReportView>('index');
 
+  const canAccessPage = (page: Page): boolean => {
+    if (!usuario) return false;
+
+    if (page === "perfil" || page === "dashboard") {
+      return true;
+    }
+
+    if (page === "tiny-erp") {
+      return usuario.tipo === "backoffice";
+    }
+
+    if (page === "clientes-pendentes") {
+      return usuario.tipo === "backoffice";
+    }
+
+    const menuItem = menuItems.find((item) => item.id === page);
+    if (menuItem?.backofficeOnly && usuario.tipo !== "backoffice") {
+      return false;
+    }
+
+    if (usuario.tipo === "vendedor") {
+      const requiredPermission = PAGE_VIEW_PERMISSION[page];
+      if (requiredPermission) {
+        return usuario.permissoes?.includes(requiredPermission) ?? false;
+      }
+    }
+
+    return true;
+  };
+
   const handlePageChange = (page: Page) => {
-    setCurrentPage(page);
     setMobileMenuOpen(false);
+
+    if (!canAccessPage(page)) {
+      toast.error("Você não tem permissão para acessar esta página.");
+      if (page !== "dashboard" && canAccessPage("dashboard")) {
+        setCurrentPage("dashboard");
+      }
+      return;
+    }
+
+    setCurrentPage(page);
     
     // Reset customer view when navigating to customers page
     if (page === 'clientes') {
@@ -461,6 +507,16 @@ function AppContent() {
     }
   };
 
+  useEffect(() => {
+    if (!usuario) return;
+    if (canAccessPage(currentPage)) return;
+
+    const fallbackPage: Page = canAccessPage("dashboard") ? "dashboard" : "perfil";
+    if (currentPage !== fallbackPage) {
+      setCurrentPage(fallbackPage);
+    }
+  }, [usuario, currentPage]);
+
   const handleNovoCliente = () => {
     setCustomerView('create');
     setSelectedCustomerId(undefined);
@@ -483,12 +539,25 @@ function AppContent() {
 
   // Handlers para navegação de vendas
   const handleNovaVenda = () => {
+    if (!canAccessPage('vendas')) {
+      toast.error("Você não tem permissão para acessar pedidos.");
+      return;
+    }
+    if (usuario?.tipo === "vendedor" && !usuario.permissoes?.includes("vendas.criar")) {
+      toast.error("Você não tem permissão para criar pedidos.");
+      return;
+    }
     setSaleView('create');
     setSelectedSaleId(undefined);
   };
 
   const handleVisualizarVenda = (vendaId: string) => {
-    console.log('[APP] 📋 handleVisualizarVenda chamado:', {
+    if (!canAccessPage('vendas')) {
+      toast.error("Você não tem permissão para acessar pedidos.");
+      return;
+    }
+
+    console.log('[APP] handleVisualizarVenda chamado:', {
       vendaId,
       currentPage,
       saleView
@@ -496,14 +565,14 @@ function AppContent() {
     
     // Mudar para página de vendas se não estiver nela
     if (currentPage !== 'vendas') {
-      console.log('[APP] 🔄 Mudando para página de vendas...');
-      setCurrentPage('vendas');
+      console.log('[APP] Mudando para página de vendas...');
+      handlePageChange('vendas');
     }
     
     setSaleView('view');
     setSelectedSaleId(vendaId);
     
-    console.log('[APP] ✅ Navegação configurada:', {
+    console.log('[APP] Navegação configurada:', {
       page: 'vendas',
       view: 'view',
       saleId: vendaId
@@ -511,6 +580,14 @@ function AppContent() {
   };
 
   const handleEditarVenda = (vendaId: string) => {
+    if (!canAccessPage('vendas')) {
+      toast.error("Você não tem permissão para acessar pedidos.");
+      return;
+    }
+    if (usuario?.tipo === "vendedor" && !usuario.permissoes?.includes("vendas.editar")) {
+      toast.error("Você não tem permissão para editar pedidos.");
+      return;
+    }
     setSaleView('edit');
     setSelectedSaleId(vendaId);
   };
@@ -1054,7 +1131,7 @@ function AppContent() {
       <div className="h-screen flex overflow-hidden bg-background">
         {/* Sidebar Desktop */}
         <aside className="hidden lg:block w-64 flex-shrink-0">
-          <Sidebar currentPage={currentPage} onPageChange={handlePageChange} />
+          <Sidebar currentPage={currentPage} onPageChange={handlePageChange} canAccessPage={canAccessPage} />
         </aside>
 
         {/* Mobile Menu */}
@@ -1063,7 +1140,7 @@ function AppContent() {
             <VisuallyHidden>
               <SheetTitle>Menu de Navegação</SheetTitle>
             </VisuallyHidden>
-            <Sidebar currentPage={currentPage} onPageChange={handlePageChange} />
+            <Sidebar currentPage={currentPage} onPageChange={handlePageChange} canAccessPage={canAccessPage} />
           </SheetContent>
         </Sheet>
 
@@ -1099,7 +1176,7 @@ function AppContent() {
             <DemoModeBadge />
             
             {/* Menu de Notificações */}
-            <NotificationsMenu onNavigate={(page) => setCurrentPage(page as Page)} />
+            <NotificationsMenu onNavigate={(page) => handlePageChange(page as Page)} />
             
             {/* Botão de perfil no header mobile */}
             {currentPage !== "perfil" && (
@@ -1107,7 +1184,7 @@ function AppContent() {
                 variant="ghost"
                 size="icon"
                 className="lg:hidden"
-                onClick={() => setCurrentPage("perfil")}
+                onClick={() => handlePageChange("perfil")}
               >
                 <UserCircle className="h-5 w-5" />
               </Button>
@@ -1143,3 +1220,4 @@ export default function App() {
     </ErrorBoundary>
   );
 }
+

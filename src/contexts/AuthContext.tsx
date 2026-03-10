@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Usuario, TipoUsuario } from '../types/user';
 import { api, getAuthToken, setAuthToken, isTokenExpiringSoon, refreshAuthToken } from '../services/api';
+import { getDefaultSellerPermissionIds } from '../utils/sellerPermissions';
 
 interface AuthContextType {
   usuario: Usuario | null;
@@ -19,8 +20,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const resolverPermissoesUsuario = (user: Usuario): string[] => {
-    if (Array.isArray(user.permissoes) && user.permissoes.length > 0) {
-      return user.permissoes;
+    if (Array.isArray(user.permissoes)) {
+      return user.permissoes.filter((permissao) => typeof permissao === 'string');
     }
     return getDefaultPermissoes(user.tipo);
   };
@@ -112,19 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         'configuracoes.excluir',
       ];
     } else {
-      return [
-        'clientes.visualizar',
-        'clientes.criar',
-        'clientes.editar',
-        'vendas.visualizar',
-        'vendas.criar',
-        'vendas.editar',
-        'produtos.visualizar',
-        'comissoes.visualizar',
-        'relatorios.visualizar',
-        'contacorrente.visualizar',
-        'contacorrente.criar',
-      ];
+      return getDefaultSellerPermissionIds();
     }
   };
 

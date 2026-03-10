@@ -49,6 +49,29 @@ interface UpdateUserBody {
   contatosAdicionais?: any[]
 }
 
+const SUPPORTED_SELLER_PERMISSION_IDS = new Set<string>([
+  'clientes.visualizar',
+  'clientes.criar',
+  'clientes.editar',
+  'clientes.excluir',
+  'vendas.visualizar',
+  'vendas.criar',
+  'vendas.editar',
+  'vendas.excluir',
+  'relatorios.visualizar',
+  'contacorrente.visualizar',
+  'contacorrente.criar',
+  'contacorrente.editar',
+  'contacorrente.excluir',
+  'produtos.visualizar',
+  'produtos.criar',
+  'produtos.editar',
+  'produtos.excluir',
+  'comissoes.visualizar',
+  'comissoes.lancamentos.editar',
+  'comissoes.lancamentos.excluir',
+])
+
 // Helper: Valida JWT (mesmo cÃ³digo da get-user-v2)
 async function validateJWT(
   req: Request,
@@ -133,6 +156,24 @@ function sanitizeInput(input: string): string {
   return typeof input === 'string' ? input.trim().replace(/[<>]/g, '').replace(/javascript:/gi, '').replace(/on\w+=/gi, '') : ''
 }
 
+function sanitizeAndValidatePermissionIds(permissionIds: string[]): string[] {
+  const sanitizedPermissions = permissionIds
+    .filter((permissionId) => typeof permissionId === 'string')
+    .map((permissionId) => sanitizeInput(permissionId).trim())
+    .filter((permissionId) => permissionId.length > 0)
+
+  const uniquePermissions = Array.from(new Set(sanitizedPermissions))
+  const invalidPermissions = uniquePermissions.filter(
+    (permissionId) => !SUPPORTED_SELLER_PERMISSION_IDS.has(permissionId)
+  )
+
+  if (invalidPermissions.length > 0) {
+    throw new ValidationError(`Permissoes invalidas: ${invalidPermissions.join(', ')}`)
+  }
+
+  return uniquePermissions
+}
+
 function validateMinLength(value: string, minLength: number): boolean {
   return value && value.trim().length >= minLength
 }
@@ -207,16 +248,14 @@ serve(async (req) => {
       if (!Array.isArray(body.permissoes)) {
         throw new ValidationError('permissoes deve ser um array de strings')
       }
-      sanitizedData.permissoes = body.permissoes
-        .filter((p) => typeof p === 'string')
-        .map((p) => sanitizeInput(p).trim())
-        .filter((p) => p.length > 0)
+      sanitizedData.permissoes = sanitizeAndValidatePermissionIds(body.permissoes)
     }
 
     console.log('[UPDATE-USER-V2] Step 5: Calling RPC function update_user_v2...', { p_user_id: userId, p_updated_by: user.id })
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       global: { headers: { Authorization: req.headers.get('Authorization') || '' } },
     })
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
     // Atualizar tabela user
     const { data: rpcData, error: rpcError } = await supabase.rpc('update_user_v2', {
@@ -246,17 +285,27 @@ serve(async (req) => {
         throw new ValidationError('Apenas backoffice pode alterar permissoes')
       }
 
-      const { error: permsError } = await supabase
+      const targetUserId =
+        (typeof rpcData[0]?.user_id === 'string' && rpcData[0].user_id.length > 0)
+          ? rpcData[0].user_id
+          : userId
+
+      const { data: permissionsRow, error: permsError } = await supabaseAdmin
         .from('user')
         .update({ permissoes: sanitizedData.permissoes })
-        .eq('user_id', userId)
+        .eq('user_id', targetUserId)
+        .select('user_id, permissoes')
+        .maybeSingle()
 
       if (permsError) {
         console.error('[UPDATE-USER-V2] RPC Error (permissions update):', permsError)
         throw new Error(`Database operation failed: ${permsError.message}`)
       }
+      if (!permissionsRow) {
+        throw new Error(`Permissions update affected 0 rows for user_id ${targetUserId}`)
+      }
 
-      rpcData[0].permissoes = sanitizedData.permissoes
+      rpcData[0].permissoes = permissionsRow.permissoes
     }
 
     // Se hÃ¡ dados de vendedor e o usuÃ¡rio Ã© do tipo vendedor, atualizar dados_vendedor

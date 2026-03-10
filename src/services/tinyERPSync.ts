@@ -1288,7 +1288,7 @@ class TinyERPSyncService {
           console.log('ℹ️ Cliente já existe no Tiny ERP');
           clienteCadastrado = true;
         } else if (msgErro.includes('HTTP Error: 404') || msgErro.includes('File not found')) {
-          console.error('? Erro na API do Tiny ERP - URL inv�lida ou m??todo incorreto');
+          console.error('[ERRO] Erro na API do Tiny ERP - URL inválida ou método incorreto');
           console.error('❌ Contate o suporte técnico');
           throw new Error('Erro crítico na API do Tiny ERP. Contate o suporte.');
         } else {

@@ -61,6 +61,7 @@ export interface UserPermissions {
   comissoes: { visualizar: boolean; criar: boolean; editar: boolean; excluir: boolean };
   produtos: { visualizar: boolean; criar: boolean; editar: boolean; excluir: boolean };
   relatorios: { visualizar: boolean; criar: boolean; editar: boolean; excluir: boolean };
+  contacorrente: { visualizar: boolean; criar: boolean; editar: boolean; excluir: boolean };
   equipe: { visualizar: boolean; criar: boolean; editar: boolean; excluir: boolean };
   configuracoes: { visualizar: boolean; criar: boolean; editar: boolean; excluir: boolean };
 }

@@ -12,6 +12,7 @@ interface AuthenticatedUser {
   email: string
   tipo: 'backoffice' | 'vendedor'
   ativo: boolean
+  permissoes: string[]
 }
 
 async function validateJWT(
@@ -30,7 +31,7 @@ async function validateJWT(
     if (authError || !authUser) return { user: null, error: 'Invalid or expired token' }
     const { data: userData, error: userError } = await supabase
       .from('user')
-      .select('user_id, email, tipo, ativo')
+      .select('user_id, email, tipo, ativo, permissoes')
       .eq('user_id', authUser.id)
       .eq('ativo', true)
       .is('deleted_at', null)
@@ -42,6 +43,9 @@ async function validateJWT(
         email: userData.email || authUser.email || '',
         tipo: userData.tipo as 'backoffice' | 'vendedor',
         ativo: userData.ativo,
+        permissoes: Array.isArray(userData.permissoes)
+          ? userData.permissoes.filter((permissionId: unknown) => typeof permissionId === 'string')
+          : [],
       },
       error: null
     }
@@ -55,6 +59,18 @@ function createAuthErrorResponse(message: string, statusCode: number = 401): Res
     JSON.stringify({ error: message, timestamp: new Date().toISOString() }),
     { status: statusCode, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
+}
+
+function createPermissionErrorResponse(message: string): Response {
+  return new Response(
+    JSON.stringify({ success: false, error: message, timestamp: new Date().toISOString() }),
+    { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+function hasPermission(user: AuthenticatedUser, permissionId: string): boolean {
+  if (user.tipo === 'backoffice') return true
+  return user.permissoes.includes(permissionId)
 }
 
 function createHttpSuccessResponse<T>(data: T, status: number = 200, meta?: Record<string, unknown>): Response {
@@ -100,6 +116,18 @@ serve(async (req) => {
     const { user, error: authError } = await validateJWT(req, supabaseUrl, supabaseServiceKey)
     if (authError || !user) {
       return createAuthErrorResponse(authError || 'Unauthorized')
+    }
+
+    const requiredPermissionByMethod: Record<string, string | undefined> = {
+      GET: 'vendas.visualizar',
+      POST: 'vendas.criar',
+      PUT: 'vendas.editar',
+      DELETE: 'vendas.excluir',
+    }
+
+    const requiredPermission = requiredPermissionByMethod[req.method]
+    if (requiredPermission && !hasPermission(user, requiredPermission)) {
+      return createPermissionErrorResponse(`Sem permissao para ${requiredPermission}`)
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {

@@ -9,7 +9,10 @@ import { Separator } from "./ui/separator";
 import { toast } from "sonner@2.0.3";
 import { Mail, Key, Shield, Eye, EyeOff, Send, Check, X } from "lucide-react";
 import { Seller, UserPermissions } from "../types/seller";
-
+import {
+  getDefaultSellerPermissionMatrix,
+  isSellerPermissionCellSupported,
+} from "../utils/sellerPermissions";
 interface SellerFormUsuarioProps {
   formData: Partial<Seller>;
   setFormData: (data: Partial<Seller>) => void;
@@ -28,6 +31,7 @@ const modules: Array<{ key: ModuleName; label: string }> = [
   { key: "comissoes", label: "Comissões" },
   { key: "produtos", label: "Produtos" },
   { key: "relatorios", label: "Relatórios" },
+  { key: "contacorrente", label: "Conta Corrente" },
   { key: "equipe", label: "Equipe" },
   { key: "configuracoes", label: "Configurações" },
 ];
@@ -100,7 +104,11 @@ export function SellerFormUsuario({
 
   // Atualizar permissão de um módulo
   const handleUpdatePermission = (module: ModuleName, permission: PermissionType, value: boolean) => {
-    const currentPermissions = formData.usuario?.permissoes || getDefaultPermissions();
+    if (!isSellerPermissionCellSupported(module, permission)) {
+      return;
+    }
+
+    const currentPermissions = formData.usuario?.permissoes || getDefaultSellerPermissionMatrix();
 
     setFormData({
       ...formData,
@@ -118,20 +126,7 @@ export function SellerFormUsuario({
   };
 
   // Permissões padrão
-  const getDefaultPermissions = (): UserPermissions => {
-    const defaultPerms: UserPermissions = {} as UserPermissions;
-    modules.forEach((module) => {
-      defaultPerms[module.key] = {
-        visualizar: true,
-        criar: false,
-        editar: false,
-        excluir: false,
-      };
-    });
-    return defaultPerms;
-  };
-
-  const permissoes = formData.usuario?.permissoes || getDefaultPermissions();
+  const permissoes = formData.usuario?.permissoes || getDefaultSellerPermissionMatrix();
 
   return (
     <div className="space-y-4">
@@ -318,24 +313,39 @@ export function SellerFormUsuario({
             {modules.map((module) => (
               <div key={module.key} className="grid grid-cols-5 gap-4 items-center">
                 <div className="font-medium text-sm">{module.label}</div>
-                {permissionTypes.map((perm) => (
-                  <div key={perm.key} className="flex justify-center">
-                    <Switch
-                      checked={permissoes[module.key][perm.key]}
-                      onCheckedChange={(checked) =>
-                        handleUpdatePermission(module.key, perm.key, checked)
-                      }
-                      disabled={!isEditing}
-                    />
-                  </div>
-                ))}
+                {permissionTypes.map((perm) => {
+                  const isSupported = isSellerPermissionCellSupported(module.key, perm.key);
+
+                  return (
+                    <div key={perm.key} className="flex justify-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <Switch
+                          checked={isSupported ? permissoes[module.key][perm.key] : false}
+                          onCheckedChange={(checked) =>
+                            handleUpdatePermission(module.key, perm.key, checked)
+                          }
+                          disabled={!isEditing || !isSupported}
+                        />
+                        {!isSupported && (
+                          <span className="text-[10px] text-muted-foreground">N/A</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
 
+          <div className="mt-4 p-3 bg-muted/70 rounded-lg">
+            <p className="text-sm text-muted-foreground">
+              Células marcadas como <strong>N/A</strong> ainda não estão implementadas no sistema
+              e não serão salvas.
+            </p>
+          </div>
           <div className="mt-6 p-4 bg-muted rounded-lg">
             <p className="text-sm text-muted-foreground">
-              💡 <strong>Dica:</strong> É recomendado conceder apenas as permissões necessárias
+              <strong>Dica:</strong> É recomendado conceder apenas as permissões necessárias
               para cada vendedor. Comece com permissões básicas de visualização e adicione outras
               conforme necessário.
             </p>
@@ -345,3 +355,9 @@ export function SellerFormUsuario({
     </div>
   );
 }
+
+
+
+
+
+

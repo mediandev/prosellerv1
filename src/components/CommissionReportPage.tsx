@@ -71,11 +71,11 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
   // Dados do relatório completo vêm das props
   const vendedor = relatorioCompleto?.vendedor;
   const vendas = relatorioCompleto?.vendas || [];
-  const lancamentos = relatorioCompleto?.lancamentos || [];
+  const lancamentosLegado = (relatorioCompleto as any)?.lancamentos || [];
   const pagamentosRelatorio = relatorioCompleto?.pagamentos || [];
 
-  const lancamentosCredito = lancamentos.filter((l: any) => l.tipo === 'credito');
-  const lancamentosDebito = lancamentos.filter((l: any) => l.tipo === 'debito');
+  const lancamentosCredito = relatorioCompleto?.lancamentosCredito || lancamentosLegado.filter((l: any) => l.tipo === 'credito');
+  const lancamentosDebito = relatorioCompleto?.lancamentosDebito || lancamentosLegado.filter((l: any) => l.tipo === 'debito');
 
   const totalVendas = vendas.reduce((sum: number, v: any) => sum + v.valorTotalVenda, 0);
   const quantidadeVendas = vendas.length;

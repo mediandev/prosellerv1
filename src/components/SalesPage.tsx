@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+﻿import { useState, useEffect, useMemo, useCallback } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Venda, StatusVenda } from "../types/venda";
@@ -286,8 +286,12 @@ export function SalesPage({
   customDateRange = { from: undefined, to: undefined },
   onCustomDateRangeChange
 }: SalesPageProps) {
-  const { usuario } = useAuth();
+  const { usuario, temPermissao, ehBackoffice } = useAuth();
   const ehVendedor = usuario?.tipo === 'vendedor';
+  const canVisualizarVendas = ehBackoffice() || temPermissao('vendas.visualizar');
+  const canCriarVendas = ehBackoffice() || temPermissao('vendas.criar');
+  const canEditarVendas = ehBackoffice() || temPermissao('vendas.editar');
+  const canExcluirVendas = ehBackoffice() || temPermissao('vendas.excluir');
   
   // Declarações de estado - TODAS ANTES DOS useEffect
   const [sales, setSales] = useState<Sale[]>([]);
@@ -838,6 +842,11 @@ export function SalesPage({
   }, [searchTerm, statusFilter, period, dateRange]);
 
   const handleViewSale = (sale: Sale) => {
+    if (!canVisualizarVendas) {
+      toast.error('Você não tem permissão para visualizar pedidos.');
+      return;
+    }
+
     // Se houver callback de visualização, usar ele (tela completa)
     if (onVisualizarVenda) {
       onVisualizarVenda(sale.id);
@@ -849,6 +858,11 @@ export function SalesPage({
   };
 
   const handleDeleteSale = (saleId: string) => {
+    if (!canExcluirVendas) {
+      toast.error('Você não tem permissão para excluir pedidos.');
+      return;
+    }
+
     const sale = sales.find(s => s.id === saleId);
     if (sale) {
       setDeleteConfirm({
@@ -860,6 +874,11 @@ export function SalesPage({
   };
 
   const confirmDelete = async () => {
+    if (!canExcluirVendas) {
+      toast.error('Você não tem permissão para excluir pedidos.');
+      return;
+    }
+
     if (deleteConfirm.id) {
       try {
         await api.delete('vendas', deleteConfirm.id);
@@ -875,6 +894,11 @@ export function SalesPage({
   };
 
   const handleSincronizarVenda = async (saleId: string) => {
+    if (!canEditarVendas) {
+      toast.error('Você não tem permissão para editar pedidos.');
+      return;
+    }
+
     try {
       setSincronizandoVenda(saleId);
       toast.info('Sincronizando status com Tiny ERP...');
@@ -937,6 +961,11 @@ export function SalesPage({
   };
   // Enviar pedido manualmente ao ERP
   const handleEnviarParaERP = async (saleId: string) => {
+    if (!canEditarVendas) {
+      toast.error('Você não tem permissão para editar pedidos.');
+      return;
+    }
+
     try {
       setEnviandoParaERP(saleId);
       console.log('[SALES-PAGE] Enviando pedido ao ERP:', saleId);
@@ -1034,6 +1063,14 @@ export function SalesPage({
       </TableHead>
     );
   };
+
+  if (!canVisualizarVendas) {
+    return (
+      <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+        Você não possui permissão para visualizar pedidos.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -1229,10 +1266,12 @@ export function SalesPage({
                 <Download className="h-4 w-4 mr-2" />
                 Exportar
               </Button>
-              <Button size="sm" onClick={onNovaVenda}>
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Pedido
-              </Button>
+              {canCriarVendas && (
+                <Button size="sm" onClick={onNovaVenda}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo Pedido
+                </Button>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" disabled={syncing}>
@@ -1564,25 +1603,27 @@ export function SalesPage({
                               <Eye className="h-4 w-4 mr-2" />
                               Ver Detalhes
                             </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => {
-                                // Se pedido foi enviado ao ERP, redirecionar para visualização
-                                if (sale.integracaoERP?.erpPedidoId) {
-                                  handleViewSale(sale);
-                                } else {
-                                  onEditarVenda?.(sale.id);
-                                }
-                              }}
-                              disabled={!!sale.integracaoERP?.erpPedidoId}
-                              className={sale.integracaoERP?.erpPedidoId ? 'opacity-50 cursor-not-allowed' : ''}
-                            >
-                              <Edit className="h-4 w-4 mr-2" />
-                              Editar
-                              {sale.integracaoERP?.erpPedidoId && (
-                                <span className="ml-2 text-xs">(Bloqueado)</span>
-                              )}
-                            </DropdownMenuItem>
-                            {sale.integracaoERP?.erpPedidoId ? (
+                            {canEditarVendas && (
+                              <DropdownMenuItem 
+                                onClick={() => {
+                                  // Se pedido foi enviado ao ERP, redirecionar para visualização
+                                  if (sale.integracaoERP?.erpPedidoId) {
+                                    handleViewSale(sale);
+                                  } else {
+                                    onEditarVenda?.(sale.id);
+                                  }
+                                }}
+                                disabled={!!sale.integracaoERP?.erpPedidoId}
+                                className={sale.integracaoERP?.erpPedidoId ? 'opacity-50 cursor-not-allowed' : ''}
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Editar
+                                {sale.integracaoERP?.erpPedidoId && (
+                                  <span className="ml-2 text-xs">(Bloqueado)</span>
+                                )}
+                              </DropdownMenuItem>
+                            )}
+                            {canEditarVendas && sale.integracaoERP?.erpPedidoId ? (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem 
@@ -1593,7 +1634,7 @@ export function SalesPage({
                                   {sincronizandoVenda === sale.id ? 'Sincronizando...' : 'Sincronizar Status'}
                                 </DropdownMenuItem>
                               </>
-                            ) : sale.status !== 'Rascunho' && (
+                            ) : canEditarVendas && sale.status !== 'Rascunho' && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem 
@@ -1605,14 +1646,18 @@ export function SalesPage({
                                 </DropdownMenuItem>
                               </>
                             )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              className="text-destructive"
-                              onClick={() => handleDeleteSale(sale.id)}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Excluir
-                            </DropdownMenuItem>
+                            {canExcluirVendas && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  className="text-destructive"
+                                  onClick={() => handleDeleteSale(sale.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Excluir
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

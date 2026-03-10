@@ -13,6 +13,7 @@ import { SellerFormUsuario } from "./SellerFormUsuario";
 import { SellerFormIntegracoes } from "./SellerFormIntegracoes";
 import { SellerFormHistoricoVendas } from "./SellerFormHistoricoVendas";
 import { api } from "../services/api";
+import { getDefaultSellerPermissionMatrix } from "../utils/sellerPermissions";
 
 interface SellerFormPageProps {
   vendedorId?: string;
@@ -79,18 +80,7 @@ export function SellerFormPage({
         conviteEnviado: false,
         senhaDefinida: false,
         requisitosSeguranca: true,
-        permissoes: {
-          dashboard: { visualizar: true, criar: false, editar: false, excluir: false },
-          vendas: { visualizar: true, criar: true, editar: true, excluir: false },
-          pipeline: { visualizar: true, criar: true, editar: true, excluir: false },
-          clientes: { visualizar: true, criar: true, editar: true, excluir: false },
-          metas: { visualizar: true, criar: false, editar: false, excluir: false },
-          comissoes: { visualizar: true, criar: false, editar: false, excluir: false },
-          produtos: { visualizar: true, criar: false, editar: false, excluir: false },
-          relatorios: { visualizar: true, criar: false, editar: false, excluir: false },
-          equipe: { visualizar: false, criar: false, editar: false, excluir: false },
-          configuracoes: { visualizar: false, criar: false, editar: false, excluir: false },
-        },
+        permissoes: getDefaultSellerPermissionMatrix(),
       },
       integracoes: [],
     }
@@ -231,18 +221,7 @@ export function SellerFormPage({
               conviteEnviado: false,
               senhaDefinida: false,
               requisitosSeguranca: true,
-              permissoes: {
-                dashboard: { visualizar: true, criar: false, editar: false, excluir: false },
-                vendas: { visualizar: true, criar: true, editar: true, excluir: false },
-                pipeline: { visualizar: true, criar: true, editar: true, excluir: false },
-                clientes: { visualizar: true, criar: true, editar: true, excluir: false },
-                metas: { visualizar: true, criar: false, editar: false, excluir: false },
-                comissoes: { visualizar: true, criar: false, editar: false, excluir: false },
-                produtos: { visualizar: true, criar: false, editar: false, excluir: false },
-                relatorios: { visualizar: true, criar: false, editar: false, excluir: false },
-                equipe: { visualizar: false, criar: false, editar: false, excluir: false },
-                configuracoes: { visualizar: false, criar: false, editar: false, excluir: false },
-              },
+              permissoes: getDefaultSellerPermissionMatrix(),
             },
             integracoes: vendedorData.integracoes || [],
           };
