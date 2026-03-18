@@ -233,6 +233,43 @@ serve(async (req) => {
       throw createAuthorizationError('Insufficient permissions')
     }
 
+    const vendedorUuid = String(pedido.vendedor_uuid || '').trim()
+    if (!vendedorUuid) {
+      throw createBadRequestError('Pedido sem vendedor_uuid definido', { pedido_venda_ID: pedidoId })
+    }
+
+    // 1b) Carregar dados do vendedor para envio ao Tiny.
+    // Regra: pedido.id_vendedor <- dados_vendedor.idtiny
+    //        pedido.nome_vendedor <- dados_vendedor.nome_fantasia
+    const { data: vendedorData, error: vendedorError } = await supabase
+      .from('dados_vendedor')
+      .select('idtiny,nome_fantasia')
+      .eq('user_id', vendedorUuid)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (vendedorError) {
+      throw createBadRequestError('Falha ao buscar dados do vendedor', {
+        code: vendedorError.code,
+        message: vendedorError.message,
+        vendedor_uuid: vendedorUuid,
+      })
+    }
+
+    if (!vendedorData) {
+      throw createNotFoundError('Dados do vendedor', vendedorUuid)
+    }
+
+    const tinyVendedorId = String((vendedorData as any).idtiny || '').trim()
+    const tinyVendedorNome = String((vendedorData as any).nome_fantasia || '').trim()
+
+    if (!tinyVendedorId) {
+      throw createBadRequestError('Vendedor sem idtiny para envio ao Tiny', { vendedor_uuid: vendedorUuid })
+    }
+    if (!tinyVendedorNome) {
+      throw createBadRequestError('Vendedor sem nome_fantasia para envio ao Tiny', { vendedor_uuid: vendedorUuid })
+    }
+
     const empresaId = pedido.empresa_faturamento_id
     if (!empresaId) {
       throw createBadRequestError('Pedido sem empresa de faturamento definida', { pedido_venda_ID: pedidoId })
@@ -482,6 +519,8 @@ serve(async (req) => {
         numero_ordem_compra: String(pedido.ordem_cliente || '').trim() || undefined,
         obs: String(pedido.observacao || '').trim() || undefined,
         obs_internas: String(pedido.observacao_interna || '').trim() || undefined,
+        id_vendedor: tinyVendedorId,
+        nome_vendedor: tinyVendedorNome,
         valor_desconto: descontoExtra.toFixed(2),
         parcelas: parcelasTiny,
         itens: itens.map((it: any) => ({
@@ -508,6 +547,8 @@ serve(async (req) => {
           tiny: {
             token_masked: maskToken(tinyToken),
             natureza_operacao: tinyNaturezaValor,
+            id_vendedor: tinyVendedorId,
+            nome_vendedor: tinyVendedorNome,
           },
           pedido: pedidoTiny,
         },
