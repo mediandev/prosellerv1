@@ -110,6 +110,43 @@ const removeDuplicatesById = <T extends { id: string }>(array: T[]): T[] => {
   return Array.from(new Map(array.map(item => [item.id, item])).values());
 };
 
+const truncarPara2Casas = (valor: number): number => {
+  const numero = Number(valor);
+  if (!Number.isFinite(numero)) return 0;
+  return Math.trunc(numero * 100) / 100;
+};
+
+const calcularValorUnitarioESubtotal = (
+  valorTabela: number,
+  percentualDesconto: number,
+  quantidade: number
+): { valorUnitario: number; subtotal: number } => {
+  const valorTabelaNum = Number(valorTabela) || 0;
+  const percentualDescontoNum = Number(percentualDesconto) || 0;
+  const quantidadeNum = Number(quantidade) || 0;
+
+  const valorUnitario = truncarPara2Casas(valorTabelaNum * (1 - percentualDescontoNum / 100));
+  const subtotal = truncarPara2Casas(valorUnitario * quantidadeNum);
+
+  return { valorUnitario, subtotal };
+};
+
+const normalizarItemVenda = (item: ItemVenda): ItemVenda => {
+  const valorTabela = Number(item.valorTabela) || 0;
+  const percentualDesconto = Number(item.percentualDesconto) || 0;
+  const quantidade = Number(item.quantidade) || 0;
+  const { valorUnitario, subtotal } = calcularValorUnitarioESubtotal(valorTabela, percentualDesconto, quantidade);
+
+  return {
+    ...item,
+    valorTabela,
+    percentualDesconto,
+    quantidade,
+    valorUnitario,
+    subtotal,
+  };
+};
+
 export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   const { usuario, temPermissao } = useAuth();
   const { companies: companiesRaw } = useCompanies();
@@ -488,6 +525,9 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             updatedAt: vendaExistente.updatedAt instanceof Date
               ? vendaExistente.updatedAt
               : new Date(vendaExistente.updatedAt),
+            itens: Array.isArray(vendaExistente.itens)
+              ? vendaExistente.itens.map(normalizarItemVenda)
+              : [],
           };
 
           setFormData(vendaComDataCorrigida);
@@ -1132,11 +1172,11 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     const totalItens = itens.length;
     const pesoBrutoTotal = itens.reduce((sum, item) => sum + (item.pesoBruto * item.quantidade), 0);
     const pesoLiquidoTotal = itens.reduce((sum, item) => sum + (item.pesoLiquido * item.quantidade), 0);
-    const valorTotalProdutos = itens.reduce((sum, item) => sum + item.subtotal, 0);
+    const valorTotalProdutos = truncarPara2Casas(itens.reduce((sum, item) => sum + item.subtotal, 0));
 
     const percentualDescontoExtra = formData.percentualDescontoExtra || 0;
-    const valorDescontoExtra = (valorTotalProdutos * percentualDescontoExtra) / 100;
-    const valorPedido = valorTotalProdutos - valorDescontoExtra;
+    const valorDescontoExtra = truncarPara2Casas((valorTotalProdutos * percentualDescontoExtra) / 100);
+    const valorPedido = truncarPara2Casas(valorTotalProdutos - valorDescontoExtra);
 
     setFormData(prev => ({
       ...prev,
@@ -1511,8 +1551,11 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     });
 
     const percentualDesconto = formData.percentualDescontoPadrao || 0;
-    const valorUnitario = valorTabela * (1 - percentualDesconto / 100);
-    const subtotal = valorUnitario * quantidade;
+    const { valorUnitario, subtotal } = calcularValorUnitarioESubtotal(
+      valorTabela,
+      percentualDesconto,
+      quantidade
+    );
 
     const novoItem: ItemVenda = {
       id: `item-${Date.now()}`,
@@ -1716,6 +1759,16 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     // Limpar erros se passou na validação
     setCamposComErro(new Set());
 
+    const itensNormalizados = (formData.itens || []).map(normalizarItemVenda);
+    const totalQuantidades = itensNormalizados.reduce((sum, item) => sum + item.quantidade, 0);
+    const totalItens = itensNormalizados.length;
+    const pesoBrutoTotal = itensNormalizados.reduce((sum, item) => sum + (item.pesoBruto * item.quantidade), 0);
+    const pesoLiquidoTotal = itensNormalizados.reduce((sum, item) => sum + (item.pesoLiquido * item.quantidade), 0);
+    const valorTotalProdutos = truncarPara2Casas(itensNormalizados.reduce((sum, item) => sum + item.subtotal, 0));
+    const percentualDescontoExtra = Number(formData.percentualDescontoExtra || 0);
+    const valorDescontoExtra = truncarPara2Casas((valorTotalProdutos * percentualDescontoExtra) / 100);
+    const valorPedido = truncarPara2Casas(valorTotalProdutos - valorDescontoExtra);
+
     // Garantir que todos os campos de nome estão preenchidos
     const cliente = clientes.find(c => c.id === formData.clienteId);
     const condicao = condicoes.find(c => c.id === formData.condicaoPagamentoId);
@@ -1732,6 +1785,15 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       createdAt: formData.createdAt || new Date(),
       updatedAt: new Date(),
       createdBy: usuario?.id || '',
+      itens: itensNormalizados,
+      totalQuantidades,
+      totalItens,
+      pesoBrutoTotal,
+      pesoLiquidoTotal,
+      valorTotalProdutos,
+      percentualDescontoExtra,
+      valorDescontoExtra,
+      valorPedido,
       // Garantir que os nomes estão salvos
       nomeCliente: formData.nomeCliente || cliente?.razaoSocial || cliente?.nomeFantasia || '',
       nomeListaPreco: formData.nomeListaPreco || cliente?.listaPrecos || '',
@@ -3027,8 +3089,11 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                         }
 
                         const percentualDesconto = formData.percentualDescontoPadrao || 0;
-                        const valorUnitario = valorTabela * (1 - percentualDesconto / 100);
-                        const subtotal = valorUnitario * quantidade;
+                        const { valorUnitario, subtotal } = calcularValorUnitarioESubtotal(
+                          valorTabela,
+                          percentualDesconto,
+                          quantidade
+                        );
 
                         if (mensagemErro) {
                           return (
