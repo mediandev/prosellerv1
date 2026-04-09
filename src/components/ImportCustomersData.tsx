@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, Eye, ArrowRight } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, Eye, ArrowRight, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
@@ -7,6 +7,123 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
 import * as XLSX from 'xlsx';
+
+// Mapeamento de colunas: variações de nomes que o cliente pode usar → nome padrão do template
+const COLUMN_MAP: Record<string, string> = {
+  'tipo pessoa': 'Tipo Pessoa',
+  'tipo de pessoa': 'Tipo Pessoa',
+  'cpf/cnpj': 'CPF/CNPJ',
+  'cpf cnpj': 'CPF/CNPJ',
+  'cnpj': 'CPF/CNPJ',
+  'cpf': 'CPF/CNPJ',
+  'razão social': 'Razão Social',
+  'razao social': 'Razão Social',
+  'nome': 'Razão Social',
+  'nome fantasia': 'Nome Fantasia',
+  'fantasia': 'Nome Fantasia',
+  'inscrição estadual': 'Inscrição Estadual',
+  'inscricao estadual': 'Inscrição Estadual',
+  'ie': 'Inscrição Estadual',
+  'situação': 'Situação',
+  'situacao': 'Situação',
+  'status': 'Situação',
+  'segmento': 'Segmento Mercado',
+  'segmento mercado': 'Segmento Mercado',
+  'segmento de mercado': 'Segmento Mercado',
+  'grupo/rede': 'Grupo/Rede',
+  'grupo rede': 'Grupo/Rede',
+  'grupo': 'Grupo/Rede',
+  'rede': 'Grupo/Rede',
+  'cep': 'CEP',
+  'logradouro': 'Logradouro',
+  'rua': 'Logradouro',
+  'endereço': 'Logradouro',
+  'endereco': 'Logradouro',
+  'número': 'Número',
+  'numero': 'Número',
+  'nº': 'Número',
+  'complemento': 'Complemento',
+  'bairro': 'Bairro',
+  'uf': 'UF',
+  'estado': 'UF',
+  'município': 'Município',
+  'municipio': 'Município',
+  'cidade': 'Município',
+  'site': 'Site',
+  'website': 'Site',
+  'e-mail': 'Email Principal',
+  'email': 'Email Principal',
+  'email principal': 'Email Principal',
+  'email nf-e': 'Email NF-e',
+  'email nfe': 'Email NF-e',
+  'telefone fixo': 'Telefone Fixo',
+  'fone fixo': 'Telefone Fixo',
+  'telefone': 'Telefone Fixo',
+  'telefone celular': 'Telefone Celular',
+  'celular': 'Telefone Celular',
+  'empresa faturamento': 'Empresa Faturamento',
+  'vendedor (email)': 'Vendedor (Email)',
+  'vendedor': 'Vendedor (Email)',
+  'lista de preços': 'Lista de Preços',
+  'lista de precos': 'Lista de Preços',
+  'lista preços': 'Lista de Preços',
+  'desconto padrão (%)': 'Desconto Padrão (%)',
+  'desconto padrao (%)': 'Desconto Padrão (%)',
+  'desconto padrão': 'Desconto Padrão (%)',
+  'desconto padrao': 'Desconto Padrão (%)',
+  'desconto financeiro (%)': 'Desconto Financeiro (%)',
+  'desconto financeiro': 'Desconto Financeiro (%)',
+  'pedido mínimo (r$)': 'Pedido Mínimo (R$)',
+  'pedido minimo (r$)': 'Pedido Mínimo (R$)',
+  'pedido mínimo': 'Pedido Mínimo (R$)',
+  'pedido minimo': 'Pedido Mínimo (R$)',
+  'status aprovação': 'Status Aprovação',
+  'status aprovacao': 'Status Aprovação',
+  'observações internas': 'Observações Internas',
+  'observacoes internas': 'Observações Internas',
+  'observações': 'Observações Internas',
+  'observacoes': 'Observações Internas',
+};
+
+// Colunas do template na ordem correta
+const TEMPLATE_COLUMNS = [
+  'Tipo Pessoa', 'CPF/CNPJ', 'Razão Social', 'Nome Fantasia', 'Inscrição Estadual',
+  'Situação', 'Segmento Mercado', 'Grupo/Rede', 'CEP', 'Logradouro', 'Número',
+  'Complemento', 'Bairro', 'UF', 'Município', 'Site', 'Email Principal', 'Email NF-e',
+  'Telefone Fixo', 'Telefone Celular', 'Empresa Faturamento', 'Vendedor (Email)',
+  'Lista de Preços', 'Desconto Padrão (%)', 'Desconto Financeiro (%)', 'Pedido Mínimo (R$)',
+  'Status Aprovação', 'Observações Internas',
+];
+
+function normalizeColumnName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function mapColumns(originalHeaders: string[]): Record<string, string> {
+  const mapping: Record<string, string> = {};
+  for (const header of originalHeaders) {
+    const normalized = normalizeColumnName(header);
+    if (COLUMN_MAP[normalized]) {
+      mapping[header] = COLUMN_MAP[normalized];
+    }
+  }
+  return mapping;
+}
+
+function convertFileData(rows: Record<string, any>[], columnMapping: Record<string, string>): Record<string, any>[] {
+  return rows.map(row => {
+    const newRow: Record<string, any> = {};
+    for (const col of TEMPLATE_COLUMNS) {
+      newRow[col] = '';
+    }
+    for (const [originalCol, templateCol] of Object.entries(columnMapping)) {
+      if (row[originalCol] !== undefined && row[originalCol] !== null) {
+        newRow[templateCol] = row[originalCol];
+      }
+    }
+    return newRow;
+  });
+}
 
 interface ImportResult {
   success: number;
@@ -24,6 +141,77 @@ export function ImportCustomersData() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [convertResult, setConvertResult] = useState<{ total: number; mapped: string[]; unmapped: string[] } | null>(null);
+  const convertInputRef = useRef<HTMLInputElement>(null);
+
+  const handleConvertFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      let rows: Record<string, any>[] = [];
+
+      if (file.name.endsWith('.csv')) {
+        const text = await file.text();
+        // Detectar separador: se tem mais ; que , na primeira linha, usar ;
+        const firstLine = text.split('\n')[0];
+        const semicolons = (firstLine.match(/;/g) || []).length;
+        const commas = (firstLine.match(/,/g) || []).length;
+        const separator = semicolons > commas ? ';' : ',';
+
+        const lines = text.split('\n').filter(l => l.trim());
+        const headers = lines[0].split(separator).map(h => h.replace(/^"|"$/g, '').trim());
+
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(separator).map(v => v.replace(/^"|"$/g, '').trim());
+          const row: Record<string, any> = {};
+          headers.forEach((h, idx) => {
+            row[h] = values[idx] || '';
+          });
+          rows.push(row);
+        }
+      } else {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data);
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+      }
+
+      if (rows.length === 0) {
+        setConvertResult({ total: 0, mapped: [], unmapped: [] });
+        return;
+      }
+
+      const originalHeaders = Object.keys(rows[0]);
+      const columnMapping = mapColumns(originalHeaders);
+
+      const mappedCols = Object.keys(columnMapping);
+      const unmappedCols = originalHeaders.filter(h => !columnMapping[h]);
+
+      const converted = convertFileData(rows, columnMapping);
+
+      // Gerar e baixar o arquivo Excel convertido
+      const ws = XLSX.utils.json_to_sheet(converted, { header: TEMPLATE_COLUMNS });
+      const colWidths = TEMPLATE_COLUMNS.map(col => ({ wch: Math.max(col.length + 2, 15) }));
+      ws['!cols'] = colWidths;
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Clientes');
+
+      const baseName = file.name.replace(/\.[^.]+$/, '');
+      XLSX.writeFile(wb, `${baseName}_CONVERTIDO.xlsx`);
+
+      setConvertResult({
+        total: converted.length,
+        mapped: mappedCols,
+        unmapped: unmappedCols,
+      });
+    } catch (error) {
+      setConvertResult({ total: 0, mapped: [], unmapped: ['Erro: ' + (error as Error).message] });
+    } finally {
+      event.target.value = '';
+    }
+  };
 
   const generateTemplate = () => {
     const template = [
@@ -336,6 +524,25 @@ export function ImportCustomersData() {
           <div className="relative">
             <input
               type="file"
+              accept=".xlsx,.xls,.csv"
+              ref={convertInputRef}
+              onChange={handleConvertFile}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              style={{ display: 'none' }}
+            />
+            <Button
+              variant="outline"
+              onClick={() => convertInputRef.current?.click()}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Converter Arquivo
+            </Button>
+          </div>
+
+          <div className="relative">
+            <input
+              type="file"
               accept=".xlsx,.xls"
               onChange={handleFileUpload}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -347,6 +554,33 @@ export function ImportCustomersData() {
             </Button>
           </div>
         </div>
+
+        {convertResult && (
+          <Alert className={convertResult.total > 0 ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
+            <RefreshCw className={`h-4 w-4 ${convertResult.total > 0 ? 'text-green-600' : 'text-red-600'}`} />
+            <AlertDescription className={convertResult.total > 0 ? 'text-green-800' : 'text-red-800'}>
+              {convertResult.total > 0 ? (
+                <div className="space-y-2">
+                  <p className="font-medium">
+                    Arquivo convertido com sucesso! {convertResult.total} {convertResult.total === 1 ? 'registro' : 'registros'} exportados.
+                  </p>
+                  {convertResult.mapped.length > 0 && (
+                    <p className="text-sm">
+                      <strong>Colunas mapeadas ({convertResult.mapped.length}):</strong> {convertResult.mapped.join(', ')}
+                    </p>
+                  )}
+                  {convertResult.unmapped.length > 0 && (
+                    <p className="text-sm">
+                      <strong>Colunas ignoradas ({convertResult.unmapped.length}):</strong> {convertResult.unmapped.join(', ')}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p>Não foi possível converter o arquivo. Verifique se o formato está correto.</p>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
 
         {result && (
           <div className="space-y-3">
@@ -391,6 +625,7 @@ export function ImportCustomersData() {
           <ol className="list-decimal list-inside space-y-1 text-sm">
             <li>Baixe a planilha modelo</li>
             <li>Preencha os dados dos clientes conforme o exemplo</li>
+            <li><strong>Já tem uma planilha pronta?</strong> Use "Converter Arquivo" para adaptar automaticamente ao formato do sistema (aceita CSV e Excel, qualquer separador)</li>
             <li>Selecione o arquivo para visualizar um preview dos dados</li>
             <li>Revise os dados e confirme a importação</li>
             <li>Campos obrigatórios: Tipo Pessoa, CPF/CNPJ, Razão Social, CEP, Logradouro, Número, Bairro, UF e Município</li>
