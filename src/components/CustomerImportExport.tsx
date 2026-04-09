@@ -16,8 +16,76 @@ import {
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
 import { Alert, AlertDescription } from './ui/alert';
-import { Upload, Download, FileSpreadsheet, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Upload, Download, FileSpreadsheet, CheckCircle, XCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+
+// Mapeamento de variações de nomes de colunas → nome padrão do template
+const COLUMN_MAP: Record<string, string> = {
+  'tipo pessoa': 'Tipo Pessoa',
+  'tipo de pessoa': 'Tipo Pessoa',
+  'cpf/cnpj': 'CPF/CNPJ',
+  'cpf cnpj': 'CPF/CNPJ',
+  'cnpj': 'CPF/CNPJ',
+  'cpf': 'CPF/CNPJ',
+  'razão social': 'Razão Social',
+  'razao social': 'Razão Social',
+  'nome': 'Razão Social',
+  'nome fantasia': 'Nome Fantasia',
+  'fantasia': 'Nome Fantasia',
+  'inscrição estadual': 'Inscrição Estadual',
+  'inscricao estadual': 'Inscrição Estadual',
+  'ie': 'Inscrição Estadual',
+  'situação': 'Situação',
+  'situacao': 'Situação',
+  'status': 'Situação',
+  'segmento': 'Segmento',
+  'segmento mercado': 'Segmento',
+  'segmento de mercado': 'Segmento',
+  'grupo/rede': 'Grupo/Rede',
+  'grupo rede': 'Grupo/Rede',
+  'grupo': 'Grupo/Rede',
+  'rede': 'Grupo/Rede',
+  'cep': 'CEP',
+  'logradouro': 'Logradouro',
+  'rua': 'Logradouro',
+  'endereço': 'Logradouro',
+  'endereco': 'Logradouro',
+  'número': 'Número',
+  'numero': 'Número',
+  'nº': 'Número',
+  'complemento': 'Complemento',
+  'bairro': 'Bairro',
+  'uf': 'UF',
+  'estado': 'UF',
+  'município': 'Município',
+  'municipio': 'Município',
+  'cidade': 'Município',
+  'e-mail': 'E-mail',
+  'email': 'E-mail',
+  'email principal': 'E-mail',
+  'telefone fixo': 'Telefone Fixo',
+  'fone fixo': 'Telefone Fixo',
+  'telefone': 'Telefone Fixo',
+  'telefone celular': 'Telefone Celular',
+  'celular': 'Telefone Celular',
+  'desconto padrão (%)': 'Desconto Padrão (%)',
+  'desconto padrao (%)': 'Desconto Padrão (%)',
+  'desconto padrão': 'Desconto Padrão (%)',
+  'desconto padrao': 'Desconto Padrão (%)',
+  'desconto financeiro (%)': 'Desconto Financeiro (%)',
+  'desconto financeiro': 'Desconto Financeiro (%)',
+  'pedido mínimo (r$)': 'Pedido Mínimo (R$)',
+  'pedido minimo (r$)': 'Pedido Mínimo (R$)',
+  'pedido mínimo': 'Pedido Mínimo (R$)',
+  'pedido minimo': 'Pedido Mínimo (R$)',
+};
+
+const TEMPLATE_COLUMNS = [
+  'Tipo Pessoa', 'CPF/CNPJ', 'Razão Social', 'Nome Fantasia', 'Inscrição Estadual',
+  'Situação', 'Segmento', 'Grupo/Rede', 'CEP', 'Logradouro', 'Número',
+  'Complemento', 'Bairro', 'UF', 'Município', 'E-mail', 'Telefone Fixo',
+  'Telefone Celular', 'Desconto Padrão (%)', 'Desconto Financeiro (%)', 'Pedido Mínimo (R$)',
+];
 
 interface CustomerImportExportProps {
   clientes: Cliente[];
@@ -43,6 +111,80 @@ export function CustomerImportExport({ clientes, onImportComplete }: CustomerImp
   const [progresso, setProgresso] = useState(0);
   const [resultado, setResultado] = useState<ResultadoImportacao | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const convertInputRef = useRef<HTMLInputElement>(null);
+  const [convertResult, setConvertResult] = useState<{ total: number; mapped: string[]; unmapped: string[] } | null>(null);
+
+  const handleConvertFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      // Detectar separador
+      const firstLine = text.split('\n')[0];
+      const semicolons = (firstLine.match(/;/g) || []).length;
+      const commas = (firstLine.match(/,/g) || []).length;
+      const separator = semicolons > commas ? ';' : ',';
+
+      const lines = text.split('\n').filter(l => l.trim());
+      if (lines.length < 2) {
+        toast.error('Arquivo vazio ou sem dados');
+        return;
+      }
+
+      const headers = lines[0].split(separator).map(h => h.replace(/^"|"$/g, '').replace(/^\uFEFF/, '').trim());
+
+      // Mapear colunas
+      const columnMapping: Record<string, string> = {};
+      for (const header of headers) {
+        const normalized = header.trim().toLowerCase().replace(/\s+/g, ' ');
+        if (COLUMN_MAP[normalized]) {
+          columnMapping[header] = COLUMN_MAP[normalized];
+        }
+      }
+
+      const mappedCols = Object.keys(columnMapping);
+      const unmappedCols = headers.filter(h => !columnMapping[h]);
+
+      // Converter linhas
+      const csvRows: string[] = [TEMPLATE_COLUMNS.map(c => `"${c}"`).join(',')];
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(separator).map(v => v.replace(/^"|"$/g, '').trim());
+        const row: Record<string, string> = {};
+        headers.forEach((h, idx) => { row[h] = values[idx] || ''; });
+
+        const newRow = TEMPLATE_COLUMNS.map(col => {
+          for (const [origCol, mappedCol] of Object.entries(columnMapping)) {
+            if (mappedCol === col && row[origCol]) return `"${row[origCol].replace(/"/g, '""')}"`;
+          }
+          return '""';
+        });
+        csvRows.push(newRow.join(','));
+      }
+
+      // Download
+      const csvContent = csvRows.join('\n');
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      const baseName = file.name.replace(/\.[^.]+$/, '');
+      link.setAttribute('download', `${baseName}_CONVERTIDO.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setConvertResult({ total: lines.length - 1, mapped: mappedCols, unmapped: unmappedCols });
+      toast.success(`Arquivo convertido! ${lines.length - 1} registros.`);
+    } catch (error) {
+      toast.error('Erro ao converter arquivo');
+      console.error(error);
+    } finally {
+      event.target.value = '';
+    }
+  };
 
   // Exportar clientes para CSV
   const handleExportarCSV = () => {
@@ -410,7 +552,19 @@ export function CustomerImportExport({ clientes, onImportComplete }: CustomerImp
               Importe clientes em lote a partir de um arquivo CSV
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            <input
+              ref={convertInputRef}
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              onChange={handleConvertFile}
+              className="hidden"
+              id="convert-upload"
+            />
+            <Button onClick={() => convertInputRef.current?.click()} className="w-full" variant="outline">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Converter Arquivo
+            </Button>
             <input
               ref={fileInputRef}
               type="file"
@@ -427,10 +581,21 @@ export function CustomerImportExport({ clientes, onImportComplete }: CustomerImp
                 </span>
               </Button>
             </label>
-            <Alert className="mt-4">
+            {convertResult && convertResult.total > 0 && (
+              <Alert className="border-green-200 bg-green-50">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-sm text-green-800">
+                  <p className="font-medium">{convertResult.total} registros convertidos!</p>
+                  {convertResult.unmapped.length > 0 && (
+                    <p className="mt-1">Colunas ignoradas: {convertResult.unmapped.join(', ')}</p>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+            <Alert>
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription className="text-sm">
-                Antes de importar, baixe o template para garantir que o arquivo está no formato correto.
+                Tem um arquivo em outro formato? Use "Converter Arquivo" para adaptar automaticamente ao formato do sistema.
               </AlertDescription>
             </Alert>
           </CardContent>
