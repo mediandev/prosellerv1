@@ -7,8 +7,6 @@ import { Produto } from '../types/produto';
 import { CondicaoPagamento } from '../types/condicaoPagamento';
 import { NaturezaOperacao } from '../types/naturezaOperacao';
 import { isStatusConcluido } from '../utils/statusVendaUtils';
-import { erpAutoSendService } from '../services/erpAutoSendService';
-import { companyService } from '../services/companyService';
 import { api } from '../services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -1642,7 +1640,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           </Button>
         )}
 
-        {/* Modo Edição - Mostrar botões Cancelar, Salvar Rascunho e Enviar para Análise */}
+        {/* Modo Edição - Mostrar botões Cancelar, Salvar Rascunho e Enviar */}
         {!isReadOnly && !pedidoBloqueado && (
           <>
             <Button
@@ -1655,7 +1653,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
             {/* Botões de ação baseados no modo e status */}
             {modoAtual === 'criar' ? (
-              // Ao CRIAR novo pedido: opção de Rascunho OU Enviar para Análise
+              // Ao CRIAR novo pedido: opção de Rascunho OU Enviar
               <>
                 <Button
                   variant="outline"
@@ -1666,12 +1664,12 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                 </Button>
 
                 <Button onClick={() => handleSave(false)}>
-                  <Save className="h-4 w-4 mr-2" />
-                  Enviar para Análise
+                  <Send className="h-4 w-4 mr-2" />
+                  Enviar
                 </Button>
               </>
             ) : modoAtual === 'editar' && formData.status === 'Rascunho' ? (
-              // Ao EDITAR rascunho: opção de manter Rascunho OU Enviar para Análise
+              // Ao EDITAR rascunho: opção de manter Rascunho OU Enviar
               <>
                 <Button
                   variant="outline"
@@ -1683,7 +1681,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
                 <Button onClick={() => handleSave(false)}>
                   <Send className="h-4 w-4 mr-2" />
-                  Enviar para Análise
+                  Enviar
                 </Button>
               </>
             ) : (
@@ -1781,7 +1779,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       id: vendaId || `venda-${Date.now()}`,
       numero: formData.numero || `PV-2025-${String(Date.now()).substring(7, 11)}`,
       // ✅ NOVO: Define status baseado no tipo de salvamento
-      status: salvarComoRascunho ? 'Rascunho' : 'Em Análise',
+      status: salvarComoRascunho ? 'Rascunho' : 'Em aberto',
       createdAt: formData.createdAt || new Date(),
       updatedAt: new Date(),
       createdBy: usuario?.id || '',
@@ -1823,89 +1821,37 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       observacoesNotaFiscal: vendaCompleta.observacoesNotaFiscal,
     });
 
-    // ✅ CORREÇÃO: NÃO enviar RASCUNHOS para o ERP
-    // Se for criação de novo pedido E NÃO for rascunho, verificar envio automático ao ERP
-    if (modoAtual === 'criar' && !salvarComoRascunho && formData.empresaFaturamentoId) {
-      console.log('🔄 Iniciando verificação de envio automático...');
-      console.log('🔄 vendaCompleta.empresaFaturamentoId:', vendaCompleta.empresaFaturamentoId);
-
-      try {
-        const empresa = await companyService.getById(formData.empresaFaturamentoId);
-        console.log('🏢 Empresa encontrada:', empresa?.razaoSocial, '- ID:', formData.empresaFaturamentoId);
-        console.log('🏢 Dados da empresa:', empresa);
-
-        if (empresa) {
-          const envioHabilitado = erpAutoSendService.estaHabilitado(empresa);
-          console.log('📤 Envio automático habilitado?', envioHabilitado);
-
-          if (envioHabilitado) {
-            // ✅ VALIDAÇÃO ADICIONAL: Verificar se tem itens ANTES de enviar
-            console.log('🔍 VERIFICAÇÃO PRÉ-ENVIO:', {
-              id: vendaCompleta.id,
-              numero: vendaCompleta.numero,
-              status: vendaCompleta.status,
-              quantidadeItens: vendaCompleta.itens?.length || 0,
-            });
-
-            if (!vendaCompleta.itens || vendaCompleta.itens.length === 0) {
-              console.error('❌ BLOQUEIO: Tentativa de enviar pedido SEM ITENS ao ERP!');
-              toast.error('Não é possível enviar pedido sem itens ao ERP');
-            } else {
-              console.log('✅ Iniciando envio ao ERP');
-              toast.info('Enviando pedido ao ERP...');
-
-              try {
-                const resultado = await erpAutoSendService.enviarVendaComRetry(vendaCompleta, empresa);
-                console.log('📊 Resultado do envio:', resultado);
-
-                if (resultado.sucesso && resultado.erpPedidoId) {
-                  // Atualizar venda com dados de integração ANTES de adicionar ao array
-                  vendaCompleta.integracaoERP = {
-                    erpPedidoId: resultado.erpPedidoId,
-                    sincronizacaoAutomatica: true,
-                    tentativasSincronizacao: 0,
-                  };
-
-                  toast.success(`Pedido enviado ao ERP com sucesso! (ID: ${resultado.erpPedidoId})`);
-                  console.log('✅ Venda atualizada com integração ERP:', vendaCompleta.integracaoERP);
-                } else {
-                  toast.error(`Erro ao enviar ao ERP: ${resultado.erro}`);
-                  console.error('❌ Erro no envio automático:', resultado.erro);
-                }
-              } catch (error) {
-                console.error('❌ Erro inesperado no envio automático:', error);
-                toast.error('Erro inesperado ao enviar pedido ao ERP');
-              }
-            }
-          } else {
-            console.log('⚠️ Envio automático não está habilitado para esta empresa');
-          }
-        } else {
-          console.error('❌ Empresa não encontrada com ID:', formData.empresaFaturamentoId);
-        }
-      } catch (error) {
-        console.error('❌ Erro ao buscar empresa:', error);
-      }
-    } else if (salvarComoRascunho) {
-      // ✅ LOG: Rascunhos NÃO são enviados ao ERP
-      console.log('📝 Salvando como RASCUNHO - NÃO será enviado ao ERP');
-    }
-
-    // Persistir venda no Supabase (DEPOIS do envio ao ERP para já incluir os dados de integração)
+    // Persistir venda no Supabase PRIMEIRO (o ERP precisa que o pedido exista no banco)
     try {
       if (modoAtual === 'criar') {
         await api.create('vendas', vendaCompleta);
-        console.log('✅ Venda criada no Supabase:', vendaCompleta.id, 'com integração ERP:', vendaCompleta.integracaoERP);
+        console.log('✅ Venda criada no Supabase:', vendaCompleta.id);
       } else {
         await api.update('vendas', vendaId!, vendaCompleta);
         console.log('✅ Venda atualizada no Supabase:', vendaCompleta.id);
       }
 
-      // ✅ NOVO: Mensagem diferente para rascunho
       if (salvarComoRascunho) {
         toast.success('Rascunho salvo com sucesso! Você pode continuar editando depois.');
+      } else if (modoAtual === 'criar' && formData.empresaFaturamentoId) {
+        // Enviar ao ERP via Edge Function real (tiny-enviar-pedido-venda-v1)
+        if (!vendaCompleta.itens || vendaCompleta.itens.length === 0) {
+          toast.error('Pedido salvo, mas não enviado ao ERP: sem itens.');
+        } else {
+          toast.info('Pedido salvo. Enviando ao ERP...');
+          try {
+            const resposta = await api.vendas.enviarAoERP(vendaCompleta.id);
+            const tinyPedidoId = resposta?.tiny?.pedido_id || resposta?.tiny?.pedidoId;
+            toast.success(tinyPedidoId
+              ? `Pedido enviado ao ERP com sucesso! (ID Tiny: ${tinyPedidoId})`
+              : 'Pedido enviado ao ERP com sucesso!');
+          } catch (erpError: any) {
+            console.error('❌ Erro ao enviar ao ERP:', erpError);
+            toast.error(`Pedido salvo, mas erro ao enviar ao ERP: ${erpError?.message || 'Erro desconhecido'}. Você pode reenviar pela lista de pedidos.`, { duration: 8000 });
+          }
+        }
       } else {
-        toast.success(modoAtual === 'criar' ? 'Pedido criado e enviado para análise!' : 'Pedido atualizado com sucesso!');
+        toast.success(modoAtual === 'criar' ? 'Pedido criado com sucesso!' : 'Pedido atualizado com sucesso!');
       }
     } catch (error: any) {
       console.error('[VENDAS] Erro ao salvar venda:', error);
@@ -2125,6 +2071,18 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             <AlertDescription>
               Este pedido já foi enviado ao ERP (ID: {formData.integracaoERP?.erpPedidoId}) e não pode mais ser editado.
               Para fazer alterações, entre em contato com o backoffice.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Alerta de Erro no Envio ao ERP */}
+        {formData.integracaoERP?.erroEnvio && !formData.integracaoERP?.erpPedidoId && (
+          <Alert className="border-orange-300 bg-orange-50">
+            <AlertTriangle className="h-4 w-4 text-orange-600" />
+            <AlertTitle className="text-orange-800">Pedido não enviado ao ERP</AlertTitle>
+            <AlertDescription className="text-orange-700">
+              <p>{formData.integracaoERP?.erroSincronizacao || 'Ocorreu um erro ao enviar este pedido ao ERP.'}</p>
+              <p className="mt-1 text-sm">Para reenviar, acesse a lista de pedidos e clique em "Reenviar ao ERP".</p>
             </AlertDescription>
           </Alert>
         )}
