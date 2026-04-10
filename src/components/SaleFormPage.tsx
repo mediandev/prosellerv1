@@ -1823,24 +1823,26 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
     // Persistir venda no Supabase PRIMEIRO (o ERP precisa que o pedido exista no banco)
     try {
+      let pedidoSalvo: any;
       if (modoAtual === 'criar') {
-        await api.create('vendas', vendaCompleta);
-        console.log('✅ Venda criada no Supabase:', vendaCompleta.id);
+        pedidoSalvo = await api.create('vendas', vendaCompleta);
+        console.log('✅ Venda criada no Supabase. ID do banco:', pedidoSalvo?.id);
       } else {
-        await api.update('vendas', vendaId!, vendaCompleta);
+        pedidoSalvo = await api.update('vendas', vendaId!, vendaCompleta);
         console.log('✅ Venda atualizada no Supabase:', vendaCompleta.id);
       }
 
       if (salvarComoRascunho) {
         toast.success('Rascunho salvo com sucesso! Você pode continuar editando depois.');
       } else if (modoAtual === 'criar' && formData.empresaFaturamentoId) {
-        // Enviar ao ERP via Edge Function real (tiny-enviar-pedido-venda-v1)
+        // Usar o ID retornado pelo banco (numérico), não o UUID do frontend
+        const idParaERP = pedidoSalvo?.id || vendaCompleta.id;
         if (!vendaCompleta.itens || vendaCompleta.itens.length === 0) {
           toast.error('Pedido salvo, mas não enviado ao ERP: sem itens.');
         } else {
           toast.info('Pedido salvo. Enviando ao ERP...');
           try {
-            const resposta = await api.vendas.enviarAoERP(vendaCompleta.id);
+            const resposta = await api.vendas.enviarAoERP(idParaERP);
             const tinyPedidoId = resposta?.tiny?.pedido_id || resposta?.tiny?.pedidoId;
             toast.success(tinyPedidoId
               ? `Pedido enviado ao ERP com sucesso! (ID Tiny: ${tinyPedidoId})`
