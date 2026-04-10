@@ -8,6 +8,7 @@ import { CondicaoPagamento } from '../types/condicaoPagamento';
 import { NaturezaOperacao } from '../types/naturezaOperacao';
 import { isStatusConcluido } from '../utils/statusVendaUtils';
 import { api } from '../services/api';
+import { tinyNaturezaOperacaoService } from '../services/tinyNaturezaOperacaoService';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -70,7 +71,8 @@ import {
   Check,
   ChevronsUpDown,
   Receipt,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency, formatCNPJ, formatCPF } from '../lib/masks';
@@ -198,6 +200,40 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clientesIniciais, setClientesIniciais] = useState<Cliente[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
+
+  // Avisos de configuração ERP
+  const [avisosERP, setAvisosERP] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (isReadOnly || !formData.empresaFaturamentoId) {
+      setAvisosERP([]);
+      return;
+    }
+    const verificar = async () => {
+      const avisos: string[] = [];
+      try {
+        const empresa = companies.find(c => String(c.id) === String(formData.empresaFaturamentoId));
+        const nomeEmpresa = empresa?.razaoSocial || empresa?.nomeFantasia || 'a empresa selecionada';
+        if (empresa && !empresa.chaveApi) {
+          avisos.push(`Empresa "${nomeEmpresa}" não tem token do Tiny configurado. Vá em Configurações > Empresas > ${nomeEmpresa} > Configuração ERP.`);
+        }
+        if (formData.naturezaOperacaoId) {
+          const mapeamentos = await tinyNaturezaOperacaoService.listarPorEmpresa(String(formData.empresaFaturamentoId));
+          const temMapeamento = mapeamentos.some(
+            m => String(m.naturezaOperacaoId) === String(formData.naturezaOperacaoId) && m.tinyValor && m.ativo
+          );
+          if (!temMapeamento) {
+            const nomeNat = formData.nomeNaturezaOperacao || 'selecionada';
+            avisos.push(`Natureza "${nomeNat}" não está mapeada para "${nomeEmpresa}" no Tiny. Vá em Configurações > Empresas > ${nomeEmpresa} > Configuração ERP > Naturezas.`);
+          }
+        }
+      } catch (err) {
+        console.warn('[SaleFormPage] Erro ao verificar config ERP:', err);
+      }
+      setAvisosERP(avisos);
+    };
+    verificar();
+  }, [formData.empresaFaturamentoId, formData.naturezaOperacaoId, companies, isReadOnly]);
 
   // Estados para itens faturados
   const [itensFaturados, setItensFaturados] = useState<ItemFaturado[]>([]);
@@ -2085,6 +2121,21 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             <AlertDescription className="text-orange-700">
               <p>{formData.integracaoERP?.erroSincronizacao || 'Ocorreu um erro ao enviar este pedido ao ERP.'}</p>
               <p className="mt-1 text-sm">Para reenviar, acesse a lista de pedidos e clique em "Reenviar ao ERP".</p>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Aviso de Configuração ERP Incompleta */}
+        {avisosERP.length > 0 && !isReadOnly && (
+          <Alert className="border-yellow-300 bg-yellow-50">
+            <AlertTriangle className="h-4 w-4 text-yellow-600" />
+            <AlertTitle className="text-yellow-800">Configuração ERP incompleta</AlertTitle>
+            <AlertDescription className="text-yellow-700">
+              <ul className="list-disc pl-4 mt-1 space-y-1">
+                {avisosERP.map((aviso, i) => (
+                  <li key={i} className="text-sm">{aviso}</li>
+                ))}
+              </ul>
             </AlertDescription>
           </Alert>
         )}

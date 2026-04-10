@@ -97,6 +97,7 @@ import {
   Wrench,
   FileText,
   Send,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
@@ -1575,9 +1576,25 @@ export function SalesPage({
                         <span className="font-medium">{formatCurrency(sale.valor)}</span>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={statusConfig[sale.status].variant}>
-                          {statusConfig[sale.status].label}
-                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant={statusConfig[sale.status].variant}>
+                            {statusConfig[sale.status].label}
+                          </Badge>
+                          {(sale as any).integracaoERP?.erroEnvio && !(sale as any).integracaoERP?.erpPedidoId && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-help">
+                                    <AlertTriangle className="h-4 w-4 text-orange-500" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs">
+                                  <p className="text-sm">{(sale as any).integracaoERP?.erroSincronizacao || 'Erro ao enviar ao ERP. Clique em ⋮ > Reenviar ao ERP.'}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
                         {sale.probabilidade && (
                           <p className="text-xs text-muted-foreground mt-1">
                             {sale.probabilidade}% prob.
@@ -1634,15 +1651,15 @@ export function SalesPage({
                                   {sincronizandoVenda === sale.id ? 'Sincronizando...' : 'Sincronizar Status'}
                                 </DropdownMenuItem>
                               </>
-                            ) : canEditarVendas && sale.status !== 'Rascunho' && (
+                            ) : canEditarVendas && sale.status !== 'Rascunho' && !sale.integracaoERP?.erpPedidoId && (
                               <>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem 
+                                <DropdownMenuItem
                                   onClick={() => handleEnviarParaERP(sale.id)}
                                   disabled={enviandoParaERP === sale.id}
                                 >
                                   <Send className={`h-4 w-4 mr-2 ${enviandoParaERP === sale.id ? 'animate-pulse' : ''}`} />
-                                  {enviandoParaERP === sale.id ? 'Enviando...' : 'Enviar ao ERP'}
+                                  {enviandoParaERP === sale.id ? 'Reenviando...' : 'Reenviar ao ERP'}
                                 </DropdownMenuItem>
                               </>
                             )}
