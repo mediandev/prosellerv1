@@ -1,0 +1,157 @@
+// Adicionar após handleSalvarNovoCompromisso
+
+  const handleAbrirRegistroPagamento = (compromissoId?: string) => {
+    if (!temPermissao('contacorrente.criar')) {
+      toast.error('Você não tem permissão para criar lançamentos');
+      return;
+    }
+
+    if (compromissoId) {
+      // Pagamento rápido para um compromisso específico
+      const compromisso = compromissos.find(c => c.id === compromissoId);
+      if (compromisso) {
+        if (compromisso.valorPendente <= 0) {
+          toast.error('Este compromisso já está totalmente pago');
+          return;
+        }
+        setCompromissoParaPagamento(compromisso);
+        setDialogRegistrarPagamentoOpen(true);
+      }
+    } else {
+      // Registrar pagamento sem compromisso específico
+      setCompromissoParaPagamento(null);
+      setDialogRegistrarPagamentoOpen(true);
+    }
+  };
+
+  const handleSalvarPagamento = async (pagamento: {
+    compromissoId: string;
+    dataPagamento: string;
+    valor: string;
+    formaPagamentoId: string;
+    categoriaId: string;
+    observacoes: string;
+  }) => {
+    if (!temPermissao('contacorrente.criar')) {
+      toast.error('Você não tem permissão para criar lançamentos');
+      return;
+    }
+
+    try {
+      console.log('[CONTA-CORRENTE] Salvando pagamento:', pagamento);
+      
+      // Buscar informações
+      const compromisso = compromissos.find(c => c.id === pagamento.compromissoId);
+      const formaPagamento = formasPagamento.find(f => f.id === pagamento.formaPagamentoId);
+      const categoria = categorias.find(c => c.id === pagamento.categoriaId);
+      
+      const valorNumerico = parseFloat(pagamento.valor);
+      
+      // Criar objeto do pagamento
+      const novoPagamento: Pagamento = {
+        id: Date.now().toString(),
+        compromissoId: pagamento.compromissoId,
+        compromissoTitulo: compromisso?.titulo || 'Compromisso não encontrado',
+        dataPagamento: pagamento.dataPagamento,
+        valor: valorNumerico,
+        formaPagamento: formaPagamento?.nome || 'Não informado',
+        categoriaId: pagamento.categoriaId || undefined,
+        categoriaNome: categoria?.nome || undefined,
+        observacoes: pagamento.observacoes,
+        dataCriacao: new Date().toISOString(),
+        criadoPor: 'Sistema', // TODO: pegar do contexto de autenticação
+      };
+      
+      // Salvar no backend
+      await api.create('conta-corrente/pagamentos', novoPagamento);
+      
+      // Atualizar compromisso
+      if (compromisso) {
+        const novoValorPago = compromisso.valorPago + valorNumerico;
+        const novoValorPendente = compromisso.valor - novoValorPago;
+        let novoStatus: 'Pendente' | 'Pago Parcialmente' | 'Pago Integralmente' = 'Pendente';
+        
+        if (novoValorPendente === 0) {
+          novoStatus = 'Pago Integralmente';
+        } else if (novoValorPago > 0) {
+          novoStatus = 'Pago Parcialmente';
+        }
+        
+        const compromissoAtualizado = {
+          ...compromisso,
+          valorPago: novoValorPago,
+          valorPendente: novoValorPendente,
+          status: novoStatus,
+          dataAtualizacao: new Date().toISOString(),
+          atualizadoPor: 'Sistema',
+        };
+        
+        await api.update('conta-corrente/compromissos', compromisso.id, compromissoAtualizado);
+      }
+      
+      toast.success('Pagamento registrado com sucesso!');
+      setDialogRegistrarPagamentoOpen(false);
+      setCompromissoParaPagamento(null);
+      
+      // Recarregar dados
+      await carregarDados();
+    } catch (error: any) {
+      console.error('[CONTA-CORRENTE] Erro ao registrar pagamento:', error);
+      toast.error(`Erro ao registrar pagamento: ${error.message || 'Erro desconhecido'}`);
+    }
+  };
+
+// Modificar no header Card onde está o botão "Novo Compromisso", adicionar botão ao lado:
+// Substituir:
+            {temPermissao('contacorrente.criar') && (
+              <Button onClick={() => setDialogNovoCompromissoOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Compromisso
+              </Button>
+            )}
+
+// Por:
+            {temPermissao('contacorrente.criar') && (
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => handleAbrirRegistroPagamento()}>
+                  <Wallet className="h-4 w-4 mr-2" />
+                  Registrar Pagamento
+                </Button>
+                <Button onClick={() => setDialogNovoCompromissoOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo Compromisso
+                </Button>
+              </div>
+            )}
+
+// Modificar a TableRow para adicionar coluna de ações e ícone de pagamento:
+// Adicionar após TableHead de Status:
+                    <TableHead className="w-[60px]"></TableHead>
+
+// E modificar cada TableRow, adicionar após a última TableCell (Status):
+                      <TableCell className="py-3">
+                        {lancamento.tipo === 'compromisso' && lancamento.valorPendente! > 0 && temPermissao('contacorrente.criar') && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const idCompromisso = lancamento.id.replace('comp-', '');
+                              handleAbrirRegistroPagamento(idCompromisso);
+                            }}
+                            title="Registrar pagamento"
+                          >
+                            <Wallet className="h-4 w-4 text-green-600" />
+                          </Button>
+                        )}
+                      </TableCell>
+
+// Modificar o RegistrarPagamentoDialog para passar onSalvar:
+      <RegistrarPagamentoDialog
+        open={dialogRegistrarPagamentoOpen}
+        onOpenChange={setDialogRegistrarPagamentoOpen}
+        compromisso={compromissoParaPagamento}
+        formasPagamentoOptions={formasPagamentoOptions}
+        categoriasOptions={categoriasOptions}
+        onSalvar={handleSalvarPagamento}
+      />

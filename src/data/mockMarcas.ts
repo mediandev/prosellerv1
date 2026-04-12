@@ -1,0 +1,88 @@
+import { Marca } from '../types/produto';
+
+export const mockMarcas: Marca[] = [
+  {
+    id: '1',
+    nome: 'Dell',
+    ativo: true,
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: '2',
+    nome: 'Logitech',
+    ativo: true,
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: '3',
+    nome: 'Samsung',
+    ativo: true,
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: '4',
+    nome: 'LG',
+    ativo: true,
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: '5',
+    nome: 'HP',
+    ativo: true,
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: '6',
+    nome: 'Corsair',
+    ativo: true,
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: '7',
+    nome: 'Keychron',
+    ativo: true,
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: '8',
+    nome: 'HyperX',
+    ativo: true,
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: '9',
+    nome: 'TP-Link',
+    ativo: true,
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: '10',
+    nome: 'Seagate',
+    ativo: true,
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: '11',
+    nome: 'NVIDIA',
+    ativo: true,
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: '12',
+    nome: 'Microsoft',
+    ativo: true,
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+];
