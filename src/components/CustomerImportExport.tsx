@@ -16,8 +16,10 @@ import {
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
 import { Alert, AlertDescription } from './ui/alert';
-import { Upload, Download, FileSpreadsheet, CheckCircle, XCircle, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Upload, Download, FileSpreadsheet, CheckCircle, XCircle, AlertTriangle, ArrowRight, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Checkbox } from './ui/checkbox';
 import { toast } from 'sonner@2.0.3';
+import { api, getAuthToken } from '../services/api';
 
 // Mapeamento de variações de nomes de colunas → nome padrão do template
 const COLUMN_MAP: Record<string, string> = {
@@ -86,6 +88,31 @@ const TEMPLATE_COLUMNS = [
   'Complemento', 'Bairro', 'UF', 'Município', 'E-mail', 'Telefone Fixo',
   'Telefone Celular', 'Desconto Padrão (%)', 'Desconto Financeiro (%)', 'Pedido Mínimo (R$)',
 ];
+
+// Colunas da view cliente_exportacao disponíveis para exportação
+const ALL_EXPORT_COLUMNS: { key: string; label: string }[] = [
+  { key: 'cliente_id', label: 'ID' },
+  { key: 'codigo', label: 'Código' },
+  { key: 'nome', label: 'Razão Social' },
+  { key: 'nome_fantasia', label: 'Nome Fantasia' },
+  { key: 'cpf_cnpj', label: 'CPF/CNPJ' },
+  { key: 'inscricao_estadual', label: 'Inscrição Estadual' },
+  { key: 'status_aprovacao', label: 'Status Aprovação' },
+  { key: 'grupo_rede', label: 'Grupo/Rede' },
+  { key: 'tipo_segmento', label: 'Segmento' },
+  { key: 'lista_de_preco', label: 'Lista de Preço' },
+  { key: 'empresaFaturamento', label: 'Empresa Faturamento' },
+  { key: 'desconto', label: 'Desconto Padrão (%)' },
+  { key: 'desconto_financeiro', label: 'Desconto Financeiro (%)' },
+  { key: 'pedido_minimo', label: 'Pedido Mínimo (R$)' },
+  { key: 'condicao_padrao', label: 'Condição Padrão' },
+  { key: 'condicoes_pagamento', label: 'Condições de Pagamento' },
+  { key: 'observacao_interna', label: 'Observações Internas' },
+  { key: 'created_at', label: 'Data Cadastro' },
+  { key: 'updated_at', label: 'Data Atualização' },
+];
+
+const DEFAULT_EXPORT_KEYS = new Set(ALL_EXPORT_COLUMNS.map(c => c.key));
 
 const REQUIRED_FIELDS = ['Razão Social', 'CPF/CNPJ', 'CEP'];
 
@@ -159,21 +186,46 @@ export function CustomerImportExport({ clientes, onImportComplete }: CustomerImp
   const [progresso, setProgresso] = useState(0);
   const [resultado, setResultado] = useState<ResultadoImportacao | null>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [exportando, setExportando] = useState(false);
+  const [exportCols, setExportCols] = useState<Set<string>>(new Set(DEFAULT_EXPORT_KEYS));
+  const [mostrarColunas, setMostrarColunas] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Exportar clientes para CSV
-  const handleExportarCSV = () => {
+  const toggleExportCol = (key: string) => {
+    setExportCols(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // Exportar clientes para CSV via RPC exportar_clientes (view cliente_exportacao)
+  const handleExportarCSV = async () => {
     try {
-      const headers = TEMPLATE_COLUMNS;
-      const rows = clientes.map((cliente) => [
-        cliente.tipoPessoa, cliente.cpfCnpj, cliente.razaoSocial,
-        cliente.nomeFantasia || '', cliente.inscricaoEstadual || '',
-        cliente.situacao, cliente.segmentoMercado, cliente.grupoRede || '',
-        cliente.cep, cliente.logradouro, cliente.numero, cliente.complemento || '',
-        cliente.bairro, cliente.uf, cliente.municipio, cliente.emailPrincipal || '',
-        cliente.telefoneFixoPrincipal || '', cliente.telefoneCelularPrincipal || '',
-        cliente.descontoPadrao, cliente.descontoFinanceiro, cliente.pedidoMinimo,
-      ]);
+      setExportando(true);
+      const supabaseUrl = 'https://xxoiqfraeolsqsmsheue.supabase.co';
+      const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4b2lxZnJhZW9sc3FzbXNoZXVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjY1ODQ5MDIsImV4cCI6MjA0MjE2MDkwMn0.m8A1mUf3GyAl_17FjltxkgBr-xRQYZw9YEDUVUBdttA';
+      const token = getAuthToken();
+
+      const res = await fetch(`${supabaseUrl}/rest/v1/rpc/exportar_clientes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${token}`,
+        },
+        body: '{}',
+      });
+
+      if (!res.ok) throw new Error(`Erro ao buscar dados: ${res.status}`);
+      const dados: Record<string, any>[] = await res.json();
+
+      const selectedCols = ALL_EXPORT_COLUMNS.filter(c => exportCols.has(c.key));
+      const headers = selectedCols.map(c => c.label);
+      const rows = dados.map(row =>
+        selectedCols.map(col => row[col.key] ?? '')
+      );
 
       const csvContent = [
         headers.join(','),
@@ -185,10 +237,12 @@ export function CustomerImportExport({ clientes, onImportComplete }: CustomerImp
       link.href = URL.createObjectURL(blob);
       link.download = `clientes_${new Date().toISOString().split('T')[0]}.csv`;
       link.click();
-      toast.success(`${clientes.length} clientes exportados com sucesso!`);
+      toast.success(`${dados.length} clientes exportados com sucesso!`);
     } catch (error) {
       console.error('Erro ao exportar:', error);
       toast.error('Erro ao exportar clientes');
+    } finally {
+      setExportando(false);
     }
   };
 
@@ -361,13 +415,36 @@ export function CustomerImportExport({ clientes, onImportComplete }: CustomerImp
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button onClick={handleExportarCSV} className="w-full" variant="outline">
-              <FileSpreadsheet className="h-4 w-4 mr-2" />
-              Exportar {clientes.length} Cliente(s)
+            <Button onClick={() => setMostrarColunas(!mostrarColunas)} className="w-full" variant="ghost" size="sm">
+              {mostrarColunas ? <ChevronUp className="h-4 w-4 mr-2" /> : <ChevronDown className="h-4 w-4 mr-2" />}
+              Selecionar Colunas ({exportCols.size} de {ALL_EXPORT_COLUMNS.length})
             </Button>
-            <Button onClick={handleExportarTemplate} className="w-full" variant="ghost">
-              <Download className="h-4 w-4 mr-2" />
-              Baixar Template de Importação
+            {mostrarColunas && (
+              <div className="border rounded-lg p-3 space-y-2 max-h-[300px] overflow-y-auto">
+                <div className="flex gap-2 mb-2">
+                  <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => setExportCols(new Set(DEFAULT_EXPORT_KEYS))}>
+                    Todas
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => setExportCols(new Set())}>
+                    Nenhuma
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  {ALL_EXPORT_COLUMNS.map(col => (
+                    <label key={col.key} className="flex items-center gap-2 text-sm cursor-pointer py-0.5">
+                      <Checkbox
+                        checked={exportCols.has(col.key)}
+                        onCheckedChange={() => toggleExportCol(col.key)}
+                      />
+                      {col.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            <Button onClick={handleExportarCSV} className="w-full" variant="outline" disabled={exportando || exportCols.size === 0}>
+              {exportando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 mr-2" />}
+              {exportando ? 'Exportando...' : 'Exportar Todos os Clientes'}
             </Button>
           </CardContent>
         </Card>
@@ -384,6 +461,10 @@ export function CustomerImportExport({ clientes, onImportComplete }: CustomerImp
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            <Button onClick={handleExportarTemplate} className="w-full" variant="ghost">
+              <Download className="h-4 w-4 mr-2" />
+              Baixar Template de Importação
+            </Button>
             <input
               ref={fileInputRef}
               type="file"
