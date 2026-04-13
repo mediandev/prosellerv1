@@ -21,6 +21,7 @@ interface CreateUserBody {
   user_login?: string
   auth_user_id?: string
   permissoes?: string[]
+  redirect_to?: string
 }
 
 const SUPPORTED_SELLER_PERMISSION_IDS = new Set<string>([
@@ -414,6 +415,48 @@ serve(async (req) => {
 
     console.log('[CREATE-USER-V2] Data sanitized')
 
+    // 4.5. CONVITE POR EMAIL (quando auth_user_id não fornecido)
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      global: {
+        headers: { Authorization: req.headers.get('Authorization') || '' },
+      },
+    })
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+
+    let conviteEnviado = false
+    if (!sanitizedData.auth_user_id) {
+      console.log('[CREATE-USER-V2] Step 4.5: No auth_user_id — sending invite email...')
+
+      const redirectTo = body.redirect_to || 'https://proseller.app.br'
+
+      const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+        sanitizedData.email,
+        {
+          redirectTo,
+          data: {
+            nome: sanitizedData.nome,
+            tipo: sanitizedData.tipo,
+          },
+        }
+      )
+
+      if (inviteError) {
+        console.error('[CREATE-USER-V2] Invite error:', {
+          message: inviteError.message,
+          status: inviteError.status,
+        })
+        throw new Error(`Erro ao enviar convite: ${inviteError.message}`)
+      }
+
+      if (!inviteData?.user?.id) {
+        throw new Error('Invite succeeded but no user ID returned')
+      }
+
+      sanitizedData.auth_user_id = inviteData.user.id
+      conviteEnviado = true
+      console.log('[CREATE-USER-V2] Invite sent successfully, auth_user_id:', sanitizedData.auth_user_id)
+    }
+
     // 5. CHAMADA RPC
     console.log('[CREATE-USER-V2] Step 5: Calling RPC function...', {
       p_email: sanitizedData.email,
@@ -422,13 +465,6 @@ serve(async (req) => {
       p_created_by: user.id,
       has_auth_user_id: !!sanitizedData.auth_user_id
     })
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      global: {
-        headers: { Authorization: req.headers.get('Authorization') || '' },
-      },
-    })
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
     const { data: rpcData, error: rpcError } = await supabase.rpc('create_user_v2', {
       p_email: sanitizedData.email,
@@ -493,7 +529,10 @@ serve(async (req) => {
     return createHttpSuccessResponse(
       {
         user: rpcData[0],
-        message: 'UsuÃ¡rio criado com sucesso',
+        message: conviteEnviado
+          ? 'Usuário criado e convite enviado por email'
+          : 'Usuário criado com sucesso',
+        convite_enviado: conviteEnviado,
       },
       201,
       {

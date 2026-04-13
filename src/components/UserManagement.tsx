@@ -227,9 +227,24 @@ export function UserManagement() {
           });
       }
     } else {
-      // Criar novo usuário (requer senha - será implementado em componente separado)
-      toast.error('Para criar usuários, use a função de signup com senha. Esta funcionalidade será implementada.');
-      // TODO: Implementar criação de usuário com senha ou componente separado
+      // Criar novo usuário via Edge Function (sem senha — convite)
+      api.usuarios.create({
+        nome: formulario.nome,
+        email: formulario.email,
+        tipo: 'backoffice',
+        permissoes: formulario.permissoes,
+      })
+        .then((novoUsuario) => {
+          setUsuarios([...usuarios, { ...novoUsuario, permissoes: formulario.permissoes } as Usuario]);
+          toast.success("Convite enviado! O usuário receberá um email para definir a senha.");
+          setDialogAberto(false);
+          setFormulario(formularioInicial);
+          carregarUsuarios();
+        })
+        .catch((error: any) => {
+          console.error('[USERS] Erro ao criar usuário:', error);
+          toast.error(`Erro ao criar usuário: ${error.message || 'Erro desconhecido'}`);
+        });
     }
   };
 

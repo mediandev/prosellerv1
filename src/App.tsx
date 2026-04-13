@@ -18,6 +18,7 @@ import { ptBR } from "date-fns@4.1.0/locale";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { LoginPage } from "./components/LoginPage";
 import { ForgotPasswordPage } from "./components/ForgotPasswordPage";
+import { SetPasswordPage } from "./components/SetPasswordPage";
 import { ProSellerLogo } from "./components/ProSellerLogo";
 import { DashboardMetrics, DashboardFilters } from "./components/DashboardMetrics";
 import { SalesChart } from "./components/SalesChart";
@@ -246,7 +247,26 @@ function AppContent() {
   const { usuario, loading } = useAuth();
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [authView, setAuthView] = useState<'login' | 'forgot-password'>('login');
+  const [authView, setAuthView] = useState<'login' | 'forgot-password' | 'set-password'>('login');
+  const [inviteTokens, setInviteTokens] = useState<{ accessToken: string; refreshToken: string } | null>(null);
+
+  // Detectar tokens de convite/invite na URL (hash fragment do Supabase)
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash) return;
+
+    const params = new URLSearchParams(hash.substring(1));
+    const type = params.get('type');
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+
+    if ((type === 'invite' || type === 'recovery') && accessToken && refreshToken) {
+      setInviteTokens({ accessToken, refreshToken });
+      setAuthView('set-password');
+      // Limpar o hash da URL para não reprocessar
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
   
   // Obter mês atual no formato YYYY-MM
   const getCurrentMonthPeriod = () => {
@@ -1113,8 +1133,20 @@ function AppContent() {
     );
   }
 
-  // Se não estiver autenticado, mostrar tela de login ou recuperação de senha
+  // Se não estiver autenticado, mostrar tela de login, recuperação ou definição de senha
   if (!usuario) {
+    if (authView === 'set-password' && inviteTokens) {
+      return (
+        <SetPasswordPage
+          accessToken={inviteTokens.accessToken}
+          refreshToken={inviteTokens.refreshToken}
+          onComplete={() => {
+            setInviteTokens(null);
+            setAuthView('login');
+          }}
+        />
+      );
+    }
     if (authView === 'forgot-password') {
       return <ForgotPasswordPage onBackToLogin={() => setAuthView('login')} />;
     }
