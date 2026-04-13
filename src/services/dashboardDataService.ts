@@ -543,16 +543,9 @@ export async function calculateMetricsWithComparison(
     const clientes: Cliente[] = await api.get('clientes');
     // Filtrar por vendedor se especificado
     if (vendedorNome) {
-      const clientesDoVendedor = clientes.filter(c => c.vendedorAtribuido?.nome === vendedorNome);
-      // Contar apenas clientes Ativos e Inativos
-      positivacaoTotal = clientesDoVendedor.filter(c => 
-        c.situacao === 'Ativo' || c.situacao === 'Inativo'
-      ).length;
+      positivacaoTotal = clientes.filter(c => c.vendedorAtribuido?.nome === vendedorNome).length;
     } else {
-      // Contar apenas clientes Ativos e Inativos
-      positivacaoTotal = clientes.filter(c => 
-        c.situacao === 'Ativo' || c.situacao === 'Inativo'
-      ).length;
+      positivacaoTotal = clientes.length;
     }
   } catch (error) {
     console.error('[DASHBOARD-SERVICE] Erro ao buscar total de clientes:', error);

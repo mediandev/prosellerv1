@@ -275,7 +275,71 @@ const formatDisplayValue = (value: number) => {
   return formatCurrency(safeValue);
 };
 
-export function SalesPage({ 
+// Mapear erros do ERP para mensagens resumidas e contextuais
+function getErpErrorResumido(errorMsg: string): string {
+  if (errorMsg.includes('Natureza de operacao nao mapeada')) {
+    return 'Natureza de operação não mapeada para esta empresa. Edite o pedido e altere a Natureza de Operação.';
+  }
+  if (errorMsg.includes('sem chave_api')) {
+    return 'Empresa sem chave API do Tiny. Peça ao backoffice para configurar.';
+  }
+  if (errorMsg.includes('CPF/CNPJ invalido')) {
+    return 'CPF/CNPJ do cliente inválido. Corrija o cadastro do cliente.';
+  }
+  if (errorMsg.includes('sem natureza de operacao') || errorMsg.includes('Pedido sem natureza')) {
+    return 'Pedido sem natureza de operação. Edite o pedido e selecione uma natureza.';
+  }
+  if (errorMsg.includes('sem empresa de faturamento') || errorMsg.includes('Empresa de faturamento')) {
+    return 'Pedido sem empresa de faturamento. Edite o pedido e selecione a empresa.';
+  }
+  if (errorMsg.includes('Vendedor') || errorMsg.includes('sem vendedor')) {
+    return 'Vendedor não configurado. Verifique o cadastro do vendedor.';
+  }
+  if (errorMsg.includes('sem itens') || errorMsg.includes('Pedido sem produtos')) {
+    return 'Pedido sem produtos. Adicione itens antes de enviar.';
+  }
+  return `Erro ao enviar ao ERP: ${errorMsg}`;
+}
+
+// Mapear erros do ERP para mensagem detalhada com instruções (exibida no form do pedido)
+function getErpErrorDetalhado(errorMsg: string): { erro: string; instrucao: string } {
+  if (errorMsg.includes('Natureza de operacao nao mapeada')) {
+    return {
+      erro: 'A natureza de operação deste pedido não está mapeada no ERP para a empresa selecionada.',
+      instrucao: 'Edite o pedido, altere a "Natureza de Operação" para uma opção válida (ex: "Venda de mercadorias") e envie novamente. Se o problema persistir, peça ao backoffice para configurar o mapeamento em Configurações > Natureza de Operação ERP.'
+    };
+  }
+  if (errorMsg.includes('sem chave_api')) {
+    return {
+      erro: 'A empresa de faturamento não possui chave API do Tiny configurada.',
+      instrucao: 'Peça ao backoffice para acessar Configurações > Empresas e cadastrar a chave API do Tiny para esta empresa.'
+    };
+  }
+  if (errorMsg.includes('CPF/CNPJ invalido')) {
+    return {
+      erro: 'O CPF/CNPJ do cliente é inválido para envio ao ERP.',
+      instrucao: 'Vá em Clientes, edite o cadastro do cliente e corrija o CPF/CNPJ. Depois volte e reenvie o pedido.'
+    };
+  }
+  if (errorMsg.includes('sem natureza de operacao') || errorMsg.includes('Pedido sem natureza')) {
+    return {
+      erro: 'Este pedido não possui natureza de operação definida.',
+      instrucao: 'Edite o pedido e selecione uma "Natureza de Operação" no formulário. Depois envie novamente.'
+    };
+  }
+  if (errorMsg.includes('sem empresa de faturamento') || errorMsg.includes('Empresa de faturamento')) {
+    return {
+      erro: 'Este pedido não possui empresa de faturamento definida.',
+      instrucao: 'Edite o pedido e selecione a "Empresa de Faturamento" no formulário. Depois envie novamente.'
+    };
+  }
+  return {
+    erro: errorMsg,
+    instrucao: 'Verifique os dados do pedido e tente enviar novamente. Se o problema persistir, entre em contato com o suporte.'
+  };
+}
+
+export function SalesPage({
   onNovaVenda, 
   onVisualizarVenda, 
   onEditarVenda,
@@ -978,16 +1042,16 @@ export function SalesPage({
     try {
       setEnviandoParaERP(saleId);
       console.log('[SALES-PAGE] Enviando pedido ao ERP:', saleId);
-      toast.info('Enviando pedido ao ERP...');
-      
+      toast.info('Enviando pedido ao ERP...', { id: 'erp-envio' });
+
       // Buscar venda completa do backend
       const vendaCompleta = await api.getById('vendas', saleId);
-      
+
       if (!vendaCompleta) {
-        toast.error('Venda não encontrada');
+        toast.error('Venda não encontrada', { id: 'erp-envio' });
         return;
       }
-      
+
       console.log('[SALES-PAGE] Venda encontrada:', {
         id: vendaCompleta.id,
         numero: vendaCompleta.numero,
@@ -995,22 +1059,22 @@ export function SalesPage({
         status: vendaCompleta.status,
         temIntegracaoERP: !!vendaCompleta.integracaoERP?.erpPedidoId,
       });
-      
+
       // Verificar se já foi enviado
       if (vendaCompleta.integracaoERP?.erpPedidoId) {
-        toast.warning('Este pedido já foi enviado ao ERP');
+        toast.warning('Este pedido já foi enviado ao ERP', { id: 'erp-envio' });
         return;
       }
-      
+
       // Verificar se tem itens
       if (!vendaCompleta.itens || vendaCompleta.itens.length === 0) {
-        toast.error('Não é possível enviar pedido sem itens ao ERP');
+        toast.error('Não é possível enviar pedido sem itens ao ERP', { id: 'erp-envio' });
         return;
       }
-      
+
       // Verificar se empresa está definida (a Edge Function deriva o token pela empresa do pedido)
       if (!vendaCompleta.empresaFaturamentoId) {
-        toast.error('Empresa de faturamento não definida para este pedido');
+        toast.error('Empresa de faturamento não definida para este pedido', { id: 'erp-envio' });
         return;
       }
 
@@ -1028,7 +1092,8 @@ export function SalesPage({
       toast.success(
         tinyId
           ? `Pedido enviado ao ERP com sucesso! (Tiny ID: ${tinyId}${tinyNumero ? ` / Nº: ${tinyNumero}` : ''})`
-          : 'Pedido enviado ao ERP com sucesso!'
+          : 'Pedido enviado ao ERP com sucesso!',
+        { id: 'erp-envio' }
       );
 
       // Recarregar lista para refletir mudanças
@@ -1036,7 +1101,8 @@ export function SalesPage({
 
     } catch (error: any) {
       console.error('[SALES-PAGE] Erro ao enviar pedido ao ERP:', error);
-      toast.error(`Erro ao enviar ao ERP: ${error.message || 'Erro desconhecido'}`);
+      const erroResumido = getErpErrorResumido(error.message || 'Erro desconhecido');
+      toast.error(erroResumido, { id: 'erp-envio', duration: 8000 });
     } finally {
       setEnviandoParaERP(null);
     }

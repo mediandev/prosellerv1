@@ -147,6 +147,44 @@ const normalizarItemVenda = (item: ItemVenda): ItemVenda => {
   };
 };
 
+// Mapear erros do ERP para mensagem detalhada com instruções
+function getErpErrorDetalhado(errorMsg: string): { erro: string; instrucao: string } {
+  if (errorMsg.includes('Natureza de operacao nao mapeada')) {
+    return {
+      erro: 'A natureza de operação deste pedido não está mapeada no ERP para a empresa selecionada.',
+      instrucao: 'Edite o pedido, altere a "Natureza de Operação" para uma opção válida (ex: "Venda de mercadorias") e envie novamente. Se o problema persistir, peça ao backoffice para configurar o mapeamento em Configurações > Natureza de Operação ERP.'
+    };
+  }
+  if (errorMsg.includes('sem chave_api')) {
+    return {
+      erro: 'A empresa de faturamento não possui chave API do Tiny configurada.',
+      instrucao: 'Peça ao backoffice para acessar Configurações > Empresas e cadastrar a chave API do Tiny para esta empresa.'
+    };
+  }
+  if (errorMsg.includes('CPF/CNPJ invalido')) {
+    return {
+      erro: 'O CPF/CNPJ do cliente é inválido para envio ao ERP.',
+      instrucao: 'Vá em Clientes, edite o cadastro do cliente e corrija o CPF/CNPJ. Depois volte e reenvie o pedido.'
+    };
+  }
+  if (errorMsg.includes('sem natureza de operacao') || errorMsg.includes('Pedido sem natureza')) {
+    return {
+      erro: 'Este pedido não possui natureza de operação definida.',
+      instrucao: 'Edite o pedido e selecione uma "Natureza de Operação" no formulário. Depois envie novamente.'
+    };
+  }
+  if (errorMsg.includes('sem empresa de faturamento') || errorMsg.includes('Empresa de faturamento')) {
+    return {
+      erro: 'Este pedido não possui empresa de faturamento definida.',
+      instrucao: 'Edite o pedido e selecione a "Empresa de Faturamento" no formulário. Depois envie novamente.'
+    };
+  }
+  return {
+    erro: errorMsg,
+    instrucao: 'Verifique os dados do pedido e tente enviar novamente. Se o problema persistir, entre em contato com o suporte.'
+  };
+}
+
 export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   const { usuario, temPermissao } = useAuth();
   const { companies: companiesRaw } = useCompanies();
@@ -564,7 +602,25 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
               : [],
           };
 
-          setFormData(vendaComDataCorrigida);
+          // Carregar erro ERP do localStorage (se houver) para Rascunhos
+          let formComErro = vendaComDataCorrigida;
+          if (vendaComDataCorrigida.status === 'Rascunho' && vendaId) {
+            try {
+              const erroSalvo = localStorage.getItem(`erp-erro-${vendaId}`);
+              if (erroSalvo) {
+                formComErro = {
+                  ...vendaComDataCorrigida,
+                  integracaoERP: {
+                    ...vendaComDataCorrigida.integracaoERP,
+                    erroEnvio: true,
+                    erroSincronizacao: erroSalvo,
+                  },
+                };
+              }
+            } catch (e) { /* ignore */ }
+          }
+
+          setFormData(formComErro);
           setDadosOriginais(vendaComDataCorrigida);
           setClienteJaCarregado(true);
         } else {
@@ -1860,19 +1916,39 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         if (!vendaCompleta.itens || vendaCompleta.itens.length === 0) {
           toast.error('Pedido salvo como rascunho — sem itens para enviar ao ERP.');
         } else {
-          toast.info('Pedido salvo. Enviando ao ERP...');
+          toast.info('Pedido salvo. Enviando ao ERP...', { id: 'erp-envio' });
           try {
             const resposta = await api.vendas.enviarAoERP(idParaERP);
             const tinyPedidoId = resposta?.tiny?.pedido_id || resposta?.tiny?.pedidoId;
             // Sucesso: atualizar status para 'Em aberto'
             await api.update('vendas', idParaERP, { status: 'Em aberto' });
+            // Limpar erro salvo
+            try { localStorage.removeItem(`erp-erro-${idParaERP}`); } catch (e) { /* ignore */ }
             toast.success(tinyPedidoId
               ? `Pedido enviado ao ERP com sucesso! (ID Tiny: ${tinyPedidoId})`
-              : 'Pedido enviado ao ERP com sucesso!');
+              : 'Pedido enviado ao ERP com sucesso!', { id: 'erp-envio' });
           } catch (erpError: any) {
             console.error('❌ Erro ao enviar ao ERP:', erpError);
-            // Erro: pedido fica em Rascunho com indicação de erro
-            toast.error(`Pedido salvo como rascunho. Erro ao enviar ao ERP: ${erpError?.message || 'Erro desconhecido'}. Você pode reenviar pela edição do pedido.`, { duration: 8000 });
+            const erroMsg = erpError?.message || 'Erro desconhecido';
+            const erroDetalhado = getErpErrorDetalhado(erroMsg);
+            // Setar erro no formData para exibir o Alert no form
+            const idErro = idParaERP || pedidoSalvo?.id;
+            setFormData(prev => ({
+              ...prev,
+              integracaoERP: {
+                ...prev.integracaoERP,
+                erroEnvio: true,
+                erroSincronizacao: erroMsg,
+              },
+            }));
+            // Persistir erro no localStorage para exibir ao reabrir o Rascunho
+            if (idErro) {
+              try {
+                localStorage.setItem(`erp-erro-${idErro}`, erroMsg);
+              } catch (e) { /* ignore */ }
+            }
+            // Toast resumido
+            toast.error(`Pedido salvo como rascunho. ${erroDetalhado.erro}`, { id: 'erp-envio', duration: 8000 });
           }
         }
       } else {
@@ -2106,8 +2182,16 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             <AlertTriangle className="h-4 w-4 text-orange-600" />
             <AlertTitle className="text-orange-800">Pedido não enviado ao ERP</AlertTitle>
             <AlertDescription className="text-orange-700">
-              <p>{formData.integracaoERP?.erroSincronizacao || 'Ocorreu um erro ao enviar este pedido ao ERP.'}</p>
-              <p className="mt-1 text-sm">Para reenviar, acesse a lista de pedidos e clique em "Reenviar ao ERP".</p>
+              {(() => {
+                const detalhado = getErpErrorDetalhado(formData.integracaoERP?.erroSincronizacao || '');
+                return (
+                  <>
+                    <p>{detalhado.erro}</p>
+                    <p className="mt-2 text-sm font-medium">Como resolver:</p>
+                    <p className="text-sm">{detalhado.instrucao}</p>
+                  </>
+                );
+              })()}
             </AlertDescription>
           </Alert>
         )}
