@@ -86,6 +86,7 @@ export function CommissionsManagement({
   const [pagamentos, setPagamentos] = useState<PagamentoPeriodo[]>([]);
   const [vendedores, setVendedores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [previewData, setPreviewData] = useState<Array<{ vendedor_id: string; vendedor_nome: string; qtd_pedidos: number; valor_total_pedidos: number; comissao_estimada: number }>>([]);
 
   const [relatorioSelecionado, setRelatorioSelecionado] = useState<RelatorioComissoesCompleto | null>(null);
   const [visualizandoRelatorio, setVisualizandoRelatorio] = useState(false);
@@ -226,12 +227,13 @@ export function CommissionsManagement({
       setLoading(true);
       console.log('[COMISSOES] Carregando dados para o período:', periodoSelecionado);
 
-      const [relatoriosAPI, lancamentosAPI, pagamentosAPI, comissoesVendasAPI, vendedoresAPI] = await Promise.all([
+      const [relatoriosAPI, lancamentosAPI, pagamentosAPI, comissoesVendasAPI, vendedoresAPI, previewAPI] = await Promise.all([
         api.comissoes.getRelatorio(periodoSelecionado),
         api.comissoes.getLancamentos(periodoSelecionado),
         api.comissoes.getPagamentos(periodoSelecionado),
         api.comissoes.getVendas(periodoSelecionado),
         api.get('vendedores'),
+        api.comissoes.getPreview(periodoSelecionado).catch(() => []),
       ]);
 
       // Mapear Relatórios (RPC já retorna totais calculados, mas o frontend pode recalcular se quiser)
@@ -306,11 +308,21 @@ export function CommissionsManagement({
       setComissoesVendas(vendasMapeadas);
       setVendedores(Array.isArray(vendedoresAPI) ? vendedoresAPI : []);
 
+      // Preview de comissões futuras
+      setPreviewData(Array.isArray(previewAPI) ? previewAPI.map((p: any) => ({
+        vendedor_id: p.vendedor_id,
+        vendedor_nome: p.vendedor_nome,
+        qtd_pedidos: Number(p.qtd_pedidos || 0),
+        valor_total_pedidos: Number(p.valor_total_pedidos || 0),
+        comissao_estimada: Number(p.comissao_estimada || 0),
+      })) : []);
+
       console.log('[COMISSOES] Dados carregados:', {
         relatorios: relatoriosMapeados.length,
         lancamentos: lancamentosMapeados.length,
         pagamentos: pagamentosMapeados.length,
-        vendas: vendasMapeadas.length
+        vendas: vendasMapeadas.length,
+        preview: Array.isArray(previewAPI) ? previewAPI.length : 0
       });
 
     } catch (error) {
@@ -836,16 +848,12 @@ export function CommissionsManagement({
       setLoading(true);
       toast.info('Calculando comissões de vendas concluídas...');
 
-      const resultado = await api.create('comissoesVendas/calcular', {});
+      const resultado = await api.comissoes.calcularPendentes();
 
-      if (resultado.success) {
-        toast.success(resultado.message, { duration: 5000 });
+      toast.success(resultado.message || `${resultado.gerados} comissão(ões) gerada(s)`, { duration: 5000 });
 
-        // Recarregar dados
-        await carregarComissoes();
-      } else {
-        toast.error('Erro ao calcular comissões');
-      }
+      // Recarregar dados
+      await carregarComissoes();
     } catch (error: any) {
       console.error('[COMISSOES] Erro ao calcular comissões pendentes:', error);
       toast.error(`Erro ao calcular comissões: ${error.message || 'Erro desconhecido'}`);
@@ -1065,6 +1073,35 @@ export function CommissionsManagement({
           </CardContent>
         </Card>
       </div>
+
+      {/* Preview - Pedidos aguardando faturamento */}
+      {previewData.length > 0 && (
+        <Card className="border-blue-200 bg-blue-50/50">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-blue-600" />
+              <CardTitle className="text-sm font-medium text-blue-900">Previsão de Comissões</CardTitle>
+            </div>
+            <CardDescription className="text-blue-700">
+              Pedidos enviados aguardando faturamento — valores estimados
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {previewData.map((p) => (
+                <div key={p.vendedor_id} className="flex items-center justify-between text-sm py-1 border-b border-blue-100 last:border-0">
+                  <span className="font-medium text-blue-900">{p.vendedor_nome}</span>
+                  <div className="flex items-center gap-4 text-blue-700">
+                    <span>{p.qtd_pedidos} pedido{p.qtd_pedidos !== 1 ? 's' : ''}</span>
+                    <span>Vendas: {formatCurrency(p.valor_total_pedidos)}</span>
+                    <span className="font-semibold">Comissão est.: {formatCurrency(p.comissao_estimada)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabela de Relatórios */}
       <Card>

@@ -1548,7 +1548,7 @@ export function SalesPage({
                 <TabsTrigger value="all" onClick={() => setStatusFilter("all")} className="whitespace-nowrap">
                   Todas ({tabCounts.all || 0})
                 </TabsTrigger>
-                <TabsTrigger value="Rascunho" onClick={() => setStatusFilter("Rascunho")} className="whitespace-nowrap text-red-500 data-[state=active]:text-red-600">
+                <TabsTrigger value="Rascunho" onClick={() => setStatusFilter("Rascunho")} className={`whitespace-nowrap ${(tabCounts['Rascunho'] || 0) > 0 ? 'text-red-500 data-[state=active]:text-red-600' : ''}`}>
                   Rascunho ({tabCounts['Rascunho'] || 0})
                 </TabsTrigger>
                 <TabsTrigger value="Em aberto" onClick={() => setStatusFilter("Em aberto")} className="whitespace-nowrap">

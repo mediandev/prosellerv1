@@ -148,6 +148,30 @@ serve(async (req) => {
         }
 
         /* =========================
+           GET /preview
+           ========================= */
+        if (action === 'preview' && req.method === 'GET') {
+            const periodo = url.searchParams.get('periodo')
+            const vendedorId = url.searchParams.get('vendedorId') || url.searchParams.get('vendedor_id')
+
+            if (!periodo) throw new Error('Parâmetro periodo (YYYY-MM) é obrigatório')
+
+            if (user.tipo === 'vendedor') {
+                if (vendedorId && vendedorId !== user.id) {
+                    throw new Error('Você não tem permissão para ver preview de outros vendedores')
+                }
+            }
+
+            const { data, error } = await supabase.rpc('get_preview_comissoes', {
+                p_periodo: periodo,
+                p_vendedor_uuid: user.tipo === 'vendedor' ? user.id : (vendedorId || null)
+            })
+
+            if (error) throw error
+            return createHttpSuccessResponse(data)
+        }
+
+        /* =========================
            GET /lancamentos
            ========================= */
         if (action === 'lancamentos' && req.method === 'GET') {
@@ -349,6 +373,58 @@ serve(async (req) => {
 
             if (error) throw error
             return createHttpSuccessResponse(data, 200)
+        }
+
+        /* =========================
+           POST /calcular-pendentes
+           ========================= */
+        if (action === 'calcular-pendentes' && req.method === 'POST') {
+            if (user.tipo !== 'backoffice') {
+                throw new Error('Apenas backoffice pode calcular comissões')
+            }
+
+            // Buscar pedidos faturados sem comissão gerada
+            const { data: pedidosPendentes, error: queryError } = await supabase
+                .from('pedido_venda')
+                .select('"pedido_venda_ID", updated_at')
+                .eq('status', 'Faturado')
+                .not('vendedor_uuid', 'is', null)
+
+            if (queryError) throw queryError
+
+            // Filtrar os que já têm comissão
+            const { data: comissoesExistentes, error: comError } = await supabase
+                .from('vendedor_comissão')
+                .select('pedido_id')
+
+            if (comError) throw comError
+
+            const pedidosComComissao = new Set((comissoesExistentes || []).map((c: any) => c.pedido_id))
+            const pedidosSemComissao = (pedidosPendentes || []).filter((p: any) => !pedidosComComissao.has(p.pedido_venda_ID))
+
+            let gerados = 0
+            let erros = 0
+            for (const pedido of pedidosSemComissao) {
+                const dataFat = pedido.updated_at ? new Date(pedido.updated_at).toISOString().split('T')[0] : null
+                const { error: rpcError } = await supabase.rpc('generate_vendedor_comissao', {
+                    p_pedido_id: pedido.pedido_venda_ID,
+                    p_data_faturamento: dataFat
+                })
+                if (rpcError) {
+                    console.error(`[COMISSOES] Erro ao gerar comissão para pedido ${pedido.pedido_venda_ID}:`, rpcError.message)
+                    erros++
+                } else {
+                    gerados++
+                }
+            }
+
+            return createHttpSuccessResponse({
+                success: true,
+                message: `${gerados} comissão(ões) gerada(s)${erros > 0 ? `, ${erros} erro(s)` : ''}`,
+                gerados,
+                erros,
+                total_pendentes: pedidosSemComissao.length
+            })
         }
 
         /* =========================

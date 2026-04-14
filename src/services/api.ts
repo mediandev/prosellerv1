@@ -1012,6 +1012,18 @@ export const api = {
       }
     },
 
+    getPreview: async (periodo: string, vendedorId?: string) => {
+      try {
+        const params: Record<string, string> = { periodo };
+        if (vendedorId) params.vendedorId = vendedorId;
+        const response = await callEdgeFunction('comissoes-v2/preview', 'GET', undefined, undefined, params);
+        return response.data || response;
+      } catch (error) {
+        console.error('[API] Erro ao buscar preview de comissões:', error);
+        throw error;
+      }
+    },
+
     getVendas: async (periodo: string, vendedorId?: string) => {
       try {
         const params: Record<string, string> = {};
@@ -1155,6 +1167,16 @@ export const api = {
         return response.data || response;
       } catch (error) {
         console.error('[API] Erro ao fechar período:', error);
+        throw error;
+      }
+    },
+
+    calcularPendentes: async () => {
+      try {
+        const response = await callEdgeFunction('comissoes-v2/calcular-pendentes', 'POST');
+        return response;
+      } catch (error) {
+        console.error('[API] Erro ao calcular comissões pendentes:', error);
         throw error;
       }
     },

@@ -18,7 +18,7 @@ import { api } from '../services/api';
 import { getNotificacoesWithCache, clearNotificacoesCache } from '../services/notificacoesCache';
 
 interface NotificationsMenuProps {
-  onNavigate: (page: string) => void;
+  onNavigate: (page: string, vendaId?: string) => void;
 }
 
 export function NotificationsMenu({ onNavigate }: NotificationsMenuProps) {
@@ -26,6 +26,7 @@ export function NotificationsMenu({ onNavigate }: NotificationsMenuProps) {
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [loading, setLoading] = useState(false);
   const [rascunhosCount, setRascunhosCount] = useState(0);
+  const [rascunhoIds, setRascunhoIds] = useState<string[]>([]);
 
   // Buscar contagem de pedidos em rascunho
   const loadRascunhos = async () => {
@@ -34,6 +35,7 @@ export function NotificationsMenu({ onNavigate }: NotificationsMenuProps) {
       const vendas = await api.get('vendas', { params: { status: 'Rascunho' } });
       const lista = Array.isArray(vendas) ? vendas : [];
       setRascunhosCount(lista.length);
+      setRascunhoIds(lista.map((v: any) => v.id).filter(Boolean));
     } catch {
       // silently fail
     }
@@ -203,7 +205,11 @@ export function NotificationsMenu({ onNavigate }: NotificationsMenuProps) {
 
     // Navegar baseado no tipo de notificação
     if (notificacao.tipo === 'pedidos_rascunho' as any) {
-      onNavigate('pedidos');
+      if (rascunhoIds.length === 1) {
+        onNavigate('vendas', rascunhoIds[0]);
+      } else {
+        onNavigate('vendas');
+      }
     } else if (notificacao.tipo === 'cliente_pendente_aprovacao') {
       onNavigate('clientes-pendentes');
     } else if (notificacao.dadosAdicionais?.clienteId) {

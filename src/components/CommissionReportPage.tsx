@@ -450,16 +450,14 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
   };
 
   const handleEnviarEmail = async () => {
-    // Busca o vendedor para obter o e-mail atual
-    const vendedorEmail = relatorioCompleto?.vendedor;
+    const email = relatorioCompleto?.vendedorEmail;
 
-    if (!vendedorEmail || !vendedorEmail.email) {
+    if (!email) {
       toast.error('Vendedor não possui e-mail cadastrado');
       return;
     }
 
-    // Abre dialog de confirmação com o e-mail
-    setEmailDestino(vendedorEmail.email);
+    setEmailDestino(email);
     setDialogEmail(true);
   };
 

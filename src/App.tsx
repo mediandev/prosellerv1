@@ -1190,9 +1190,9 @@ function AppContent() {
             </Button>
             
             <div className="flex-1">
-              <h2 className="text-2xl font-bold">{pageConfig[currentPage].title}</h2>
+              <h2 className="text-2xl font-bold">{pageConfig[currentPage]?.title || ''}</h2>
               <p className="text-sm text-muted-foreground">
-                {pageConfig[currentPage].description}
+                {pageConfig[currentPage]?.description || ''}
               </p>
             </div>
             
@@ -1208,7 +1208,14 @@ function AppContent() {
             <DemoModeBadge />
             
             {/* Menu de Notificações */}
-            <NotificationsMenu onNavigate={(page) => handlePageChange(page as Page)} />
+            <NotificationsMenu onNavigate={(page, vendaId) => {
+              if (page === 'vendas' && vendaId) {
+                handleVisualizarVenda(vendaId);
+              } else {
+                const validPage = page in pageConfig ? page as Page : 'vendas';
+                handlePageChange(validPage);
+              }
+            }} />
             
             {/* Botão de perfil no header mobile */}
             {currentPage !== "perfil" && (

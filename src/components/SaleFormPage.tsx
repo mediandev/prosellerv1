@@ -1922,11 +1922,24 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
             const tinyPedidoId = resposta?.tiny?.pedido_id || resposta?.tiny?.pedidoId;
             // Sucesso: atualizar status para 'Em aberto'
             await api.update('vendas', idParaERP, { status: 'Em aberto' });
+            // Bloquear edição imediatamente no estado local
+            setFormData(prev => ({
+              ...prev,
+              status: 'Em aberto',
+              integracaoERP: {
+                ...prev.integracaoERP,
+                erpPedidoId: tinyPedidoId || 'enviado',
+                erroEnvio: false,
+                erroSincronizacao: undefined,
+              },
+            }));
             // Limpar erro salvo
             try { localStorage.removeItem(`erp-erro-${idParaERP}`); } catch (e) { /* ignore */ }
             toast.success(tinyPedidoId
               ? `Pedido enviado ao ERP com sucesso! (ID Tiny: ${tinyPedidoId})`
               : 'Pedido enviado ao ERP com sucesso!', { id: 'erp-envio' });
+            // Redirecionar para listagem após sucesso
+            setTimeout(() => onVoltar(), 1500);
           } catch (erpError: any) {
             console.error('❌ Erro ao enviar ao ERP:', erpError);
             const erroMsg = erpError?.message || 'Erro desconhecido';
@@ -2147,12 +2160,26 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                 {modo === 'criar' ? 'Novo Pedido de Venda' :
                   modoAtual === 'editar' ? 'Editar Pedido de Venda' :
                     'Visualizar Pedido de Venda'}
-                {/* ✅ NOVO: Badge indicando Rascunho */}
-                {formData.status === 'Rascunho' && (
-                  <Badge variant="outline" className="text-gray-500">
-                    Rascunho
-                  </Badge>
-                )}
+                {formData.status && (() => {
+                  const statusStyles: Record<string, { variant: "default" | "secondary" | "outline" | "destructive"; color: string }> = {
+                    'Rascunho': { variant: 'outline', color: 'text-gray-500' },
+                    'Em aberto': { variant: 'secondary', color: 'text-amber-700' },
+                    'Aprovado': { variant: 'secondary', color: 'text-blue-500' },
+                    'Preparando envio': { variant: 'secondary', color: 'text-purple-500' },
+                    'Faturado': { variant: 'default', color: 'text-green-600' },
+                    'Pronto para envio': { variant: 'secondary', color: 'text-indigo-600' },
+                    'Enviado': { variant: 'default', color: 'text-cyan-500' },
+                    'Entregue': { variant: 'default', color: 'text-emerald-600' },
+                    'Não Entregue': { variant: 'destructive', color: 'text-orange-600' },
+                    'Cancelado': { variant: 'destructive', color: 'text-red-500' },
+                  };
+                  const style = statusStyles[formData.status] || { variant: 'outline' as const, color: 'text-gray-500' };
+                  return (
+                    <Badge variant={style.variant} className={style.color}>
+                      {formData.status}
+                    </Badge>
+                  );
+                })()}
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {formData.numero || 'Preencha as informações do pedido'}

@@ -409,7 +409,9 @@ serve(async (req) => {
       user_login: body.user_login ? sanitizeInput(body.user_login).trim() : null,
       auth_user_id: body.auth_user_id || null,
       permissoes: body.permissoes !== undefined
-        ? sanitizeAndValidatePermissionIds(body.permissoes)
+        ? (body.tipo === 'backoffice'
+            ? body.permissoes.filter((p: string) => typeof p === 'string').map((p: string) => sanitizeInput(p).trim()).filter((p: string) => p.length > 0)
+            : sanitizeAndValidatePermissionIds(body.permissoes))
         : null,
     }
 
