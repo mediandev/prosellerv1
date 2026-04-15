@@ -554,13 +554,27 @@ serve(async (req) => {
         p_set_requisitos_logisticos: requisitosLogisticos.hasValue,
         p_requisitos_logisticos: requisitosLogisticos.value,
         p_telefone: body.telefoneFixoPrincipal ?? body.telefone ?? body.contato?.telefoneFixoPrincipal ?? null,
-        p_telefone_adicional: body.telefoneCelularPrincipal ?? '',
-        p_website: body.site ?? '',
+        p_telefone_adicional: body.telefoneCelularPrincipal ?? body.contato?.telefoneCelularPrincipal ?? '',
+        p_website: body.site ?? body.contato?.site ?? '',
         p_email: body.emailPrincipal ?? body.email ?? body.contato?.emailPrincipal ?? '',
+        p_email_nf: body.emailNFe ?? body.contato?.emailNFe ?? null,
+        p_observacao_contato: body.observacaoContato ?? body.contato?.observacao ?? null,
+        p_cep: body.cep ?? body.endereco?.cep ?? null,
+        p_rua: body.logradouro ?? body.endereco?.logradouro ?? body.endereco?.rua ?? null,
+        p_numero: body.numero ?? body.endereco?.numero ?? null,
+        p_complemento: body.complemento ?? body.endereco?.complemento ?? null,
+        p_bairro: body.bairro ?? body.endereco?.bairro ?? null,
+        p_cidade: body.municipio ?? body.endereco?.municipio ?? body.endereco?.cidade ?? null,
+        p_uf: body.uf ?? body.endereco?.uf ?? null,
       })
       if (rpcError) throw new Error(rpcError.message)
-      const row = Array.isArray(rpcData) && rpcData[0] ? rpcData[0] : rpcData
-      const updated = mapClienteListItem({ ...row, cliente_id: idNum } as Record<string, unknown>)
+      // Buscar dados completos após update para retornar ao frontend
+      const { data: completeData, error: completeError } = await supabase.rpc('get_cliente_completo_v2', {
+        p_cliente_id: idNum,
+        p_requesting_user_id: user.id,
+      })
+      if (completeError) throw new Error(completeError.message)
+      const updated = mapClienteCompleto(completeData as any)
       const duration = Date.now() - startTime
       return createHttpSuccessResponse(updated, 200, { userId: user.id, duration: `${duration}ms` })
     }
