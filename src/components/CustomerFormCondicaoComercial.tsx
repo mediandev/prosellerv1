@@ -99,15 +99,50 @@ export function CustomerFormCondicaoComercial({
           }
         }
         
-        // Normalizar vendedorAtribuido se necessário
+        // Normalizar vendedorAtribuido - enriquecer com nome/email da lista de vendedores
         if (formData.vendedorAtribuido && formData.vendedorAtribuido.id && vendedoresAPI.length > 0) {
-          const vendedorAtual = vendedoresAPI.find((v: any) => 
+          const vendedorAtual = vendedoresAPI.find((v: any) =>
             String(v.id) === String(formData.vendedorAtribuido?.id)
           );
-          if (!vendedorAtual) {
-            console.log('[CONDICAO-COMERCIAL] Vendedor não encontrado na lista. ID:', formData.vendedorAtribuido.id);
+          if (vendedorAtual) {
+            // Encontrado pelo ID - atualizar nome/email caso estejam vazios
+            if (!formData.vendedorAtribuido.nome || !formData.vendedorAtribuido.email) {
+              console.log('[CONDICAO-COMERCIAL] Enriquecendo vendedor com dados da lista:', vendedorAtual.id, vendedorAtual.nome);
+              const vendedorObj = {
+                id: vendedorAtual.id,
+                nome: vendedorAtual.nome,
+                email: vendedorAtual.email || '',
+              };
+              updateFormData({
+                vendedorAtribuido: vendedorObj,
+                vendedoresAtribuidos: [vendedorObj],
+              });
+            }
           } else {
-            console.log('[CONDICAO-COMERCIAL] Vendedor encontrado:', vendedorAtual.id, vendedorAtual.nome);
+            console.log('[CONDICAO-COMERCIAL] Vendedor não encontrado na lista pelo ID:', formData.vendedorAtribuido.id);
+            // Tentar encontrar pelo usuarioId (pode vir como id diferente)
+            const vendedorPorUsuarioId = vendedoresAPI.find((v: any) =>
+              String(v.usuarioId) === String(formData.vendedorAtribuido?.id) ||
+              String(v.id) === String(formData.vendedorAtribuido?.id)
+            );
+            // Fallback: buscar pelo email
+            const vendedorFallback = vendedorPorUsuarioId || (
+              formData.vendedorAtribuido.email
+                ? vendedoresAPI.find((v: any) => v.email === formData.vendedorAtribuido?.email)
+                : null
+            );
+            if (vendedorFallback) {
+              console.log('[CONDICAO-COMERCIAL] Vendedor encontrado por fallback, normalizando:', vendedorFallback.id, vendedorFallback.nome);
+              const vendedorObj = {
+                id: vendedorFallback.id,
+                nome: vendedorFallback.nome,
+                email: vendedorFallback.email || '',
+              };
+              updateFormData({
+                vendedorAtribuido: vendedorObj,
+                vendedoresAtribuidos: [vendedorObj],
+              });
+            }
           }
         }
         
@@ -131,6 +166,36 @@ export function CustomerFormCondicaoComercial({
     
     carregarDados();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-normalizar vendedorAtribuido quando formData ou lista de vendedores mudar
+  useEffect(() => {
+    if (!formData.vendedorAtribuido?.id || vendedores.length === 0) return;
+    const currentId = String(formData.vendedorAtribuido.id);
+    const match = vendedores.find((v: any) => String(v.id) === currentId);
+    if (match) {
+      // ID bate - enriquecer nome/email se vazios
+      if (!formData.vendedorAtribuido.nome) {
+        updateFormData({
+          vendedorAtribuido: { id: match.id, nome: match.nome, email: match.email || '' },
+          vendedoresAtribuidos: [{ id: match.id, nome: match.nome, email: match.email || '' }],
+        });
+      }
+    } else {
+      // ID não bate - tentar por usuarioId ou email
+      const fallback = vendedores.find((v: any) =>
+        String(v.usuarioId) === currentId
+      ) || (formData.vendedorAtribuido.email
+        ? vendedores.find((v: any) => v.email === formData.vendedorAtribuido?.email)
+        : null
+      );
+      if (fallback) {
+        updateFormData({
+          vendedorAtribuido: { id: fallback.id, nome: fallback.nome, email: fallback.email || '' },
+          vendedoresAtribuidos: [{ id: fallback.id, nome: fallback.nome, email: fallback.email || '' }],
+        });
+      }
+    }
+  }, [vendedores, formData.vendedorAtribuido?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Opções para os comboboxes
   const empresasOptions = useMemo(
@@ -173,15 +238,17 @@ export function CustomerFormCondicaoComercial({
   const handleVendedorChange = (vendedorId: string) => {
     const vendedor = vendedores.find((v) => v.id === vendedorId);
     if (vendedor) {
-      updateFormData({ 
-        vendedorAtribuido: {
-          id: vendedor.id,
-          nome: vendedor.nome,
-          email: vendedor.email || '',
-        }
+      const vendedorObj = {
+        id: vendedor.id,
+        nome: vendedor.nome,
+        email: vendedor.email || '',
+      };
+      updateFormData({
+        vendedorAtribuido: vendedorObj,
+        vendedoresAtribuidos: [vendedorObj],
       });
     } else {
-      updateFormData({ vendedorAtribuido: undefined });
+      updateFormData({ vendedorAtribuido: undefined, vendedoresAtribuidos: [] });
     }
   };
 
