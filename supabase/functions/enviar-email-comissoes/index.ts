@@ -53,7 +53,7 @@ serve(async (req) => {
 
     // Ler body
     const body = await req.json()
-    const { to, vendedorNome, periodo, totalVendas, totalComissoes, valorLiquido, saldo } = body
+    const { to, vendedorNome, periodo, totalVendas, totalComissoes, valorLiquido, saldo, pdfBase64, pdfFilename } = body
 
     if (!to || !vendedorNome || !periodo) {
       return new Response(JSON.stringify({ error: 'Campos obrigatórios: to, vendedorNome, periodo' }), {
@@ -122,6 +122,12 @@ serve(async (req) => {
         to: [to],
         subject: `Relatório de Comissões - ${periodo}`,
         html,
+        ...(pdfBase64 ? {
+          attachments: [{
+            filename: pdfFilename || `relatorio-comissoes-${periodo}.pdf`,
+            content: pdfBase64,
+          }]
+        } : {}),
       }),
     })
 

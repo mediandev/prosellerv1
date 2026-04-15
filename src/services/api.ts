@@ -539,14 +539,19 @@ function mapClienteFromApi(item: any): any {
     codigoTinyIntegrationRef: item.codigoTinyIntegrationRef ?? item.codigo_tiny_integration_ref ?? undefined,
     codigoGeradoEm: item.codigoGeradoEm ?? item.codigo_gerado_em ?? undefined,
     tipoPessoa: item.tipoPessoa ?? (item.cpfCnpj?.length === 11 || item.cpf_cnpj?.length === 11 ? 'Pessoa Física' : 'Pessoa Jurídica'),
-    refTipoPessoaId: item.refTipoPessoaId ?? item.ref_tipo_pessoa_id ?? item.ref_tipo_pessoa_id_FK != null ? Number(item.ref_tipo_pessoa_id_FK) : undefined,
+    refTipoPessoaId:
+      item.refTipoPessoaId ??
+      item.ref_tipo_pessoa_id ??
+      (item.ref_tipo_pessoa_id_FK != null ? Number(item.ref_tipo_pessoa_id_FK) : undefined),
     cpfCnpj: item.cpfCnpj ?? item.cpf_cnpj ?? '',
     razaoSocial: item.razaoSocial ?? item.nome ?? '',
     nomeFantasia: item.nomeFantasia ?? item.nome_fantasia ?? '',
     inscricaoEstadual: item.inscricaoEstadual ?? item.inscricao_estadual ?? '',
     situacao,
     segmentoMercado: item.segmentoMercado ?? item.segmento_mercado ?? item.tipo_segmento ?? item.segmento_nome ?? '',
-    segmentoId: item.segmentoId ?? item.segmento_id != null ? String(item.segmentoId ?? item.segmento_id) : undefined,
+    segmentoId:
+      item.segmentoId ??
+      (item.segmento_id != null ? String(item.segmento_id) : undefined),
     grupoRede: item.grupoRede ?? item.grupo_id ?? item.grupo_rede_nome ?? item.grupo_rede ?? '',
     grupoId: item.grupoId ?? item.grupo_id ?? item.grupoRede ?? undefined,
     cep: item.cep ?? item.endereco?.cep ?? '',
@@ -1189,6 +1194,8 @@ export const api = {
       totalComissoes?: number;
       valorLiquido?: number;
       saldo?: number;
+      pdfBase64?: string;
+      pdfFilename?: string;
     }) => {
       console.log('[API] Enviando email de relatório de comissões para:', data.to);
       const response = await callEdgeFunction('enviar-email-comissao', 'POST', data);
@@ -4408,6 +4415,5 @@ export const api = {
     return { success: true };
   },
 };
-
 
 

@@ -197,6 +197,238 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     return '';
   };
 
+  const gerarPDFDoc = (): jsPDF => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let yPos = 20;
+
+    // Título
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('RELATORIO DE COMISSOES', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 10;
+
+    // Linha divisória 1
+    doc.setDrawColor(200, 200, 200);
+    doc.line(15, yPos, pageWidth - 15, yPos);
+    yPos += 8;
+
+    // Informações do Vendedor
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('INFORMACOES DO VENDEDOR', 15, yPos);
+    yPos += 8;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Vendedor: ' + dadosRelatorio.vendedorNome, 15, yPos);
+    yPos += 6;
+    doc.text('ID: ' + relatorio.vendedorId, 15, yPos);
+    yPos += 6;
+    doc.text('Periodo: ' + formatPeriodo(relatorio.periodo), 15, yPos);
+    yPos += 6;
+    doc.text('Status: ' + relatorio.status.toUpperCase(), 15, yPos);
+    yPos += 8;
+
+    // Linha divisória 2
+    doc.setDrawColor(200, 200, 200);
+    doc.line(15, yPos, pageWidth - 15, yPos);
+    yPos += 8;
+
+    // Resumo Financeiro
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('RESUMO FINANCEIRO', 15, yPos);
+    yPos += 8;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Total de Vendas: ' + formatCurrency(dadosRelatorio.totalVendas), 15, yPos);
+    doc.text('(' + dadosRelatorio.quantidadeVendas + ' ' + (dadosRelatorio.quantidadeVendas === 1 ? 'venda' : 'vendas') + ')', 80, yPos);
+    yPos += 6;
+    doc.text('Total de Comissoes: ' + formatCurrency(dadosRelatorio.totalComissoes), 15, yPos);
+    yPos += 6;
+
+    if (dadosRelatorio.totalCreditos > 0) {
+      doc.setTextColor(0, 150, 0);
+      doc.text('Creditos: +' + formatCurrency(dadosRelatorio.totalCreditos), 15, yPos);
+      doc.setTextColor(0, 0, 0);
+      yPos += 6;
+    }
+
+    if (dadosRelatorio.totalDebitos > 0) {
+      doc.setTextColor(200, 0, 0);
+      doc.text('Debitos: -' + formatCurrency(dadosRelatorio.totalDebitos), 15, yPos);
+      doc.setTextColor(0, 0, 0);
+      yPos += 6;
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('Valor Liquido: ' + formatCurrency(relatorio.valorLiquido), 15, yPos);
+    yPos += 6;
+
+    doc.setTextColor(0, 150, 0);
+    doc.text('Total Pago: ' + formatCurrency(relatorio.totalPago), 15, yPos);
+    doc.setTextColor(0, 0, 0);
+    yPos += 6;
+
+    doc.setFont('helvetica', 'bold');
+    if (saldoDevedorCalculado > 0) {
+      doc.setTextColor(200, 0, 0);
+    } else if (saldoDevedorCalculado < 0) {
+      doc.setTextColor(0, 150, 0);
+    }
+    doc.text('Saldo: ' + formatCurrency(saldoDevedorCalculado), 15, yPos);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'normal');
+    yPos += 8;
+
+    // Linha divisória 3
+    doc.setDrawColor(200, 200, 200);
+    doc.line(15, yPos, pageWidth - 15, yPos);
+    yPos += 8;
+
+    // Tabela de Vendas
+    if (dadosRelatorio.vendas.length > 0) {
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('VENDAS DO PERIODO (' + dadosRelatorio.quantidadeVendas + ')', 15, yPos);
+      yPos += 5;
+
+      const vendasData = dadosRelatorio.vendas.map(v => [
+        v.vendaId,
+        v.clienteNome.substring(0, 30) + (v.clienteNome.length > 30 ? '...' : ''),
+        format(new Date(v.dataVenda), 'dd/MM/yyyy'),
+        formatCurrency(v.valorTotalVenda),
+        v.percentualComissao + '%',
+        formatCurrency(v.valorComissao)
+      ]);
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [['ID', 'Cliente', 'Data', 'Valor Venda', '%', 'Comissao']],
+        body: vendasData,
+        theme: 'grid',
+        headStyles: { fillColor: [41, 128, 185], fontSize: 9 },
+        bodyStyles: { fontSize: 8 },
+        columnStyles: {
+          0: { cellWidth: 20 },
+          1: { cellWidth: 50 },
+          2: { cellWidth: 25 },
+          3: { cellWidth: 30 },
+          4: { cellWidth: 15 },
+          5: { cellWidth: 30 }
+        }
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Lançamentos Manuais (se houver)
+    if (dadosRelatorio.lancamentosCredito.length > 0 || dadosRelatorio.lancamentosDebito.length > 0) {
+      if (yPos > 250) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('LANCAMENTOS MANUAIS', 15, yPos);
+      yPos += 5;
+
+      const lancamentosData = [
+        ...dadosRelatorio.lancamentosCredito.map(l => [
+          format(new Date(l.data), 'dd/MM/yyyy'),
+          'CREDITO',
+          l.descricao.substring(0, 40) + (l.descricao.length > 40 ? '...' : ''),
+          formatCurrency(l.valor)
+        ]),
+        ...dadosRelatorio.lancamentosDebito.map(l => [
+          format(new Date(l.data), 'dd/MM/yyyy'),
+          'DEBITO',
+          l.descricao.substring(0, 40) + (l.descricao.length > 40 ? '...' : ''),
+          formatCurrency(l.valor)
+        ])
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Data', 'Tipo', 'Descricao', 'Valor']],
+        body: lancamentosData,
+        theme: 'grid',
+        headStyles: { fillColor: [41, 128, 185], fontSize: 9 },
+        bodyStyles: { fontSize: 8 },
+        columnStyles: {
+          0: { cellWidth: 25 },
+          1: { cellWidth: 25 },
+          2: { cellWidth: 90 },
+          3: { cellWidth: 30 }
+        }
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Histórico de Pagamentos (se houver)
+    if (dadosRelatorio.pagamentos.length > 0) {
+      if (yPos > 250) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('HISTORICO DE PAGAMENTOS', 15, yPos);
+      yPos += 5;
+
+      const pagamentosData = dadosRelatorio.pagamentos.map(p => [
+        format(new Date(p.data), 'dd/MM/yyyy'),
+        p.formaPagamento,
+        p.comprovante || '-',
+        formatCurrency(p.valor)
+      ]);
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Data', 'Forma Pagamento', 'Comprovante', 'Valor']],
+        body: pagamentosData,
+        theme: 'grid',
+        headStyles: { fillColor: [41, 128, 185], fontSize: 9 },
+        bodyStyles: { fontSize: 8 },
+        columnStyles: {
+          0: { cellWidth: 25 },
+          1: { cellWidth: 50 },
+          2: { cellWidth: 65 },
+          3: { cellWidth: 30 }
+        }
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Rodapé
+    const totalPages = (doc as any).internal.pages.length - 1;
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text(
+        'Relatorio gerado em ' + format(new Date(), "dd/MM/yyyy 'as' HH:mm", { locale: ptBR }),
+        pageWidth / 2,
+        doc.internal.pageSize.getHeight() - 10,
+        { align: 'center' }
+      );
+      doc.text(
+        'Pagina ' + i + ' de ' + totalPages,
+        pageWidth - 15,
+        doc.internal.pageSize.getHeight() - 10,
+        { align: 'right' }
+      );
+    }
+
+    return doc;
+  };
+
   const handleExportarPDF = () => {
     const fileName = `relatorio-comissoes-${relatorio.vendedorId}-${relatorio.periodo}.pdf`;
 
@@ -204,235 +436,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
       new Promise((resolve, reject) => {
         setTimeout(() => {
           try {
-            const doc = new jsPDF();
-            const pageWidth = doc.internal.pageSize.getWidth();
-            let yPos = 20;
-
-            // Título
-            doc.setFontSize(18);
-            doc.setFont('helvetica', 'bold');
-            doc.text('RELATORIO DE COMISSOES', pageWidth / 2, yPos, { align: 'center' });
-            yPos += 10;
-
-            // Linha divisória 1
-            doc.setDrawColor(200, 200, 200);
-            doc.line(15, yPos, pageWidth - 15, yPos);
-            yPos += 8;
-
-            // Informações do Vendedor
-            doc.setFontSize(12);
-            doc.setFont('helvetica', 'bold');
-            doc.text('INFORMACOES DO VENDEDOR', 15, yPos);
-            yPos += 8;
-
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            doc.text('Vendedor: ' + dadosRelatorio.vendedorNome, 15, yPos);
-            yPos += 6;
-            doc.text('ID: ' + relatorio.vendedorId, 15, yPos);
-            yPos += 6;
-            doc.text('Periodo: ' + formatPeriodo(relatorio.periodo), 15, yPos);
-            yPos += 6;
-            doc.text('Status: ' + relatorio.status.toUpperCase(), 15, yPos);
-            yPos += 8;
-
-            // Linha divisória 2
-            doc.setDrawColor(200, 200, 200);
-            doc.line(15, yPos, pageWidth - 15, yPos);
-            yPos += 8;
-
-            // Resumo Financeiro
-            doc.setFontSize(12);
-            doc.setFont('helvetica', 'bold');
-            doc.text('RESUMO FINANCEIRO', 15, yPos);
-            yPos += 8;
-
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            doc.text('Total de Vendas: ' + formatCurrency(dadosRelatorio.totalVendas), 15, yPos);
-            doc.text('(' + dadosRelatorio.quantidadeVendas + ' ' + (dadosRelatorio.quantidadeVendas === 1 ? 'venda' : 'vendas') + ')', 80, yPos);
-            yPos += 6;
-            doc.text('Total de Comissoes: ' + formatCurrency(dadosRelatorio.totalComissoes), 15, yPos);
-            yPos += 6;
-
-            if (dadosRelatorio.totalCreditos > 0) {
-              doc.setTextColor(0, 150, 0);
-              doc.text('Creditos: +' + formatCurrency(dadosRelatorio.totalCreditos), 15, yPos);
-              doc.setTextColor(0, 0, 0);
-              yPos += 6;
-            }
-
-            if (dadosRelatorio.totalDebitos > 0) {
-              doc.setTextColor(200, 0, 0);
-              doc.text('Debitos: -' + formatCurrency(dadosRelatorio.totalDebitos), 15, yPos);
-              doc.setTextColor(0, 0, 0);
-              yPos += 6;
-            }
-
-            doc.setFont('helvetica', 'bold');
-            doc.text('Valor Liquido: ' + formatCurrency(relatorio.valorLiquido), 15, yPos);
-            yPos += 6;
-
-            doc.setTextColor(0, 150, 0);
-            doc.text('Total Pago: ' + formatCurrency(relatorio.totalPago), 15, yPos);
-            doc.setTextColor(0, 0, 0);
-            yPos += 6;
-
-            doc.setFont('helvetica', 'bold');
-            if (saldoDevedorCalculado > 0) {
-              doc.setTextColor(200, 0, 0);
-            } else if (saldoDevedorCalculado < 0) {
-              doc.setTextColor(0, 150, 0);
-            }
-            doc.text('Saldo: ' + formatCurrency(saldoDevedorCalculado), 15, yPos);
-            doc.setTextColor(0, 0, 0);
-            doc.setFont('helvetica', 'normal');
-            yPos += 8;
-
-            // Linha divisória 3
-            doc.setDrawColor(200, 200, 200);
-            doc.line(15, yPos, pageWidth - 15, yPos);
-            yPos += 8;
-
-            // Tabela de Vendas
-            if (dadosRelatorio.vendas.length > 0) {
-              doc.setFontSize(12);
-              doc.setFont('helvetica', 'bold');
-              doc.text('VENDAS DO PERIODO (' + dadosRelatorio.quantidadeVendas + ')', 15, yPos);
-              yPos += 5;
-
-              const vendasData = dadosRelatorio.vendas.map(v => [
-                v.vendaId,
-                v.clienteNome.substring(0, 30) + (v.clienteNome.length > 30 ? '...' : ''),
-                format(new Date(v.dataVenda), 'dd/MM/yyyy'),
-                formatCurrency(v.valorTotalVenda),
-                v.percentualComissao + '%',
-                formatCurrency(v.valorComissao)
-              ]);
-
-              autoTable(doc, {
-                startY: yPos,
-                head: [['ID', 'Cliente', 'Data', 'Valor Venda', '%', 'Comissao']],
-                body: vendasData,
-                theme: 'grid',
-                headStyles: { fillColor: [41, 128, 185], fontSize: 9 },
-                bodyStyles: { fontSize: 8 },
-                columnStyles: {
-                  0: { cellWidth: 20 },
-                  1: { cellWidth: 50 },
-                  2: { cellWidth: 25 },
-                  3: { cellWidth: 30 },
-                  4: { cellWidth: 15 },
-                  5: { cellWidth: 30 }
-                }
-              });
-
-              yPos = (doc as any).lastAutoTable.finalY + 10;
-            }
-
-            // Lançamentos Manuais (se houver)
-            if (dadosRelatorio.lancamentosCredito.length > 0 || dadosRelatorio.lancamentosDebito.length > 0) {
-              if (yPos > 250) {
-                doc.addPage();
-                yPos = 20;
-              }
-
-              doc.setFontSize(12);
-              doc.setFont('helvetica', 'bold');
-              doc.text('LANCAMENTOS MANUAIS', 15, yPos);
-              yPos += 5;
-
-              const lancamentosData = [
-                ...dadosRelatorio.lancamentosCredito.map(l => [
-                  format(new Date(l.data), 'dd/MM/yyyy'),
-                  'CREDITO',
-                  l.descricao.substring(0, 40) + (l.descricao.length > 40 ? '...' : ''),
-                  formatCurrency(l.valor)
-                ]),
-                ...dadosRelatorio.lancamentosDebito.map(l => [
-                  format(new Date(l.data), 'dd/MM/yyyy'),
-                  'DEBITO',
-                  l.descricao.substring(0, 40) + (l.descricao.length > 40 ? '...' : ''),
-                  formatCurrency(l.valor)
-                ])
-              ];
-
-              autoTable(doc, {
-                startY: yPos,
-                head: [['Data', 'Tipo', 'Descricao', 'Valor']],
-                body: lancamentosData,
-                theme: 'grid',
-                headStyles: { fillColor: [41, 128, 185], fontSize: 9 },
-                bodyStyles: { fontSize: 8 },
-                columnStyles: {
-                  0: { cellWidth: 25 },
-                  1: { cellWidth: 25 },
-                  2: { cellWidth: 90 },
-                  3: { cellWidth: 30 }
-                }
-              });
-
-              yPos = (doc as any).lastAutoTable.finalY + 10;
-            }
-
-            // Histórico de Pagamentos (se houver)
-            if (dadosRelatorio.pagamentos.length > 0) {
-              if (yPos > 250) {
-                doc.addPage();
-                yPos = 20;
-              }
-
-              doc.setFontSize(12);
-              doc.setFont('helvetica', 'bold');
-              doc.text('HISTORICO DE PAGAMENTOS', 15, yPos);
-              yPos += 5;
-
-              const pagamentosData = dadosRelatorio.pagamentos.map(p => [
-                format(new Date(p.data), 'dd/MM/yyyy'),
-                p.formaPagamento,
-                p.comprovante || '-',
-                formatCurrency(p.valor)
-              ]);
-
-              autoTable(doc, {
-                startY: yPos,
-                head: [['Data', 'Forma Pagamento', 'Comprovante', 'Valor']],
-                body: pagamentosData,
-                theme: 'grid',
-                headStyles: { fillColor: [41, 128, 185], fontSize: 9 },
-                bodyStyles: { fontSize: 8 },
-                columnStyles: {
-                  0: { cellWidth: 25 },
-                  1: { cellWidth: 50 },
-                  2: { cellWidth: 65 },
-                  3: { cellWidth: 30 }
-                }
-              });
-
-              yPos = (doc as any).lastAutoTable.finalY + 10;
-            }
-
-            // Rodapé
-            const totalPages = (doc as any).internal.pages.length - 1;
-            for (let i = 1; i <= totalPages; i++) {
-              doc.setPage(i);
-              doc.setFontSize(8);
-              doc.setTextColor(150, 150, 150);
-              doc.text(
-                'Relatorio gerado em ' + format(new Date(), "dd/MM/yyyy 'as' HH:mm", { locale: ptBR }),
-                pageWidth / 2,
-                doc.internal.pageSize.getHeight() - 10,
-                { align: 'center' }
-              );
-              doc.text(
-                'Pagina ' + i + ' de ' + totalPages,
-                pageWidth - 15,
-                doc.internal.pageSize.getHeight() - 10,
-                { align: 'right' }
-              );
-            }
-
-            // Salva o PDF
+            const doc = gerarPDFDoc();
             doc.save(fileName);
             resolve(fileName);
           } catch (error) {
@@ -466,6 +470,11 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
 
     toast.promise(
       (async () => {
+        // Gerar PDF para anexar ao email
+        const doc = gerarPDFDoc();
+        const pdfFileName = `relatorio-comissoes-${relatorio.vendedorId}-${relatorio.periodo}.pdf`;
+        const pdfBase64 = doc.output('datauristring').split(',')[1];
+
         await api.comissoes.enviarEmailRelatorio({
           to: emailDestino,
           vendedorNome: dadosRelatorio.vendedorNome,
@@ -474,12 +483,14 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
           totalComissoes: dadosRelatorio.totalComissoes,
           valorLiquido: valorLiquidoCalculado,
           saldo: saldoDevedorCalculado,
+          pdfBase64,
+          pdfFilename: pdfFileName,
         });
         return { email: emailDestino };
       })(),
       {
-        loading: 'Enviando relatório por e-mail...',
-        success: ({ email }) => `E-mail enviado com sucesso para ${email}!`,
+        loading: 'Gerando PDF e enviando relatório por e-mail...',
+        success: ({ email }) => `E-mail com PDF enviado com sucesso para ${email}!`,
         error: (err) => `Erro ao enviar e-mail: ${err.message}`,
       }
     );
