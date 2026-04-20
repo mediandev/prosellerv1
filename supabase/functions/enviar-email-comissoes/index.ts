@@ -76,9 +76,9 @@ serve(async (req) => {
             <p>Olá <strong>${vendedorNome}</strong>,</p>
             <p>Segue seu relatório de comissões referente a <strong>${periodo}</strong>:</p>
             <div style="background: #f8f9fa; border-left: 4px solid #667eea; padding: 20px; margin: 20px 0;">
-              <div style="font-size: 14px; color: #666; margin-bottom: 5px;">Total de Comissões</div>
+              <div style="font-size: 14px; color: #666; margin-bottom: 5px;">Saldo</div>
               <div style="font-size: 32px; font-weight: bold; color: #667eea;">
-                ${fmt(totalComissoes ?? 0)}
+                ${fmt(saldo ?? 0)}
               </div>
             </div>
             <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">

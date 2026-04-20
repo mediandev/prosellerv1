@@ -2,11 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Progress } from "./ui/progress";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { 
-  Transaction,
-  calculatePositivation,
-  calculateCustomerDistribution
-} from "../services/dashboardDataService";
+import type { Transaction } from "../services/dashboardDataService";
 import { Users } from "lucide-react";
 import { DashboardFilters } from "./DashboardMetrics";
 import type { DashboardSnapshot } from "../services/dashboardSnapshotService";
@@ -44,31 +40,17 @@ export function CustomerWalletCard({ transactions, currentFilters, onFilterChang
     inactivePercentage: "0.0",
   });
   
-  // Carregar positivação quando transactions ou vendedorNome mudarem
   useEffect(() => {
     if (dashboardWallet?.positivation) {
       setPositivation(dashboardWallet.positivation);
-      return;
     }
-    async function loadPositivation() {
-      const pos = await calculatePositivation(transactions, vendedorNome);
-      setPositivation(pos);
-    }
-    loadPositivation();
-  }, [transactions, vendedorNome, dashboardWallet]);
-  
-  // Carregar distribuição de clientes
+  }, [dashboardWallet]);
+
   useEffect(() => {
     if (dashboardWallet?.distribution) {
       setDistribution(dashboardWallet.distribution);
-      return;
     }
-    async function loadDistribution() {
-      const dist = await calculateCustomerDistribution(vendedorNome);
-      setDistribution(dist);
-    }
-    loadDistribution();
-  }, [vendedorNome, dashboardWallet]);
+  }, [dashboardWallet]);
   
   // Estado local para rastrear qual fatia está selecionada (se houver)
   const selectedStatus = currentFilters.statusClientes.length === 1 ? currentFilters.statusClientes[0] : null;
