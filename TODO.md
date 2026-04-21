@@ -9,17 +9,25 @@
 
 ## 1. Em andamento
 
-**F-001 · Consulta Simples Nacional — fase SPEC concluída, aguardando aprovação e resolução de DPs.**
+**F-001 · Consulta Simples Nacional — pré-execução concluída, aguardando DPs e aplicação da migration.**
 
-- [x] SPEC redigida em `docs/specs/SPEC.md` (6 RFs, 8 CAs, 7 CBs).
-- [x] Schemas Zod em `packages/shared/types/` (api, cliente, natureza-operacao, simples-nacional).
-- [x] CONTRACTS.md espelho em `docs/contracts/CONTRACTS.md`.
-- [x] ADR-001 (feature flag via env var), ADR-002 (ReceitaWS), ADR-003 (dual-ID nullable).
-- [x] `zod` adicionado a `package.json`, alias `@shared/*` em `tsconfig.json` + `vite.config.ts`.
+Artefatos produzidos (commits em `main`):
+- [x] SPEC em `docs/specs/SPEC.md` (6 RFs, 8 CAs, 7 CBs) — `cf1ea26`.
+- [x] Schemas Zod em `packages/shared/types/` (api, cliente, natureza-operacao, simples-nacional) — `cf1ea26`.
+- [x] `docs/contracts/CONTRACTS.md` espelho — `cf1ea26`.
+- [x] ADR-001 (feature flag env var), ADR-002 (ReceitaWS), ADR-003 (dual-ID nullable) — `cf1ea26`.
+- [x] `zod@3.23.8` + alias `@shared/*` (tsconfig + vite + package-lock) — `cf1ea26`.
+- [x] `docs/plans/skills-manifest.md` — 5× tool_nativa + 1× MCP Supabase, zero skills novas — `6dba32b`.
+- [x] `docs/plans/cursor-brief.md` — Tarefa 1 (Migration 108) com rollback obrigatório — `6c29740`.
+
+Bloqueadores restantes (impedem começar código de F-001):
 - [ ] **DP-001, DP-002, DP-003** resolvidas com Lucas / dev anterior (ver SPEC §11).
-- [ ] Migration 108 (ADR-003 tem o SQL pronto, aguardando brief Cursor antes de aplicar).
-- [ ] Suíte de testes de integração (Vitest + Supertest) — RNF-005 exige antes do código produção.
+- [ ] **Migration 108 aplicada em staging** via Cursor MCP (brief pronto em `docs/plans/cursor-brief.md §Tarefa 1`). Exige confirmação humana explícita.
+- [ ] **Migration 108 aplicada em produção** após smoke test verde em staging.
+- [ ] **Secrets Supabase** cadastrados: `FEATURE_SIMPLES_NACIONAL_LOOKUP` (valor `"false"` no início) e `RECEITAWS_TOKEN` (plano pago — decisão comercial pendente).
+- [ ] **Suíte Vitest + `deno test`** introduzida como feature própria (RNF-005 + recomendação do skills-manifest §5).
 - [ ] Implementação nas 3 Edge Functions afetadas: `create-cliente-v2`, `tiny-empresa-natureza-operacao-v2`, `tiny-enviar-pedido-venda-v1`.
+- [ ] UI do toggle dual-ID em Configurações › Mapeamento Naturezas Tiny (CA-006).
 
 ---
 
@@ -92,7 +100,13 @@ Criação de `AGENTS.md`, `CLAUDE.md`, `TODO.md`, estrutura `docs/`, `packages/`
 
 ### 🟢 F-001-SPEC · SPEC retroativo de F-001 (Concluída, aguardando aprovação e DPs)
 
-Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `packages/shared/types/{api,cliente,natureza-operacao,simples-nacional}.ts`, ADR-001/002/003, zod em `package.json`, alias `@shared/*`. Código de produção começa após resolução das DPs.
+Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `packages/shared/types/{api,cliente,natureza-operacao,simples-nacional}.ts`, ADR-001/002/003, zod em `package.json`, alias `@shared/*`. Commit: `cf1ea26`.
+
+### 🟢 F-001-PRE · Pré-execução de F-001 (Concluída)
+
+- `/skill-scout` → `docs/plans/skills-manifest.md` (commit `6dba32b`). Zero skills novas.
+- `/cursor-team-protocol` → `docs/plans/cursor-brief.md` Tarefa 1 Migration 108 (commit `6c29740`). Rollback explícito.
+- AGENTS.md/PLAN.md: não alterados (AGENTS já conforme, ≤6 features descarta PLAN).
 
 ---
 
@@ -137,6 +151,9 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 - **Sem lint configurado.** Adicionar ESLint + Prettier em onda dedicada (estimativa: 30 min).
 - **Sem testes.** Tratado em R-5.
 - **Token MCP Supabase hardcoded em `.cursor/MCP.json`** — decisão consciente do dev em manter; arquivo protegido pelo `.gitignore` (case-insensitive agora). Não expor em docs/ADRs públicos.
+- **Deploy é Netlify, sem MCP disponível** — template do Harness v3 assume Vercel. Operação em Netlify fica manual (painel) ou via `netlify` CLI. Identificado em `docs/plans/skills-manifest.md §5`. Não bloqueia F-001.
+- **Supertest não encaixa em Edge Functions Deno** — o TODO §3 R-5 listava "Supertest", mas Edge Functions rodam em Deno (não Node), e Supertest assume Node HTTP server. Recomendação em `docs/plans/skills-manifest.md §5`: usar `deno test` + `supabase functions serve` para integração de Edge Functions, reservando Supertest só se aparecer algum servidor Node no projeto. Atualizar R-5 quando a feature da suíte de testes for aberta.
+- **`npm install` gerou 11 vulnerabilidades auditadas (1 moderate, 8 high, 2 critical)** nas dependências existentes — detectadas ao instalar zod na fase SPEC. Não relacionado a zod; são dependências herdadas. Tratar em onda dedicada de segurança (`npm audit fix` controlado, não `--force`).
 
 ---
 
