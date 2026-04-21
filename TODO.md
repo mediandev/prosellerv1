@@ -9,38 +9,56 @@
 
 ## 1. Em andamento
 
-_Nenhuma feature em código ativo. Próximo passo: onda de reorganização + PRD/SPEC retroativo antes de abrir F-001._
+**F-001 · Consulta Simples Nacional — fase SPEC concluída, aguardando aprovação e resolução de DPs.**
+
+- [x] SPEC redigida em `docs/specs/SPEC.md` (6 RFs, 8 CAs, 7 CBs).
+- [x] Schemas Zod em `packages/shared/types/` (api, cliente, natureza-operacao, simples-nacional).
+- [x] CONTRACTS.md espelho em `docs/contracts/CONTRACTS.md`.
+- [x] ADR-001 (feature flag via env var), ADR-002 (ReceitaWS), ADR-003 (dual-ID nullable).
+- [x] `zod` adicionado a `package.json`, alias `@shared/*` em `tsconfig.json` + `vite.config.ts`.
+- [ ] **DP-001, DP-002, DP-003** resolvidas com Lucas / dev anterior (ver SPEC §11).
+- [ ] Migration 108 (ADR-003 tem o SQL pronto, aguardando brief Cursor antes de aplicar).
+- [ ] Suíte de testes de integração (Vitest + Supertest) — RNF-005 exige antes do código produção.
+- [ ] Implementação nas 3 Edge Functions afetadas: `create-cliente-v2`, `tiny-empresa-natureza-operacao-v2`, `tiny-enviar-pedido-venda-v1`.
 
 ---
 
 ## 2. Backlog — Features priorizadas
 
-### 🔴 F-001 · Consulta Simples Nacional (Alta · Em desenvolvimento na visão do negócio)
+### 🔴 F-001 · Consulta Simples Nacional (Alta · SPEC aprovada, execução aguarda DPs)
 
 **Motivação:** mudanças tributárias em SP exigem identificar clientes optantes do Simples Nacional e ajustar a natureza de operação Tiny conforme o caso.
 
-**Escopo proposto (a ser espec'ado em `docs/specs/SPEC.md` antes de codar):**
-- Adicionar campo `optante_simples_nacional` (boolean) no cadastro de cliente.
-- Consultar API `https://developers.receitaws.com.br/` para preencher o campo:
-  - No momento de criar um cliente novo.
-  - No momento de enviar o pedido ao Tiny (para garantir dado atualizado).
-- Na tela de **Configurações › Mapeamento Naturezas de Operação (Tiny por Empresa)**, permitir **2 IDs Tiny por cada Operação ProSeller** (toggle/checkbox opt-in; padrão 1:1).
-  - Campo 1: ID Tiny quando destinatário **não** é Simples.
-  - Campo 2: ID Tiny quando destinatário **é** Simples.
-- Ao disparar o pedido para o Tiny, escolher o ID correto baseado no cliente.
-- Decisão confirmada (Lucas, 18/abr): usar **ReceitaWS** em vez de SERPRO — ReceitaWS consulta CONSOPT em tempo real, SERPRO é cache.
+**Cobre:** RF-001, RF-002, RF-003, RF-004, RF-005, RF-006 (ver `docs/specs/SPEC.md §9` — tabela de rastreabilidade).
 
-**Critérios de aceite (rascunho — refinar em SPEC):**
-- CA-1: Cliente novo salvo com `optante_simples_nacional` preenchido pela consulta.
-- CA-2: Tela de Mapeamento mostra 1 campo ID Tiny por default; ao marcar toggle, abre 2º campo.
-- CA-3: Pedido enviado para Tiny usa natureza correta conforme optante/não-optante do cliente.
-- CA-4: Falha na ReceitaWS (timeout/quota) não bloqueia criação de cliente — cai em fallback com alerta.
-- CA-5: Teste de integração cobrindo os 4 cenários (Simples+ID1, Simples+ID2, Não-Simples+ID1, Não-Simples com fallback).
+**Critérios de aceite (oficial em SPEC §4):**
+- CA-001 — Cliente novo PJ com ReceitaWS OK → campos populados.
+- CA-002 — Cliente novo PF não consulta ReceitaWS.
+- CA-003 — Cliente novo sem CPF/CNPJ → campos `null`.
+- CA-004 — ReceitaWS timeout não bloqueia criação (201).
+- CA-005 — Revalidação no envio Tiny (>30 dias — **DP-001**).
+- CA-006 — UI salva dual-ID.
+- CA-007 — Envio Tiny escolhe natureza correta nos 4 cenários (A, B, C, D).
+- CA-008 — Feature flag desligada preserva comportamento atual.
+
+**Contratos (Zod em `packages/shared/types/`):**
+- `cliente.ts` → `ClienteSimplesNacional`, `ClienteSimplesNacionalUpdate`.
+- `natureza-operacao.ts` → `TinyEmpresaNaturezaOperacao` (com `tinyValorSimples`), `UpsertInput`, `NaturezaOperacaoResolucao` (log).
+- `simples-nacional.ts` → `ReceitaWsResponseSchema`, `SimplesNacionalLookupResult`, `SimplesNacionalLookupLog`.
 
 **Dependências:**
-- Migration nova: adicionar `optante_simples_nacional` em tabela de cliente + campo dual ID Tiny em `tiny_empresa_natureza_operacao`.
-- Feature flag: `feature_simples_nacional_lookup` até rollout controlado.
-- Ligação com Edge Functions: `create-cliente-v2`, `update-cliente-v2`, `tiny-enviar-pedido-venda-v1`, `tiny-empresa-natureza-operacao-v2`.
+- Migration 108 (SQL pronto em `docs/decisions/adr/ADR-003-modelagem-dual-id-natureza-operacao.md §Migration a ser criada`) — **exige brief Cursor + confirmação antes de aplicar em prod**.
+- Feature flag `FEATURE_SIMPLES_NACIONAL_LOOKUP` (env var — ADR-001).
+- Token `RECEITAWS_TOKEN` em secret Supabase (ADR-002, plano pago necessário).
+- Edge Functions afetadas: `create-cliente-v2`, `tiny-empresa-natureza-operacao-v2`, `tiny-enviar-pedido-venda-v1`.
+- **Bloqueador operacional:** Vitest + Supertest precisam entrar no repo **antes** do código produção (RNF-005 + CLAUDE.md regra "área sensível").
+
+**Decisões pendentes (ver SPEC §11):**
+- DP-001 — Janela de revalidação (default 30d).
+- DP-002 — Timeout ReceitaWS (default 5s).
+- DP-003 — `tiny_valor_simples` preenchido com `tiny_valor` vazio (default: bloquear).
+
+**Branch proposta:** `feat/simples-nacional-lookup`. Commits atômicos na ordem: (1) Vitest setup, (2) migration 108, (3) schemas já commitados, (4) Edge Function `create-cliente-v2`, (5) Edge Function `tiny-empresa-natureza-operacao-v2`, (6) Edge Function `tiny-enviar-pedido-venda-v1`, (7) UI de mapeamento dual.
 
 ---
 
@@ -71,6 +89,10 @@ _Nenhuma feature em código ativo. Próximo passo: onda de reorganização + PRD
 ### 🟢 F-000 · Espinha mínima Harness v3 (Concluída, aguardando este commit)
 
 Criação de `AGENTS.md`, `CLAUDE.md`, `TODO.md`, estrutura `docs/`, `packages/`, `tests/`, CI GitHub Actions, scripts npm (`lint`, `typecheck`), correção do `.gitignore`.
+
+### 🟢 F-001-SPEC · SPEC retroativo de F-001 (Concluída, aguardando aprovação e DPs)
+
+Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `packages/shared/types/{api,cliente,natureza-operacao,simples-nacional}.ts`, ADR-001/002/003, zod em `package.json`, alias `@shared/*`. Código de produção começa após resolução das DPs.
 
 ---
 

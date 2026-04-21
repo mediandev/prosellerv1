@@ -18,8 +18,14 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* Path aliases */
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["packages/shared/*"]
+    }
   },
-  "include": ["src", "vite-env.d.ts"],
+  "include": ["src", "packages/shared", "vite-env.d.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
