@@ -55,16 +55,24 @@
             "zod": "^3.23.8"
       },
       "devDependencies": {
+            "@testing-library/jest-dom": "^6.9.1",
+            "@testing-library/react": "^16.3.2",
+            "@testing-library/user-event": "^14.6.1",
             "@types/node": "^20.10.0",
             "@vitejs/plugin-react-swc": "^3.10.2",
+            "@vitest/ui": "^4.1.4",
+            "jsdom": "^29.0.2",
             "supabase": "^2.72.8",
-            "vite": "6.3.5"
+            "vite": "6.3.5",
+            "vitest": "^4.1.4"
       },
       "scripts": {
             "dev": "vite",
             "build": "vite build",
             "typecheck": "tsc --noEmit",
             "lint": "echo \"lint: ESLint ainda nao configurado (ver TODO.md debito tecnico)\" && exit 0",
-            "test": "echo \"test: suite de testes ainda nao introduzida (ver TODO.md onda R-5)\" && exit 0"
+            "test": "vitest run",
+            "test:watch": "vitest",
+            "test:edge": "deno test --allow-read tests/edge/"
       }
 }
