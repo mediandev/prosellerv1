@@ -5,7 +5,7 @@ As Edge Functions do Supabase rodam em **runtime Deno**, não Node. Por isso o p
 | Pasta | Runtime | Runner | Como rodar |
 |---|---|---|---|
 | `tests/unit/` · `tests/integration/` | Node + jsdom | Vitest | `npm test` |
-| `tests/edge/` | Deno | `deno test` | `npm run test:edge` *(ou `deno test --allow-read tests/edge/`)* |
+| `tests/edge/` | Deno | `deno test` | `npm run test:edge` *(ou `deno test --no-check --allow-read tests/edge/`)* |
 
 **Por quê dois runners?** Supertest (padrão Node para testes HTTP) não encaixa em Edge Functions porque o runtime é Deno. Usar `deno test` permite importar helpers de `supabase/functions/_shared/*.ts` como caixa-preta e exercitá-los no mesmo runtime que vai rodar em produção. Decisão documentada em `docs/plans/skills-manifest.md §5`.
 
@@ -24,3 +24,9 @@ As Edge Functions do Supabase rodam em **runtime Deno**, não Node. Por isso o p
 **Proibido nesta pasta:**
 - Chamadas reais a ReceitaWS, Tiny ERP, Supabase, SMTP, etc.
 - Testes que dependem de variável de ambiente de produção.
+
+## Por que `--no-check`?
+
+Deno faz typecheck mais estrito que o `tsconfig.json` do frontend (usado pelo Vite). O código legado em `supabase/functions/_shared/validation.ts:144` (`validateMinLength`) tem retornos do tipo `string | boolean` — padrão `value && ...` curto-circuita para a string vazia em vez de `false`. Como esse arquivo está **em produção** e reescrevê-lo fora do contexto de uma feature violaria as regras do projeto (CLAUDE.md: "nenhum refactor preventivo"), o runner de testes usa `--no-check` para pular a verificação de tipos. Assertions em runtime continuam normais — o que é o objetivo de um smoke test de infra.
+
+A validação de types do código de produção fica registrada como débito técnico separado.

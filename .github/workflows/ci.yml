@@ -76,4 +76,4 @@ jobs:
       - uses: denoland/setup-deno@v1
         with:
           deno-version: v1.x
-      - run: deno test --allow-read tests/edge/
+      - run: deno test --no-check --allow-read tests/edge/

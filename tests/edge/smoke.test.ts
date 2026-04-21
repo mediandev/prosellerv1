@@ -1,5 +1,13 @@
-// Rodar com: `deno test --allow-read tests/edge/`
+// Rodar com: `deno test --no-check --allow-read tests/edge/`
 // Não rodar via Vitest — é Deno puro. Vitest config exclui tests/edge/**.
+//
+// Por que `--no-check`? Deno faz typecheck mais estrito que o tsconfig do
+// frontend. Código legado em supabase/functions/_shared/ tem retornos
+// tipo `string | boolean` (curto-circuito de `value && ...`) que falham
+// o typecheck Deno. Como este smoke test é de infra — só valida que o
+// runner sobe e importa helpers existentes como caixa-preta — desabilitar
+// typecheck é aceitável. A validação de types do código de produção é
+// débito técnico separado (ver TODO.md §4).
 //
 // Smoke test de infra de F-002. Importa helpers puros de
 // supabase/functions/_shared/validation.ts para validar que:

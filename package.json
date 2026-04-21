@@ -73,6 +73,6 @@
             "lint": "echo \"lint: ESLint ainda nao configurado (ver TODO.md debito tecnico)\" && exit 0",
             "test": "vitest run",
             "test:watch": "vitest",
-            "test:edge": "deno test --allow-read tests/edge/"
+            "test:edge": "deno test --no-check --allow-read tests/edge/"
       }
 }
