@@ -18,7 +18,9 @@ Artefatos produzidos (commits em `main`):
 - [x] ADR-001 (feature flag env var), ADR-002 (ReceitaWS), ADR-003 (dual-ID nullable) — `cf1ea26`.
 - [x] `zod@3.23.8` + alias `@shared/*` (tsconfig + vite + package-lock) — `cf1ea26`.
 - [x] `docs/plans/skills-manifest.md` — 5× tool_nativa + 1× MCP Supabase, zero skills novas — `6dba32b`.
-- [x] `docs/plans/cursor-brief.md` — Tarefa 1 (Migration 108) com rollback obrigatório — `6c29740`.
+- [x] `docs/plans/cursor-brief.md` — Tarefa 1 (Migration 108) com rollback obrigatório — `6c29740`; fix Passo 0 PRÉ-MCP — `b3be6bf`.
+
+**F-002 · Setup Vitest + deno test — em execução nesta sessão (branch `feat/setup-vitest`).**
 
 Bloqueadores restantes (impedem começar código de F-001):
 - [ ] **DP-001, DP-002, DP-003** resolvidas com Lucas / dev anterior (ver SPEC §11).
@@ -32,6 +34,32 @@ Bloqueadores restantes (impedem começar código de F-001):
 ---
 
 ## 2. Backlog — Features priorizadas
+
+### 🟠 F-002 · Setup Vitest + deno test (Média · Em andamento)
+
+**Motivação:** pré-requisito do RNF-005 da SPEC de F-001 — área sensível (cliente + pedido + ERP) exige teste de integração antes do código. O repo hoje não tem runner de teste; `npm test` é placeholder. Esta feature **não escreve testes de F-001** — só prepara a infra, para que F-001 possa começar a consumir.
+
+**Escopo:**
+- **Vitest + testing-library + jsdom** para o frontend (`tests/unit/`, `tests/integration/`).
+- **`deno test` nativo** para helpers de Edge Functions (`tests/edge/`). Decisão herdada do skills-manifest §5 — Supertest não encaixa em runtime Deno.
+- 1 smoke test em cada runner, provando que cada um sobe.
+- CI GitHub Actions com job `test` (Vitest) ativado e job `edge-tests` (Deno) novo. `typecheck` e `lint` continuam débito técnico fora de escopo.
+
+**Critérios de aceite:**
+- CA-1: `npm test` verde com ≥1 test em `tests/unit/` passando localmente.
+- CA-2: `deno test --allow-read tests/edge/` verde com ≥1 test passando localmente.
+- CA-3: workflow `ci.yml` ativa o job `test` e adiciona `edge-tests`; ambos rodam em push para `main` e em PRs.
+- CA-4: nenhum teste consome ReceitaWS, Tiny ERP ou Supabase real — tudo é smoke test de infra.
+- CA-5: `npm run build` continua verde após adicionar as devDependencies (Vitest/jsdom não devem quebrar o bundler Vite).
+
+**Fora de escopo:**
+- Testes de CAs de F-001 (vêm na própria F-001 depois das DPs).
+- Coverage threshold (pode virar feature própria).
+- E2E (Playwright) — fica para onda futura se aparecer necessidade.
+
+**Branch:** `feat/setup-vitest`. PR aguardará revisão humana antes de mergear (produção em uso).
+
+---
 
 ### 🔴 F-001 · Consulta Simples Nacional (Alta · SPEC aprovada, execução aguarda DPs)
 
@@ -70,7 +98,7 @@ Bloqueadores restantes (impedem começar código de F-001):
 
 ---
 
-### 🟡 F-002 · Pedidos — Ajustes Manuais (Média · Em análise)
+### 🟡 F-003 · Pedidos — Ajustes Manuais (Média · Em análise)
 
 **Motivação:** cobrir casos fora do roteiro padrão — substituição de NF do Tiny, correções diretas no Tiny — para manter sincronia visual entre ProSeller e ERP sem gerar efeito reverso no ERP.
 
@@ -151,6 +179,7 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 - **Sem lint configurado.** Adicionar ESLint + Prettier em onda dedicada (estimativa: 30 min).
 - **Sem testes.** Tratado em R-5.
 - **Token MCP Supabase hardcoded em `.cursor/MCP.json`** — decisão consciente do dev em manter; arquivo protegido pelo `.gitignore` (case-insensitive agora). Não expor em docs/ADRs públicos.
+- **Commits de documentação feitos com autor genérico `Seu Nome <seu-email@example.com>`** (`cf1ea26`, `6dba32b`, `6c29740`, `2f6bd76`) — histórico imutável em `origin/main`; autor correto (`EduardoSousaPO <eduspires123@gmail.com>`) a partir de `b3be6bf` em diante. Rebase/force-push para corrigir o histórico está **proibido** em `main` (CLAUDE.md).
 - **Deploy é Netlify, sem MCP disponível** — template do Harness v3 assume Vercel. Operação em Netlify fica manual (painel) ou via `netlify` CLI. Identificado em `docs/plans/skills-manifest.md §5`. Não bloqueia F-001.
 - **Supertest não encaixa em Edge Functions Deno** — o TODO §3 R-5 listava "Supertest", mas Edge Functions rodam em Deno (não Node), e Supertest assume Node HTTP server. Recomendação em `docs/plans/skills-manifest.md §5`: usar `deno test` + `supabase functions serve` para integração de Edge Functions, reservando Supertest só se aparecer algum servidor Node no projeto. Atualizar R-5 quando a feature da suíte de testes for aberta.
 - **`npm install` gerou 11 vulnerabilidades auditadas (1 moderate, 8 high, 2 critical)** nas dependências existentes — detectadas ao instalar zod na fase SPEC. Não relacionado a zod; são dependências herdadas. Tratar em onda dedicada de segurança (`npm audit fix` controlado, não `--force`).
