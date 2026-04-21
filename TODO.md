@@ -3,7 +3,7 @@
 > Estado vivo do projeto. Único arquivo de controle, junto com `git log`.
 > Atualizar ao final de cada sessão.
 
-**Última atualização:** 2026-04-20
+**Última atualização:** 2026-04-21
 
 ---
 
@@ -20,8 +20,6 @@ Artefatos produzidos (commits em `main`):
 - [x] `docs/plans/skills-manifest.md` — 5× tool_nativa + 1× MCP Supabase, zero skills novas — `6dba32b`.
 - [x] `docs/plans/cursor-brief.md` — Tarefa 1 (Migration 108) com rollback obrigatório — `6c29740`; fix Passo 0 PRÉ-MCP — `b3be6bf`.
 
-**F-002 · Setup Vitest + deno test — em execução nesta sessão (branch `feat/setup-vitest`).**
-
 Bloqueadores restantes (impedem começar código de F-001):
 - [ ] **DP-001, DP-002, DP-003** resolvidas com Lucas / dev anterior (ver SPEC §11).
 - [ ] **Migration 108 aplicada em staging** via Cursor MCP (brief pronto em `docs/plans/cursor-brief.md §Tarefa 1`). Exige confirmação humana explícita.
@@ -34,32 +32,6 @@ Bloqueadores restantes (impedem começar código de F-001):
 ---
 
 ## 2. Backlog — Features priorizadas
-
-### 🟠 F-002 · Setup Vitest + deno test (Média · Em andamento)
-
-**Motivação:** pré-requisito do RNF-005 da SPEC de F-001 — área sensível (cliente + pedido + ERP) exige teste de integração antes do código. O repo hoje não tem runner de teste; `npm test` é placeholder. Esta feature **não escreve testes de F-001** — só prepara a infra, para que F-001 possa começar a consumir.
-
-**Escopo:**
-- **Vitest + testing-library + jsdom** para o frontend (`tests/unit/`, `tests/integration/`).
-- **`deno test` nativo** para helpers de Edge Functions (`tests/edge/`). Decisão herdada do skills-manifest §5 — Supertest não encaixa em runtime Deno.
-- 1 smoke test em cada runner, provando que cada um sobe.
-- CI GitHub Actions com job `test` (Vitest) ativado e job `edge-tests` (Deno) novo. `typecheck` e `lint` continuam débito técnico fora de escopo.
-
-**Critérios de aceite:**
-- CA-1: `npm test` verde com ≥1 test em `tests/unit/` passando localmente.
-- CA-2: `deno test --allow-read tests/edge/` verde com ≥1 test passando localmente.
-- CA-3: workflow `ci.yml` ativa o job `test` e adiciona `edge-tests`; ambos rodam em push para `main` e em PRs.
-- CA-4: nenhum teste consome ReceitaWS, Tiny ERP ou Supabase real — tudo é smoke test de infra.
-- CA-5: `npm run build` continua verde após adicionar as devDependencies (Vitest/jsdom não devem quebrar o bundler Vite).
-
-**Fora de escopo:**
-- Testes de CAs de F-001 (vêm na própria F-001 depois das DPs).
-- Coverage threshold (pode virar feature própria).
-- E2E (Playwright) — fica para onda futura se aparecer necessidade.
-
-**Branch:** `feat/setup-vitest`. PR aguardará revisão humana antes de mergear (produção em uso).
-
----
 
 ### 🔴 F-001 · Consulta Simples Nacional (Alta · SPEC aprovada, execução aguarda DPs)
 
@@ -204,6 +176,7 @@ _Nenhum registrado aqui. Quando aparecer, usar formato:_
 
 | # | Feature / Commit | SHA | Data |
 |---|---|---|---|
+| 🟢 F-002 | Setup Vitest + deno test (merge PR #1) | `dd50c31` | 2026-04-21 |
 | — | fix: destaque do e-mail de comissões + flash de 10 clientes no dashboard | `ccaa811` | (pré-harness) |
 | — | feat: enviar PDF como anexo no email de comissões (V 1.18) | `50212af` | (pré-harness) |
 | — | fix: endereço/contato no PUT de `clientes-v2` | `217169d` | (pré-harness) |
