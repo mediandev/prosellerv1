@@ -88,16 +88,29 @@ Usando Supabase MCP (projeto xxoiqfraeolsqsmsheue), execute a migration
 
 Ambiente-alvo: [staging | production]  ← escolher explicitamente
 
+Passo 0 (PRÉ-MCP — rodar no git local, obrigatório):
+  Criar o arquivo supabase/migrations/108_simples_nacional_lookup.sql
+  com o conteúdo exato da seção "SQL final" acima.
+  Commit (HEREDOC) com mensagem:
+    feat(db): migration 108 - optante simples nacional + dual tiny_valor
+  Push para origin/main (ou para a branch de F-001, se já houver).
+  Só depois prosseguir para as Etapas com o MCP. Este passo é o que
+  habilita o "git revert" do Rollback — sem o commit do .sql no git,
+  o rollback via `git revert` fica sem alvo.
+
 Etapas:
 1. Confirmar que a feature flag FEATURE_SIMPLES_NACIONAL_LOOKUP está
    ausente ou "false" nos secrets da Edge Function antes de rodar. Se
    estiver "true", ABORTAR.
 2. Criar o arquivo supabase/migrations/108_simples_nacional_lookup.sql
    com o SQL exato do brief (cursor-brief.md Tarefa 1).
+   (Nota: se Passo 0 já rodou, o arquivo já existe no git local — o
+   MCP apenas aplica o SQL, não recria o arquivo.)
 3. Aplicar via `supabase db push` (ou a operação equivalente do MCP).
 4. Rodar o smoke test (SQL abaixo) — confirmar que retorna 3 linhas,
    todas com is_nullable='YES'.
 5. Comitar o arquivo da migration na mesma branch de F-001 no git.
+   (Redundante com o Passo 0 acima se já foi feito — pode pular.)
 6. Reportar: [aplicada | falhou com <erro>].
 
 NÃO ligue a feature flag nesta operação. A flag entra depois, em
@@ -167,7 +180,7 @@ alter table public.cliente
 
 **Pós-rollback:**
 1. Confirmar que smoke test (seção acima) retorna **0 linhas** na query das 3 colunas.
-2. Reverter o commit da migration 108 no git: `git revert <sha-do-commit-da-migration>`.
+2. Reverter o commit da migration 108 no git — é o commit produzido no **Passo 0** da seção "Operação" acima, com mensagem `feat(db): migration 108 - optante simples nacional + dual tiny_valor`. Localize o SHA com `git log --grep='migration 108' -1 --format=%H` e rode `git revert <SHA>`.
 3. Atualizar `TODO.md §1` reinserindo "Migration 108" como bloqueador aberto.
 4. Registrar no `TODO.md §5 Bugs` (se motivação foi falha) ou `§4 Débito técnico` (se foi decisão estratégica) o motivo da reversão.
 
