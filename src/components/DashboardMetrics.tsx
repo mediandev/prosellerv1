@@ -693,11 +693,6 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   // Calculate metrics from filtered transactions with comparison to previous period
   useEffect(() => {
     async function calculateMetrics() {
-      if (serverSnapshot?.summary?.cards) {
-        setMetrics(serverSnapshot.summary.cards);
-        return;
-      }
-
       if (loading || allTransactions.length === 0) {
         setMetrics({
           vendasTotais: 0,
@@ -718,24 +713,32 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
         });
         return;
       }
-      
+
       const { current, previous } = filtrarPorPeriodo(allTransactions, period);
       const filteredCurrent = filterTransactions(current);
       const filteredPrevious = filterTransactions(previous);
-      
+
       // Passar o nome do vendedor se for um vendedor logado
       const vendedorNome = ehVendedor && usuario ? usuario.nome : undefined;
-      
+
       const calculatedMetrics = await calculateMetricsWithComparison(
-        filteredCurrent, 
-        filteredPrevious, 
-        metaMensal, 
+        filteredCurrent,
+        filteredPrevious,
+        metaMensal,
         vendedorNome
       );
-      
+
+      // positivacaoTotal via cálculo local conta só clientes presentes nas transações.
+      // O total real da carteira vem do servidor (respeita visibilidade por usuário).
+      const walletTotal = serverSnapshot?.customerWallet?.distribution?.total;
+      if (typeof walletTotal === 'number' && walletTotal > 0) {
+        calculatedMetrics.positivacaoTotal = walletTotal;
+        calculatedMetrics.positivacao = (calculatedMetrics.positivacaoCount / walletTotal) * 100;
+      }
+
       setMetrics(calculatedMetrics);
     }
-    
+
     calculateMetrics();
   }, [loading, allTransactions, period, selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, ehVendedor, usuario, metaMensal, selectedStatusVendas, selectedCurvaABC, serverSnapshot]);
   const [segmentoPopoverOpen, setSegmentoPopoverOpen] = useState(false);
