@@ -692,25 +692,29 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   
   // Calculate metrics from filtered transactions with comparison to previous period
   useEffect(() => {
+    let cancelled = false;
+
     async function calculateMetrics() {
       if (loading || allTransactions.length === 0) {
-        setMetrics({
-          vendasTotais: 0,
-          vendasTotaisChange: 0,
-          ticketMedio: 0,
-          ticketMedioChange: 0,
-          produtosVendidos: 0,
-          produtosVendidosChange: 0,
-          positivacao: 0,
-          positivacaoChange: 0,
-          positivacaoCount: 0,
-          positivacaoTotal: 0,
-          vendedoresAtivos: 0,
-          vendedoresAtivosChange: 0,
-          porcentagemMeta: 0,
-          porcentagemMetaChange: 0,
-          negociosFechados: 0,
-        });
+        if (!cancelled) {
+          setMetrics({
+            vendasTotais: 0,
+            vendasTotaisChange: 0,
+            ticketMedio: 0,
+            ticketMedioChange: 0,
+            produtosVendidos: 0,
+            produtosVendidosChange: 0,
+            positivacao: 0,
+            positivacaoChange: 0,
+            positivacaoCount: 0,
+            positivacaoTotal: 0,
+            vendedoresAtivos: 0,
+            vendedoresAtivosChange: 0,
+            porcentagemMeta: 0,
+            porcentagemMetaChange: 0,
+            negociosFechados: 0,
+          });
+        }
         return;
       }
 
@@ -728,6 +732,8 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
         vendedorNome
       );
 
+      if (cancelled) return;
+
       // positivacaoTotal via cálculo local conta só clientes presentes nas transações.
       // O total real da carteira vem do servidor (respeita visibilidade por usuário).
       const walletTotal = serverSnapshot?.customerWallet?.distribution?.total;
@@ -740,6 +746,8 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
     }
 
     calculateMetrics();
+
+    return () => { cancelled = true; };
   }, [loading, allTransactions, period, selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, ehVendedor, usuario, metaMensal, selectedStatusVendas, selectedCurvaABC, serverSnapshot]);
   const [segmentoPopoverOpen, setSegmentoPopoverOpen] = useState(false);
   
