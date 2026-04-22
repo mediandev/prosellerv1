@@ -242,6 +242,7 @@ export function CommissionsManagement({
       const relatoriosMapeados = Array.isArray(relatoriosAPI) ? relatoriosAPI.map((r: any) => ({
         id: `REL-${r.vendedor_id}-${r.periodo}`, // ID sintético se não vier do banco
         vendedorId: r.vendedor_id,
+        vendedorNome: r.vendedor_nome || undefined, // RPC faz JOIN com user e retorna o nome
         periodo: r.periodo,
         status: r.status,
         valorLiquido: Number(r.saldo_final || 0), // RPC retorna saldo_final já calculado
@@ -388,7 +389,9 @@ export function CommissionsManagement({
 
     return {
       relatorio,
-      vendedorNome: vendedor?.nome || relatorio.vendedorId,
+      // Ordem de preferência: nome do próprio relatório (RPC com JOIN no user),
+      // depois lookup no api.get('vendedores'), e só então cai pro UUID.
+      vendedorNome: relatorio.vendedorNome || vendedor?.nome || relatorio.vendedorId,
       vendedorEmail: vendedor?.email || "",
       vendedorIniciais: vendedor?.iniciais || "",
       vendas,
