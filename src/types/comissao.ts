@@ -75,6 +75,9 @@ export interface PagamentoPeriodo {
 export interface RelatorioPeriodoComissoes {
   id: string;
   vendedorId: string;
+  // Nome do vendedor vindo direto do RPC (JOIN com user). Fonte autoritativa,
+  // imune a vendedores ausentes da lista api.get('vendedores').
+  vendedorNome?: string;
   periodo: string; // formato: "2025-10" (ano-mes) ou "2025" (ano)
   tipoPeriodo: "mensal" | "anual";
   status: StatusPeriodo;

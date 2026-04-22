@@ -1304,6 +1304,7 @@ export const api = {
         const response = await callEdgeFunction('list-users-v2', 'GET', undefined, undefined, {
           tipo: 'vendedor',
           ativo: options?.params?.ativo !== undefined ? options.params.ativo : undefined,
+          limit: 100, // default da edge function é 10 — cortaria vendedores antigos
         });
 
         const users = response.users || [];

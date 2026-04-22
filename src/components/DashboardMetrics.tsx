@@ -29,9 +29,10 @@ interface MetricCardProps {
   icon: React.ReactNode;
   subtitle?: string; // Linha adicional de descrição
   exactValue?: number; // Valor exato para tooltip
+  loading?: boolean; // Mostra "Carregando..." enquanto dados do dashboard não chegaram
 }
 
-function MetricCard({ title, value, change, icon, subtitle, exactValue }: MetricCardProps) {
+function MetricCard({ title, value, change, icon, subtitle, exactValue, loading = false }: MetricCardProps) {
   const isPositive = change >= 0;
   
   const formatCurrency = (value: number) => {
@@ -68,44 +69,52 @@ function MetricCard({ title, value, change, icon, subtitle, exactValue }: Metric
         </div>
       </CardHeader>
       <CardContent className="px-4 pb-4 space-y-0">
-        {exactValue !== undefined ? (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="text-2xl font-bold leading-none mb-0.5 cursor-help">{displayValue}</div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{formatCurrency(exactValue)}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+        {loading ? (
+          <div className="h-[68px] flex items-center">
+            <span className="text-sm text-muted-foreground animate-pulse">Carregando...</span>
+          </div>
         ) : (
-          <div className="text-2xl font-bold leading-none mb-0.5">{value}</div>
+          <>
+            {exactValue !== undefined ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="text-2xl font-bold leading-none mb-0.5 cursor-help">{displayValue}</div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{formatCurrency(exactValue)}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <div className="text-2xl font-bold leading-none mb-0.5">{value}</div>
+            )}
+            <div className="h-[20px] flex items-center mb-0.5">
+              {subtitle && (
+                <p className="text-xs text-muted-foreground leading-tight">{subtitle}</p>
+              )}
+            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1 text-xs cursor-help">
+                    {isPositive ? (
+                      <TrendingUp className="h-3 w-3 text-green-500" />
+                    ) : (
+                      <TrendingDown className="h-3 w-3 text-red-500" />
+                    )}
+                    <span className={isPositive ? "text-green-500" : "text-red-500"}>
+                      {isPositive ? "+" : ""}{change.toFixed(1)}%
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Comparado ao período anterior</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </>
         )}
-        <div className="h-[20px] flex items-center mb-0.5">
-          {subtitle && (
-            <p className="text-xs text-muted-foreground leading-tight">{subtitle}</p>
-          )}
-        </div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center gap-1 text-xs cursor-help">
-                {isPositive ? (
-                  <TrendingUp className="h-3 w-3 text-green-500" />
-                ) : (
-                  <TrendingDown className="h-3 w-3 text-red-500" />
-                )}
-                <span className={isPositive ? "text-green-500" : "text-red-500"}>
-                  {isPositive ? "+" : ""}{change.toFixed(1)}%
-                </span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Comparado ao período anterior</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
       </CardContent>
     </Card>
   );
@@ -318,6 +327,9 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   
   // Estado para armazenar a meta do período
   const [metaMensal, setMetaMensal] = useState<number>(0);
+  // Flags de readiness: controlam quando os cards saem do estado "Carregando..."
+  const [metaLoaded, setMetaLoaded] = useState<boolean>(false);
+  const [metricsReady, setMetricsReady] = useState<boolean>(false);
   const [serverSnapshot, setServerSnapshot] = useState<DashboardSnapshot | null>(null);
   
   // Estado para armazenar as métricas calculadas
@@ -361,19 +373,20 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   }, []);
   
   // Carregar meta do período
+  // NÃO usar serverSnapshot.summary.metaMensal: edge function dashboard-v2 retorna 0
+  // para backoffice (bug no servidor). Sempre carregar via buscarMetaVendedor/buscarMetaTotal.
   useEffect(() => {
-    if (serverSnapshot?.summary) {
-      setMetaMensal(serverSnapshot.summary.metaMensal || 0);
-      return;
-    }
+    let cancelled = false;
 
     async function loadMeta() {
+      setMetaLoaded(false);
+
       // Determinar ano e mês baseado no período
       let year: number;
       let month: number;
-      
+
       const hoje = new Date();
-      
+
       if (period === "current_month") {
         // Mês atual
         year = hoje.getFullYear();
@@ -383,7 +396,10 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
         const parts = period.split('-').map(Number);
         if (isNaN(parts[0]) || isNaN(parts[1])) {
           console.log('[DASHBOARD] ⚠️ Período inválido:', period);
-          setMetaMensal(0);
+          if (!cancelled) {
+            setMetaMensal(0);
+            setMetaLoaded(true);
+          }
           return;
         }
         year = parts[0];
@@ -391,13 +407,16 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
       } else {
         // Outros períodos (7, 30, 90, 365, custom) - não carregar meta
         console.log('[DASHBOARD] ⚠️ Período não compatível com meta mensal:', period);
-        setMetaMensal(0);
+        if (!cancelled) {
+          setMetaMensal(0);
+          setMetaLoaded(true);
+        }
         return;
       }
-      
+
       try {
         let meta = 0;
-        
+
         if (ehVendedor && usuario) {
           // Para vendedores, buscar meta individual
           meta = await buscarMetaVendedor(usuario.id, year, month);
@@ -407,20 +426,27 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
           meta = await buscarMetaTotal(year, month);
           console.log('[DASHBOARD] Meta total carregada:', meta);
         }
-        
+
+        if (cancelled) return;
         setMetaMensal(meta);
+        setMetaLoaded(true);
       } catch (error) {
         console.error('[DASHBOARD] Erro ao carregar meta:', error);
-        setMetaMensal(0);
+        if (!cancelled) {
+          setMetaMensal(0);
+          setMetaLoaded(true);
+        }
       }
     }
-    
+
     loadMeta();
-  }, [period, ehVendedor, usuario, serverSnapshot]);
+    return () => { cancelled = true; };
+  }, [period, ehVendedor, usuario]);
 
   useEffect(() => {
     let cancelled = false;
     setServerSnapshot(null);
+    setMetricsReady(false);
     onDashboardSnapshotChange?.(null);
 
     async function loadSnapshot() {
@@ -432,7 +458,8 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
         });
         if (cancelled) return;
         setServerSnapshot(snapshot);
-        setMetaMensal(snapshot.summary?.metaMensal || 0);
+        // NÃO sobrescrever metaMensal aqui: snapshot.summary.metaMensal vem 0 do servidor.
+        // A meta é gerenciada exclusivamente pelo useEffect de loadMeta.
         onDashboardSnapshotChange?.(snapshot);
       } catch (error) {
         console.warn('[DASHBOARD] Snapshot backend indisponível, usando cálculo local:', error);
@@ -692,52 +719,69 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   
   // Calculate metrics from filtered transactions with comparison to previous period
   useEffect(() => {
+    let cancelled = false;
+
     async function calculateMetrics() {
-      if (serverSnapshot?.summary?.cards) {
-        setMetrics(serverSnapshot.summary.cards);
+      if (loading || allTransactions.length === 0) {
+        if (!cancelled) {
+          setMetrics({
+            vendasTotais: 0,
+            vendasTotaisChange: 0,
+            ticketMedio: 0,
+            ticketMedioChange: 0,
+            produtosVendidos: 0,
+            produtosVendidosChange: 0,
+            positivacao: 0,
+            positivacaoChange: 0,
+            positivacaoCount: 0,
+            positivacaoTotal: 0,
+            vendedoresAtivos: 0,
+            vendedoresAtivosChange: 0,
+            porcentagemMeta: 0,
+            porcentagemMetaChange: 0,
+            negociosFechados: 0,
+          });
+        }
         return;
       }
 
-      if (loading || allTransactions.length === 0) {
-        setMetrics({
-          vendasTotais: 0,
-          vendasTotaisChange: 0,
-          ticketMedio: 0,
-          ticketMedioChange: 0,
-          produtosVendidos: 0,
-          produtosVendidosChange: 0,
-          positivacao: 0,
-          positivacaoChange: 0,
-          positivacaoCount: 0,
-          positivacaoTotal: 0,
-          vendedoresAtivos: 0,
-          vendedoresAtivosChange: 0,
-          porcentagemMeta: 0,
-          porcentagemMetaChange: 0,
-          negociosFechados: 0,
-        });
-        return;
+      // Gate: só computa quando TODOS os dados estão prontos.
+      // - walletTotal (do snapshot): para positivacaoTotal correta (ex.: 852, não 10).
+      // - metaLoaded: para porcentagemMeta correta (buscarMetaTotal/Vendedor resolvido).
+      // Sem esses gates, o cálculo dispara múltiplos setMetrics com dados parciais,
+      // causando flashes intermediários visíveis no UI.
+      const walletTotal = serverSnapshot?.customerWallet?.distribution?.total;
+      if (typeof walletTotal !== 'number' || walletTotal <= 0 || !metaLoaded) {
+        return; // cards ficam em "Carregando..." até tudo estar pronto
       }
-      
+
       const { current, previous } = filtrarPorPeriodo(allTransactions, period);
       const filteredCurrent = filterTransactions(current);
       const filteredPrevious = filterTransactions(previous);
-      
+
       // Passar o nome do vendedor se for um vendedor logado
       const vendedorNome = ehVendedor && usuario ? usuario.nome : undefined;
-      
+
       const calculatedMetrics = await calculateMetricsWithComparison(
-        filteredCurrent, 
-        filteredPrevious, 
-        metaMensal, 
+        filteredCurrent,
+        filteredPrevious,
+        metaMensal,
         vendedorNome
       );
-      
+
+      if (cancelled) return;
+
+      calculatedMetrics.positivacaoTotal = walletTotal;
+      calculatedMetrics.positivacao = (calculatedMetrics.positivacaoCount / walletTotal) * 100;
+
       setMetrics(calculatedMetrics);
+      setMetricsReady(true);
     }
-    
+
     calculateMetrics();
-  }, [loading, allTransactions, period, selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, ehVendedor, usuario, metaMensal, selectedStatusVendas, selectedCurvaABC, serverSnapshot]);
+
+    return () => { cancelled = true; };
+  }, [loading, allTransactions, period, selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, ehVendedor, usuario, metaMensal, metaLoaded, selectedStatusVendas, selectedCurvaABC, serverSnapshot]);
   const [segmentoPopoverOpen, setSegmentoPopoverOpen] = useState(false);
   
   // Extrair valores únicos das transações para os filtros
@@ -1143,6 +1187,7 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
           icon={<DollarSign className="h-4 w-4" />}
           subtitle={`${metrics.negociosFechados} vendas realizadas`}
           exactValue={metrics.vendasTotais}
+          loading={!metricsReady}
         />
         <MetricCard
           title="Ticket Médio"
@@ -1150,12 +1195,14 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
           change={metrics.ticketMedioChange}
           icon={<Receipt className="h-4 w-4" />}
           exactValue={metrics.ticketMedio}
+          loading={!metricsReady}
         />
         <MetricCard
           title="Produtos Vendidos"
           value={metrics.produtosVendidos.toString()}
           change={metrics.produtosVendidosChange}
           icon={<Package className="h-4 w-4" />}
+          loading={!metricsReady}
         />
         <MetricCard
           title="Positivação"
@@ -1163,6 +1210,7 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
           change={metrics.positivacaoChange}
           icon={<UserCheck className="h-4 w-4" />}
           subtitle={`${metrics.positivacaoCount} de ${metrics.positivacaoTotal} clientes`}
+          loading={!metricsReady}
         />
         {!ehVendedor && (
           <MetricCard
@@ -1170,6 +1218,7 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
             value={metrics.vendedoresAtivos.toString()}
             change={metrics.vendedoresAtivosChange}
             icon={<Users className="h-4 w-4" />}
+            loading={!metricsReady}
           />
         )}
         <MetricCard
@@ -1178,10 +1227,11 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
           change={metrics.porcentagemMetaChange}
           icon={<Target className="h-4 w-4" />}
           subtitle={metaMensal > 0 ? `Meta: R$ ${
-            metaMensal >= 1000000 
+            metaMensal >= 1000000
               ? `${Math.floor(metaMensal / 1000).toLocaleString('pt-BR')} M`
               : metaMensal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
           }` : undefined}
+          loading={!metricsReady}
         />
       </div>
     </div>
