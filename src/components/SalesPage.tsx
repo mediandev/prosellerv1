@@ -98,6 +98,7 @@ import {
   FileText,
   Send,
   AlertTriangle,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
@@ -388,6 +389,7 @@ export function SalesPage({
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [sincronizandoVenda, setSincronizandoVenda] = useState<string | null>(null);
+  const [duplicandoPedido, setDuplicandoPedido] = useState<string | null>(null);
   const [corrigindoIntegracao, setCorrigindoIntegracao] = useState(false);
   const [dialogCorrigirOpen, setDialogCorrigirOpen] = useState(false);
   
@@ -1108,6 +1110,56 @@ export function SalesPage({
     }
   };
 
+  // Duplicar pedido como novo rascunho (sem envio ao ERP)
+  const handleDuplicarPedido = async (saleId: string) => {
+    if (!canEditarVendas) {
+      toast.error('Você não tem permissão para criar pedidos.');
+      return;
+    }
+
+    try {
+      setDuplicandoPedido(saleId);
+      toast.info('Duplicando pedido...', { id: 'duplicar-pedido' });
+
+      const original = await api.getById('vendas', saleId) as Venda | null;
+      if (!original) {
+        toast.error('Pedido original não encontrado.', { id: 'duplicar-pedido' });
+        return;
+      }
+
+      const {
+        id: _id,
+        numero: numeroOriginal,
+        integracaoERP: _integracao,
+        createdAt: _createdAt,
+        updatedAt: _updatedAt,
+        createdBy: _createdBy,
+        ...resto
+      } = original;
+
+      const vendaNova = {
+        ...resto,
+        status: 'Rascunho' as StatusVenda,
+        dataPedido: new Date(),
+        itens: (original.itens || []).map(({ id: _itemId, ...item }) => item),
+      };
+
+      await api.create('vendas', vendaNova);
+
+      toast.success(
+        `Pedido ${numeroOriginal || ''} duplicado como novo rascunho`.trim(),
+        { id: 'duplicar-pedido' }
+      );
+
+      await carregarDados();
+    } catch (error: any) {
+      console.error('[SALES-PAGE] Erro ao duplicar pedido:', error);
+      toast.error(`Erro ao duplicar: ${error?.message || 'erro desconhecido'}`, { id: 'duplicar-pedido' });
+    } finally {
+      setDuplicandoPedido(null);
+    }
+  };
+
   // Componente para cabeçalho ordenável
   const SortableHeader = ({ field, children }: { field: keyof Sale; children: React.ReactNode }) => {
     const isActive = sortField === field;
@@ -1693,7 +1745,7 @@ export function SalesPage({
                               Ver Detalhes
                             </DropdownMenuItem>
                             {canEditarVendas && (
-                              <DropdownMenuItem 
+                              <DropdownMenuItem
                                 onClick={() => {
                                   // Se pedido foi enviado ao ERP, redirecionar para visualização
                                   if (sale.integracaoERP?.erpPedidoId) {
@@ -1710,6 +1762,15 @@ export function SalesPage({
                                 {sale.integracaoERP?.erpPedidoId && (
                                   <span className="ml-2 text-xs">(Bloqueado)</span>
                                 )}
+                              </DropdownMenuItem>
+                            )}
+                            {canEditarVendas && (
+                              <DropdownMenuItem
+                                onClick={() => handleDuplicarPedido(sale.id)}
+                                disabled={duplicandoPedido === sale.id}
+                              >
+                                <Copy className={`h-4 w-4 mr-2 ${duplicandoPedido === sale.id ? 'animate-pulse' : ''}`} />
+                                {duplicandoPedido === sale.id ? 'Duplicando...' : 'Duplicar'}
                               </DropdownMenuItem>
                             )}
                             {canEditarVendas && sale.integracaoERP?.erpPedidoId ? (
