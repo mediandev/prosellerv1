@@ -3,13 +3,13 @@
 > Estado vivo do projeto. Único arquivo de controle, junto com `git log`.
 > Atualizar ao final de cada sessão.
 
-**Última atualização:** 2026-04-21
+**Última atualização:** 2026-04-24
 
 ---
 
 ## 1. Em andamento
 
-**F-001 · Consulta Simples Nacional — pré-execução concluída, aguardando DPs e aplicação da migration.**
+**F-001 · Consulta Simples Nacional — EM EXECUÇÃO na branch `feat/simples-nacional-lookup`.**
 
 Artefatos produzidos (commits em `main`):
 - [x] SPEC em `docs/specs/SPEC.md` (6 RFs, 8 CAs, 7 CBs) — `cf1ea26`.
@@ -19,21 +19,23 @@ Artefatos produzidos (commits em `main`):
 - [x] `zod@3.23.8` + alias `@shared/*` (tsconfig + vite + package-lock) — `cf1ea26`.
 - [x] `docs/plans/skills-manifest.md` — 5× tool_nativa + 1× MCP Supabase, zero skills novas — `6dba32b`.
 - [x] `docs/plans/cursor-brief.md` — Tarefa 1 (Migration 108) com rollback obrigatório — `6c29740`; fix Passo 0 PRÉ-MCP — `b3be6bf`.
+- [x] **DPs resolvidas em 2026-04-22 via call com Valentim Nunes** (ver SPEC §11.b).
+- [x] **SPEC v0.2 atualizada com DPs resolvidas** — `a0d0823`.
+- [x] **ADR-004 criado** (revalidação ReceitaWS a cada envio de pedido Tiny) — `a0d0823`.
+- [x] **Suíte Vitest + `deno test` introduzida** como F-002 (merge PR #1, `dd50c31`).
 
-Bloqueadores restantes (impedem começar código de F-001):
-- [ ] **DP-001, DP-002, DP-003** resolvidas com Lucas / dev anterior (ver SPEC §11).
-- [ ] **Migration 108 aplicada em staging** via Cursor MCP (brief pronto em `docs/plans/cursor-brief.md §Tarefa 1`). Exige confirmação humana explícita.
+Bloqueadores restantes:
+- [ ] **Migration 108 aplicada em staging** via Cursor MCP (brief em `docs/plans/cursor-brief.md §Tarefa 1`). Exige confirmação humana explícita.
 - [ ] **Migration 108 aplicada em produção** após smoke test verde em staging.
-- [ ] **Secrets Supabase** cadastrados: `FEATURE_SIMPLES_NACIONAL_LOOKUP` (valor `"false"` no início) e `RECEITAWS_TOKEN` (plano pago — decisão comercial pendente).
-- [ ] **Suíte Vitest + `deno test`** introduzida como feature própria (RNF-005 + recomendação do skills-manifest §5).
-- [ ] Implementação nas 3 Edge Functions afetadas: `create-cliente-v2`, `tiny-empresa-natureza-operacao-v2`, `tiny-enviar-pedido-venda-v1`.
-- [ ] UI do toggle dual-ID em Configurações › Mapeamento Naturezas Tiny (CA-006).
+- [ ] **Secrets Supabase** cadastrados: `FEATURE_SIMPLES_NACIONAL_LOOKUP` (`"false"` no início) e `RECEITAWS_TOKEN` (plano pago). Ver `docs/plans/cursor-brief.md §Tarefa 2`.
+- [ ] Merge do PR `feat/simples-nacional-lookup` após smoke em preview Netlify.
+- [ ] Ligar a flag em staging, validar, depois em produção (`cursor-brief §Tarefa 3/4`).
 
 ---
 
 ## 2. Backlog — Features priorizadas
 
-### 🔴 F-001 · Consulta Simples Nacional (Alta · SPEC aprovada, execução aguarda DPs)
+### 🔴 F-001 · Consulta Simples Nacional (Alta · EM EXECUÇÃO — branch feat/simples-nacional-lookup)
 
 **Motivação:** mudanças tributárias em SP exigem identificar clientes optantes do Simples Nacional e ajustar a natureza de operação Tiny conforme o caso.
 
@@ -44,8 +46,8 @@ Bloqueadores restantes (impedem começar código de F-001):
 - CA-002 — Cliente novo PF não consulta ReceitaWS.
 - CA-003 — Cliente novo sem CPF/CNPJ → campos `null`.
 - CA-004 — ReceitaWS timeout não bloqueia criação (201).
-- CA-005 — Revalidação no envio Tiny (>30 dias — **DP-001**).
-- CA-006 — UI salva dual-ID.
+- CA-005 — Revalidação a cada envio de pedido Tiny (ADR-004).
+- CA-006 — UI salva dual-ID com toggle.
 - CA-007 — Envio Tiny escolhe natureza correta nos 4 cenários (A, B, C, D).
 - CA-008 — Feature flag desligada preserva comportamento atual.
 
@@ -55,42 +57,39 @@ Bloqueadores restantes (impedem começar código de F-001):
 - `simples-nacional.ts` → `ReceitaWsResponseSchema`, `SimplesNacionalLookupResult`, `SimplesNacionalLookupLog`.
 
 **Dependências:**
-- Migration 108 (SQL pronto em `docs/decisions/adr/ADR-003-modelagem-dual-id-natureza-operacao.md §Migration a ser criada`) — **exige brief Cursor + confirmação antes de aplicar em prod**.
-- Feature flag `FEATURE_SIMPLES_NACIONAL_LOOKUP` (env var — ADR-001).
-- Token `RECEITAWS_TOKEN` em secret Supabase (ADR-002, plano pago necessário).
+- Migration 108 (arquivo `supabase/migrations/108_simples_nacional_lookup.sql` já commitado) — aplicação via Cursor MCP pendente (`cursor-brief §Tarefa 1`).
+- Feature flag `FEATURE_SIMPLES_NACIONAL_LOOKUP` (env var — ADR-001), inicia `"false"`.
+- Token `RECEITAWS_TOKEN` em secret Supabase (ADR-002, plano pago).
 - Edge Functions afetadas: `create-cliente-v2`, `tiny-empresa-natureza-operacao-v2`, `tiny-enviar-pedido-venda-v1`.
-- **Bloqueador operacional:** Vitest + Supertest precisam entrar no repo **antes** do código produção (RNF-005 + CLAUDE.md regra "área sensível").
 
-**Decisões pendentes (ver SPEC §11):**
-- DP-001 — Janela de revalidação (default 30d).
-- DP-002 — Timeout ReceitaWS (default 5s).
-- DP-003 — `tiny_valor_simples` preenchido com `tiny_valor` vazio (default: bloquear).
-
-**Branch proposta:** `feat/simples-nacional-lookup`. Commits atômicos na ordem: (1) Vitest setup, (2) migration 108, (3) schemas já commitados, (4) Edge Function `create-cliente-v2`, (5) Edge Function `tiny-empresa-natureza-operacao-v2`, (6) Edge Function `tiny-enviar-pedido-venda-v1`, (7) UI de mapeamento dual.
+**Branch:** `feat/simples-nacional-lookup`. Commits atômicos: (1) testes primeiro (`resolveNaturezaTiny` + toggle UI), (2) helper `natureza-resolver.ts`, (3) helper `receitaws-client.ts`, (4) integração em `create-cliente-v2`, (5) aceite dual-ID em `tiny-empresa-natureza-operacao-v2`, (6) revalidação por pedido em `tiny-enviar-pedido-venda-v1`, (7) toggle na UI de Mapeamento, (8) campo read-only na ficha do cliente.
 
 ---
 
-### 🟡 F-003 · Pedidos — Ajustes Manuais (Média · Em análise)
+### 🟡 F-003 · Clonar Pedido (Média · Backlog)
 
-**Motivação:** cobrir casos fora do roteiro padrão — substituição de NF do Tiny, correções diretas no Tiny — para manter sincronia visual entre ProSeller e ERP sem gerar efeito reverso no ERP.
+**Motivação:** quando um pedido é cancelado no Tiny, o fluxo atual obriga o backoffice a recriar manualmente um novo pedido com os mesmos itens. Um botão "Clonar" na listagem reduz esse retrabalho e preserva auditoria: o pedido cancelado permanece cancelado, e o clonado é um novo pedido com rastreabilidade própria. Decidido na call com Valentim Nunes em 2026-04-22.
 
 **Escopo proposto:**
-- Permitir ajuste manual de **status do pedido** no ProSeller (só efeito local, não replica no Tiny).
-- Permitir alterar manualmente o número da **NF do Tiny** vinculada a um pedido ProSeller (só efeito local).
-- Ação restrita a usuário **backoffice com permissão específica**.
-- Garantir idempotência: pedido com ajuste manual **não pode** gerar repercussão no Tiny em nenhuma sync futura (flag `ajuste_manual: true`).
+- Botão "Clonar" na listagem de pedidos (`SalesPage` / `pedido-venda-v2` list).
+- Ao clicar, cria um novo pedido **em rascunho editável** copiando:
+  - Cliente, empresa, vendedor, natureza de operação, condição de pagamento.
+  - Todos os itens (`pedido_venda_produtos`) com quantidades e valores unitários.
+  - Descontos, observações e observação interna.
+- **NÃO copia:** status, `id_tiny`, `numero_pedido`, `data_venda` (nova data) e `ordem_cliente` (opcional — verificar com Valentim).
+- Pedido clonado nasce em status "Rascunho" e pode ser editado antes de enviar ao Tiny.
 
-**Critérios de aceite (rascunho):**
-- CA-1: Backoffice com permissão vê botões de "Ajuste manual" na listagem de pedidos.
-- CA-2: Usuário sem permissão não vê nem acessa os botões (403 no endpoint).
-- CA-3: Pedido com ajuste manual exibe badge visual na listagem.
-- CA-4: Sync com Tiny ignora pedidos com `ajuste_manual: true`.
-- CA-5: Log de auditoria (quem ajustou, o quê, quando) fica gravado.
+**Critérios de aceite (rascunho — formalizar em SPEC quando a feature abrir):**
+- CA-1: Botão "Clonar" aparece em pedidos de qualquer status (não restrito a cancelados).
+- CA-2: Pedido clonado tem novo ID local, sem vínculo com o original.
+- CA-3: Itens do pedido clonado são editáveis (permite ajustar quantidade/valor antes de enviar).
+- CA-4: Pedido original permanece imutável (auditoria preservada).
+- CA-5: Listagem indica visualmente quando um pedido foi clonado a partir de outro (opcional — confirmar UX).
 
 **Dependências:**
-- Migration: adicionar `ajuste_manual` + `ajuste_manual_log` em tabela de pedido.
-- Permissão nova: `pedido.ajustar_manual`.
-- Edge Functions afetadas: `pedido-venda-v2` (PATCH de status/NF manual), `tiny-enviar-pedido-venda-v1` (filtro de ignorar).
+- Edge Function afetada: `pedido-venda-v2` (novo endpoint POST `/pedido-venda-v2/clone`).
+- Sem migration (usa tabelas existentes).
+- Sem feature flag (mudança aditiva, sem risco tributário).
 
 ---
 
@@ -155,6 +154,7 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 - **Deploy é Netlify, sem MCP disponível** — template do Harness v3 assume Vercel. Operação em Netlify fica manual (painel) ou via `netlify` CLI. Identificado em `docs/plans/skills-manifest.md §5`. Não bloqueia F-001.
 - **Supertest não encaixa em Edge Functions Deno** — o TODO §3 R-5 listava "Supertest", mas Edge Functions rodam em Deno (não Node), e Supertest assume Node HTTP server. Recomendação em `docs/plans/skills-manifest.md §5`: usar `deno test` + `supabase functions serve` para integração de Edge Functions, reservando Supertest só se aparecer algum servidor Node no projeto. Atualizar R-5 quando a feature da suíte de testes for aberta.
 - **`npm install` gerou 11 vulnerabilidades auditadas (1 moderate, 8 high, 2 critical)** nas dependências existentes — detectadas ao instalar zod na fase SPEC. Não relacionado a zod; são dependências herdadas. Tratar em onda dedicada de segurança (`npm audit fix` controlado, não `--force`).
+- **F-001 consulta ReceitaWS a cada envio de pedido Tiny (ADR-004).** Decisão tributária do cliente — sem cache por janela. Monitorar quota ReceitaWS consumida no primeiro mês após ligar a flag em produção; se aproximar do limite do plano pago, reabrir ADR-004 para considerar cache curto (TTL 24h) com revalidação sob mudança de status.
 
 ---
 
