@@ -4,7 +4,8 @@
 > Primeira feature speccada retroativamente: **F-001 · Consulta Simples Nacional**.
 > Demais módulos em produção serão speccados retroativamente na Onda R-3 do TODO.
 >
-> Versão: 0.1 — Data: 2026-04-20 — Referência PRD: ainda não existe (R-2 pendente).
+> Versão: 0.2 — Data: 2026-04-22 — Referência PRD: ainda não existe (R-2 pendente).
+> **Changelog v0.2 (2026-04-22):** DP-001/002/003 resolvidas em call com Valentim Nunes; RF-003 virou revalidação por pedido (ADR-004); CB-003 eliminado pelo toggle UI; Anti-SPEC proíbe edição manual do campo optante.
 
 ---
 
@@ -35,18 +36,18 @@ Fora de F-001: F-002 e ondas R-1…R-5 têm seu próprio escopo futuro.
 - **Notas:** A consulta é **best-effort**: falha de rede, timeout (>5s) ou quota esgotada **não bloqueia** a criação do cliente. Em caso de falha, `optante_simples_nacional` permanece `null` e um log é registrado.
 
 ### RF-003 — Revalidação ao enviar pedido ao Tiny
-- **Descrição:** Ao disparar pedido ao Tiny, se o cliente é PJ e `optante_simples_nacional_consultado_em` é `null` ou mais antigo que `N dias` (default 30), o sistema deve reconsultar ReceitaWS **antes** de montar o payload Tiny.
+- **Descrição:** Ao disparar pedido ao Tiny, se o cliente é PJ e a feature flag está ligada, o sistema deve reconsultar ReceitaWS **a cada envio**, independente de quando a última consulta aconteceu, e atualizar `optante_simples_nacional` antes de montar o payload Tiny.
 - **Prioridade:** Alta
 - **Cobre:** CA-005, CA-007
 - **Contrato:** reusa `ReceitaWsSimplesResponse`
-- **Notas:** Se a revalidação falhar, usa o valor persistido (mesmo que antigo) e anota no log. Apenas se o valor for `null` E a revalidação falhar o pedido prossegue tratando como "não-simples" (fallback documentado em CB-002).
+- **Notas:** Motivo da revalidação por pedido (e não por janela de tempo): o cliente pode sair do Simples fora das janelas anuais se incluir atividade não-permitida — decisão confirmada por Valentim Nunes em 2026-04-22 (ver ADR-004). Se a revalidação falhar, usa o valor persistido (mesmo que antigo) e anota no log. Apenas se o valor for `null` E a revalidação falhar o pedido prossegue tratando como "não-simples" (fallback documentado em CB-002).
 
 ### RF-004 — Mapeamento dual de natureza de operação Tiny
 - **Descrição:** A tabela de mapeamento `(empresa × natureza de operação ProSeller → valor Tiny)` deve aceitar um segundo valor Tiny opcional, usado quando o destinatário é optante do Simples Nacional. Quando o 2º valor é `null`, o sistema usa o 1º para todos os clientes (comportamento atual preservado).
 - **Prioridade:** Alta
 - **Cobre:** CA-006, CA-007
 - **Contrato:** `packages/shared/types/natureza-operacao.ts` → `TinyEmpresaNaturezaOperacao`
-- **Notas:** A UI de Configurações expõe um toggle "Distinguir Simples Nacional"; marcar habilita o 2º campo.
+- **Notas:** A UI de Configurações expõe um **switch** "Habilitar natureza para Simples Nacional" por linha do mapeamento. Off por default (1 campo, comportamento pré-F-001). On abre o 2º campo e **ambos** `tinyValor` e `tinyValorSimples` viram obrigatórios no form; desligar o switch limpa o 2º campo.
 
 ### RF-005 — Seleção de natureza Tiny por optante no envio
 - **Descrição:** Ao enviar pedido ao Tiny, o sistema deve escolher qual `tiny_valor` usar (1º ou 2º) com base em `cliente.optante_simples_nacional`:
@@ -111,10 +112,10 @@ Fora de F-001: F-002 e ondas R-1…R-5 têm seu próprio escopo futuro.
 **Pré-condição:** pedido existe · empresa Tiny configurada · natureza mapeada em `tiny_empresa_natureza_operacao`.
 
 1. Edge Function carrega pedido + empresa + cliente.
-2. Se cliente é PJ (CNPJ de 14 dígitos) E (`optante_simples_nacional_consultado_em` é `null` OU mais antigo que 30 dias):
-   - Reconsulta ReceitaWS com timeout 5s.
-   - Sucesso: atualiza `cliente`.
-   - Falha: usa valor persistido (pode ser `null`).
+2. Se cliente é PJ (CNPJ de 14 dígitos):
+   - Reconsulta ReceitaWS com timeout 5s — **sempre, sem checar janela**.
+   - Sucesso: atualiza `cliente.optante_simples_nacional` + `..._consultado_em`.
+   - Falha: usa valor persistido (pode ser `null`) — log `receitaws.*` com outcome.
 3. Busca mapeamento em `tiny_empresa_natureza_operacao` (ambos `tiny_valor` e `tiny_valor_simples`).
 4. Escolhe `tiny_valor_escolhido`:
    - Se `optante_simples_nacional = true` e `tiny_valor_simples` não é null → `tiny_valor_simples`.
@@ -130,12 +131,13 @@ Fora de F-001: F-002 e ondas R-1…R-5 têm seu próprio escopo futuro.
 **Pré-condição:** usuário backoffice · tela Configurações › Mapeamento Naturezas Tiny.
 
 1. UI lista mapeamentos de uma empresa selecionada.
-2. Por linha: campo 1 "ID Tiny padrão" + toggle "Distinguir Simples Nacional".
-3. Ao marcar toggle: abre campo 2 "ID Tiny quando optante Simples".
-4. Ao salvar: POST `/tiny-empresa-natureza-operacao-v2` com `{ empresaId, naturezaOperacaoId, tinyValor, tinyValorSimples? }`.
-5. Ao desmarcar toggle: POST apaga `tinyValorSimples` (seta `null` no banco).
+2. Por linha: campo 1 "ID Tiny padrão" + switch "Habilitar natureza para Simples Nacional" (off por default).
+3. Ao ligar o switch: abre campo 2 "ID Tiny quando optante Simples"; o form marca ambos campos como obrigatórios e não permite salvar sem os 2 preenchidos.
+4. Ao salvar com switch on: POST `/tiny-empresa-natureza-operacao-v2` com `{ empresaId, naturezaOperacaoId, tinyValor, tinyValorSimples }` (ambos strings não-vazias).
+5. Ao desligar o switch: POST seta `tinyValorSimples = null` no banco.
+6. Ao salvar com switch off: POST com `{ empresaId, naturezaOperacaoId, tinyValor, tinyValorSimples: null }` (ou omitido).
 
-**Pós-condição:** mapeamento persistido com ou sem 2º valor.
+**Pós-condição:** mapeamento persistido com ou sem 2º valor. Estado "só `tinyValorSimples` preenchido" é impossível pela UI (CB-003 eliminado).
 **Cobre:** RF-004.
 
 ---
@@ -180,15 +182,17 @@ Then: retorna 201 com cliente criado
   And: log "receitaws.timeout" foi emitido com cnpj mascarado
 ```
 
-### CA-005 — Revalidação no envio Tiny (cobre RF-003)
+### CA-005 — Revalidação a cada envio de pedido Tiny (cobre RF-003)
 ```
-Given: cliente PJ com optante_simples_nacional_consultado_em = 40 dias atrás
+Given: cliente PJ com optante_simples_nacional = true gravado há X dias
+  (X arbitrário — pode ser 1h, 3 dias ou 6 meses; não importa)
   E feature flag ligada
 When: POST /tiny-enviar-pedido-venda-v1 para esse cliente
   E ReceitaWS responde 200 com { simples: { optante: false } } (mudou de estado)
 Then: antes de montar payload Tiny, cliente.optante_simples_nacional é atualizado para false
   And: cliente.optante_simples_nacional_consultado_em ≈ now()
   And: payload Tiny usa o tiny_valor (não o tiny_valor_simples)
+  And: log receitaws.lookup e natureza.resolvida são emitidos
 ```
 
 ### CA-006 — UI salva dual-ID (cobre RF-004)
@@ -248,7 +252,7 @@ Then: payload Tiny.natureza_operacao = tiny_valor (1º campo) — ignora optante
 |---|---|---|---|
 | CB-001 | ReceitaWS retorna 200 mas sem campo `simples` (plano grátis) | Tratar como inconclusivo: `optante_simples_nacional = null` + log `receitaws.missing_field` | Alta |
 | CB-002 | Pedido de cliente PJ com optante=null E revalidação falha na hora do envio | Envia pedido usando `tiny_valor` (não `tiny_valor_simples`), log `natureza.fallback_revalidation_failed`; pedido **não é bloqueado** | Alta |
-| CB-003 | Mapeamento tem `tiny_valor_simples` mas `tiny_valor` está null/vazio | Erro de configuração: bloquear envio com mensagem "Mapeamento incompleto: tiny_valor obrigatório" | Alta |
+| CB-003 | Mapeamento tem `tiny_valor_simples` mas `tiny_valor` está null/vazio | **Eliminado pelo toggle UI** (decisão 2026-04-22): o form de Mapeamento Naturezas só expõe `tiny_valor_simples` quando o toggle "Habilitar natureza para Simples Nacional" está ligado, e nesse modo exige ambos `tiny_valor` e `tiny_valor_simples` preenchidos. Fora disso, só existe 1 campo. Validação duplicada (front + back). Ver RF-004 e UI em F-3. | — |
 | CB-004 | ReceitaWS rate-limit 429 | Cair no fallback (comportar como timeout) + log `receitaws.rate_limited` | Média |
 | CB-005 | CNPJ inativo na Receita (empresa baixada) | Persistir `optante_simples_nacional` conforme veio na resposta (pode ser null ou false) + log `receitaws.cnpj_inativo` — operação continua | Média |
 | CB-006 | Cliente editado mudando CPF → CNPJ (tipo pessoa) | Na próxima revalidação ao enviar pedido, a flag será consultada corretamente; não há migração automática | Baixa |
@@ -273,6 +277,7 @@ Then: payload Tiny.natureza_operacao = tiny_valor (1º campo) — ignora optante
 - NÃO chamar ReceitaWS quando feature flag estiver desligada.
 - NÃO chamar ReceitaWS para CPF (PF) — sempre `null` para cliente sem CNPJ.
 - NÃO alterar linhas existentes de `tiny_empresa_natureza_operacao` na migration — apenas ADD COLUMN nullable.
+- NÃO permitir edição manual do campo `optante_simples_nacional` na v1 — sempre populado por ReceitaWS. A UI da ficha do cliente exibe o campo como read-only. (Revisitar em v2 se cliente pedir override.)
 
 ### Padrões proibidos
 - NÃO inline o valor `tiny_valor_simples` como string no frontend — o campo vem da Edge Function `tiny-empresa-natureza-operacao-v2`.
@@ -344,67 +349,56 @@ Leitura: env var `FEATURE_SIMPLES_NACIONAL_LOOKUP` (`"true"` | `"false"` | ausen
 ## 10. Dependências externas e ADRs associadas
 
 - **ADR-001** — Estratégia de feature flag (env var como MVP).
-- **ADR-002** — ReceitaWS como fornecedor de dado Simples Nacional (retroativo, formalizando decisão do Lucas de 18/abr/2026).
+- **ADR-002** — ReceitaWS como fornecedor de dado Simples Nacional (retroativo, formalizando decisão de 18/abr/2026).
 - **ADR-003** — Modelagem dual-ID em `tiny_empresa_natureza_operacao` (coluna nullable vs tabela separada).
+- **ADR-004** — Revalidação do optante Simples Nacional a cada envio de pedido Tiny (substitui janela de 30 dias).
 
 ---
 
-## 11. Decisões pendentes (aguardando cliente / dev anterior)
+## 11. Decisões pendentes e resolvidas
 
-> Pontos onde a SPEC assumiu um **default provisório** para não ficar travada, mas que precisam ser confirmados antes de congelar. Cada decisão impacta um trecho específico da SPEC — ao resolver, substituir o default e remover a entrada daqui.
->
-> **Procedimento:** ao obter resposta, marcar `Resolvida em YYYY-MM-DD por <nome>`, atualizar os RFs/CAs/RNFs apontados e mover a entrada para uma seção `11.b Resolvidas` (ou deletar se trivial).
+### 11.a — Pendentes
 
-### DP-001 — Janela de revalidação do optante Simples Nacional
-- **Pergunta:** Após quantos dias desde a última consulta à ReceitaWS o sistema deve reconsultar o optante ao enviar um pedido ao Tiny?
-- **Impacta:** RF-003, Fluxo F-2 passo 2, CA-005.
-- **Default assumido na SPEC:** **30 dias**.
-- **Opções plausíveis:**
-  - 7 dias — mais seguro tributariamente, consome mais quota ReceitaWS.
-  - 30 dias — equilíbrio; razoável para a dinâmica de opção/exclusão do Simples (anual, mas com janelas de exclusão mensais).
-  - 60 / 90 dias — mais econômico, mas risco de NF emitida com regime desatualizado.
-- **Quem pode responder:** Lucas (cliente — conhece cadência de atualização fiscal) ou dev anterior (se teve conversa prévia sobre quota ReceitaWS).
-- **Como aplicar quando resolvido:** substituir "30 dias" em RF-003 e Fluxo F-2; atualizar CA-005 ("40 dias atrás" continua válido se o corte final for ≤30d, senão ajustar).
+_Nenhuma. Todas as DPs de F-001 foram resolvidas em call com Valentim Nunes em 2026-04-22 — ver §11.b._
 
-### DP-002 — Timeout da chamada à ReceitaWS
-- **Pergunta:** Qual é o tempo máximo aceitável para a consulta à ReceitaWS antes de cair no fallback, considerando a experiência do usuário (cadastro de cliente novo) e da API de envio (pedido Tiny)?
-- **Impacta:** RNF-001, RF-002, RF-003, CA-004.
-- **Default assumido na SPEC:** **5 segundos**.
-- **Opções plausíveis:**
-  - 3s — UX mais responsiva, risco maior de timeout em horário de pico ReceitaWS.
-  - 5s — compromisso razoável (default).
-  - 10s — tolerante com picos, mas cadastro de cliente pode parecer travado.
-- **Quem pode responder:** cliente (sobre tolerância do usuário final no form de cliente) ou dev anterior (se já mediu p95 da ReceitaWS em algum experimento).
-- **Considerações técnicas:**
-  - Edge Functions Supabase tem timeout total de 60s — 5s deixa folga.
-  - Se cliente quiser valores diferentes para "cadastro" (UX) vs "envio Tiny" (backend), precisamos **separar** em RNF-001a e RNF-001b.
-- **Como aplicar quando resolvido:** substituir "5s" em RNF-001, RF-002, RF-003 e CA-004.
+### 11.b — Resolvidas
 
-### DP-003 — Comportamento quando `tiny_valor_simples` é preenchido mas `tiny_valor` está vazio
-- **Pergunta:** Se um mapeamento estiver configurado "incompleto" (só o campo Simples preenchido, sem o campo padrão), o que o sistema deve fazer ao enviar um pedido?
-- **Impacta:** CB-003, RF-004, RF-005.
-- **Default assumido na SPEC:** **bloquear envio** com erro `"Mapeamento incompleto: tiny_valor obrigatório"`.
-- **Opções plausíveis:**
-  - **(default) Bloquear com erro** — força o backoffice a corrigir o cadastro; torna o erro impossível de camuflar.
-  - **Usar `tiny_valor_simples` como fallback genérico** — mais tolerante, mas mascara um cadastro errado e pode emitir NF com regime trocado silenciosamente.
-  - **Impedir pela UI** — o frontend do Mapeamento não deixa salvar `tiny_valor_simples` sem `tiny_valor`. É o mais limpo, mas precisa validação duplicada (front + back). *(Essa alternativa não é exclusiva — pode ser combinada com o default.)*
-- **Quem pode responder:** Lucas (qual o risco tributário aceitável?) + dev anterior (se havia padrão em outras telas de Configuração).
-- **Como aplicar quando resolvido:** ajustar CB-003; se escolher opção 3, adicionar RNF de validação de formulário em RF-004.
+> Cada entrada registra o que era pendente, a decisão final, quem decidiu, em que data, e os trechos da SPEC que foram atualizados.
+> Mantidas aqui para rastreabilidade; **não** servem como defaults — o texto ativo da SPEC (RFs, CAs) já reflete a resolução.
+
+#### DP-001 — Janela de revalidação do optante Simples Nacional → **RESOLVIDA**
+- **Resolvida em:** 2026-04-22 por Valentim Nunes (cliente) + Eduardo Sousa (formalização).
+- **Decisão:** **Revalidar a cada envio de pedido Tiny**, sem janela de tempo.
+- **Motivação:** empresa pode sair do Simples fora das janelas anuais se incluir atividade não-permitida — risco tributário real; janela de 30 dias colocaria NF com regime errado por até um mês.
+- **Trechos atualizados:** RF-003 (de "30 dias" → "a cada envio"); Fluxo F-2 passo 2 (removida checagem de data); CA-005 (reescrita); débito técnico adicionado ao TODO.md §4 ("monitorar quota ReceitaWS no primeiro mês").
+- **ADR associado:** `docs/decisions/adr/ADR-004-revalidacao-simples-por-pedido.md`.
+
+#### DP-002 — Timeout da chamada à ReceitaWS → **RESOLVIDA**
+- **Resolvida em:** 2026-04-22 por Valentim Nunes + Eduardo Sousa.
+- **Decisão:** **5 segundos** (mantido o default da SPEC v0.1).
+- **Motivação:** compromisso razoável — Edge Function Supabase tem timeout total de 60s, 5s deixa folga; p95 observado da ReceitaWS no plano pago fica abaixo; UX no form de cliente é aceitável.
+- **Trechos atualizados:** nenhum (o default já estava ativo em RNF-001, RF-002, RF-003, CA-004).
+
+#### DP-003 — `tiny_valor_simples` preenchido sem `tiny_valor` → **RESOLVIDA (obsoleta pelo toggle UI)**
+- **Resolvida em:** 2026-04-22 por Valentim Nunes + Eduardo Sousa.
+- **Decisão:** **Caso eliminado pela UI**. O form de Mapeamento Naturezas Tiny ganha um toggle "Habilitar natureza para Simples Nacional" por linha. Com o toggle off (default) só existe 1 campo (`tinyValor`, comportamento pré-F-001). Com o toggle on abre o 2º campo (`tinyValorSimples`) e o form exige ambos preenchidos — não deixa salvar com um só. Backend valida redundantemente.
+- **Motivação:** o caso "só simples preenchido" deixa de existir estruturalmente; a UI torna impossível criar o estado inválido.
+- **Trechos atualizados:** CB-003 (reescrita como "eliminado pelo toggle UI"); RF-004 (toggle descrito); Fluxo F-3 (UI com switch por linha). Resumo da UX do toggle: switch por linha, off por default, label "Habilitar natureza para Simples Nacional".
 
 ---
 
 ## 12. Aprovação
 
-- [ ] RFs numerados e verificáveis
-- [ ] RNFs com alvos concretos (timeout, observabilidade, segurança)
-- [ ] CAs em formato Given/When/Then cobrindo os 4 cenários operacionais de negócio
-- [ ] Casos de borda mapeados incluindo fallbacks de rede
-- [ ] Anti-SPEC preenchida (inclui "não tocar linhas existentes da tabela 085")
-- [ ] Modelos de dados com validações
-- [ ] Rastreabilidade RF ↔ F-001
-- [ ] Três ADRs identificados como pré-requisitos de execução
-- [ ] **Decisões pendentes (DP-001 a DP-003) resolvidas OU explicitamente aceitas como defaults**
-- [ ] SPEC revisada e aprovada pelo dev
+- [x] RFs numerados e verificáveis
+- [x] RNFs com alvos concretos (timeout, observabilidade, segurança)
+- [x] CAs em formato Given/When/Then cobrindo os 4 cenários operacionais de negócio
+- [x] Casos de borda mapeados incluindo fallbacks de rede
+- [x] Anti-SPEC preenchida (inclui "não tocar linhas existentes da tabela 085" e "não permitir edição manual do optante")
+- [x] Modelos de dados com validações
+- [x] Rastreabilidade RF ↔ F-001
+- [x] Quatro ADRs identificados como pré-requisitos de execução (ADR-001 a ADR-004)
+- [x] **Decisões pendentes (DP-001 a DP-003) resolvidas em 2026-04-22 por Valentim Nunes (cliente) + Eduardo Sousa**
+- [x] SPEC revisada e aprovada (v0.2)
 
 ---
 

@@ -3,7 +3,7 @@
 > Espelho **legível** dos contratos. A **fonte de verdade são os schemas Zod** em `packages/shared/types/`.
 > Este arquivo apenas referencia e descreve — nunca duplica a definição.
 >
-> Versão: 0.1 — Referência: SPEC v0.1 (F-001 apenas)
+> Versão: 0.2 — Referência: SPEC v0.2 (F-001 apenas — DPs resolvidas 2026-04-22)
 
 ---
 
@@ -97,11 +97,11 @@ ApiErrorSchema → { success: false, error: string, trace_id?, timestamp?, detai
 - **Arquivo:** mesmo.
 - **Input:** `TinyEmpresaNaturezaOperacaoUpsertInput` — aceita `tinyValorSimples?: string | null`.
 - **Saída:** `ApiSuccess(TinyEmpresaNaturezaOperacao)` com campo dual.
-- **Regra de negócio (CB-003, DP-003):**
-  - `tinyValor` vazio + `tinyValorSimples` ausente → soft-delete do mapeamento (comportamento atual).
-  - `tinyValor` vazio + `tinyValorSimples` presente → **erro 400** `NATUREZA_MAPEAMENTO_INCOMPLETO` (até DP-003 ser resolvida).
-  - `tinyValor` presente + `tinyValorSimples` ausente/null → upsert com coluna nova = `null` (preserva comportamento pré-F-001).
-  - `tinyValor` presente + `tinyValorSimples` presente → upsert com dual.
+- **Regra de negócio (RF-004, DP-003 resolvida em 2026-04-22):**
+  - `tinyValor` vazio + `tinyValorSimples` ausente/null → soft-delete do mapeamento (comportamento atual).
+  - `tinyValor` vazio + `tinyValorSimples` não-vazio → **erro 400** `NATUREZA_MAPEAMENTO_INCOMPLETO` (defesa em profundidade — a UI já bloqueia esse estado via toggle).
+  - `tinyValor` presente + `tinyValorSimples` ausente/null → upsert com coluna nova = `null` (comportamento pré-F-001 — toggle off).
+  - `tinyValor` presente + `tinyValorSimples` não-vazio → upsert com dual (toggle on).
 
 ### `POST /tiny-enviar-pedido-venda-v1` — cobre RF-003, RF-005, CA-007
 
@@ -110,7 +110,7 @@ ApiErrorSchema → { success: false, error: string, trace_id?, timestamp?, detai
 - **Saída:** inalterada.
 - **Fluxo interno novo:**
   1. Carrega pedido + empresa + cliente (como hoje).
-  2. Se cliente PJ e `optanteSimplesNacionalConsultadoEm` está `null` ou >30 dias (DP-001) E feature flag ativa → chama ReceitaWS, atualiza se OK.
+  2. Se cliente PJ E feature flag ativa → chama ReceitaWS **a cada envio** (sem checar janela de tempo — RF-003 / ADR-004); atualiza `optante_simples_nacional` + `..._consultado_em` se OK; se falhar, usa valor persistido com fallback.
   3. Busca mapeamento incluindo `tinyValorSimples` (coluna nova).
   4. Resolve `tinyValorEscolhido` conforme RF-005 → emite `NaturezaOperacaoResolucao` em log estruturado.
   5. Monta payload Tiny usando o valor escolhido.
