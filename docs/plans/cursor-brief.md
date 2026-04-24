@@ -21,6 +21,9 @@
 ## Índice
 
 - [Tarefa 1 — Migration 108 · F-001 Simples Nacional (schema)](#tarefa-1--migration-108--f-001-simples-nacional-schema)
+- [Tarefa 2 — Secrets Supabase (pós-migration)](#tarefa-2--secrets-supabase-pós-migration)
+- [Tarefa 3 — Ativar feature flag em staging](#tarefa-3--ativar-feature-flag-em-staging)
+- [Tarefa 4 — Ativar feature flag em produção](#tarefa-4--ativar-feature-flag-em-produção)
 
 ---
 
@@ -193,6 +196,194 @@ alter table public.cliente
 - [ ] Arquivo `supabase/migrations/108_simples_nacional_lookup.sql` comitado na branch `feat/simples-nacional-lookup`.
 - [ ] Flag `FEATURE_SIMPLES_NACIONAL_LOOKUP` continua ausente/`"false"` após a migration.
 - [ ] `TODO.md §1` atualizado marcando a Migration 108 como aplicada, com SHA.
+
+---
+
+## Tarefa 2 — Secrets Supabase (pós-migration)
+
+**Feature associada:** F-001 — Consulta Simples Nacional
+**MCP:** Supabase MCP (projeto `xxoiqfraeolsqsmsheue`)
+**Pré-requisito:** Tarefa 1 concluída em staging **e** produção.
+
+### Objetivo
+
+Cadastrar os 2 secrets necessários para o código da F-001 rodar em staging e em produção, **com a flag ainda desligada**. O código das Edge Functions precisa que ambos existam antes de ser chamado com a flag ligada — se faltar `RECEITAWS_TOKEN`, o helper `consultarSimplesNacional` devolve fallback gracioso; se faltar `FEATURE_SIMPLES_NACIONAL_LOOKUP`, o código trata como `"false"` (ADR-001).
+
+### Pré-condições
+
+1. Tarefa 1 (migration 108) concluída em ambos os ambientes, smoke test verde.
+2. Token pago da ReceitaWS adquirido (decisão comercial confirmada com Lucas).
+3. Branch `feat/simples-nacional-lookup` ainda não mergeada em `main` (os secrets entram antes do código para evitar janela onde o código já está em produção mas os secrets ainda não existem).
+
+### Operação (cole no Cursor Agent)
+
+```
+Usando Supabase MCP (projeto xxoiqfraeolsqsmsheue), cadastre os seguintes
+secrets de Edge Functions no ambiente-alvo.
+
+Ambiente-alvo: [staging | production]  ← escolher explicitamente
+
+Secrets:
+1. FEATURE_SIMPLES_NACIONAL_LOOKUP = "false"
+   (string literal "false"; quando decidirmos ativar, alteramos para "true"
+   em sessão separada — Tarefa 3/4 abaixo.)
+
+2. RECEITAWS_TOKEN = <token-do-plano-pago>
+   (ler do .env.local do Cursor ou do local seguro onde o token foi
+   guardado ao contratar o plano pago da ReceitaWS. Nunca colar em chat.)
+
+Validação pós-cadastro:
+- Rodar `supabase secrets list` via MCP e confirmar que ambos os nomes
+  aparecem, sem exibir o valor.
+- Confirmar que FEATURE_SIMPLES_NACIONAL_LOOKUP aparece com valor "false"
+  (ou verificar via chamada de probe se o painel nao mostrar valor).
+
+Reportar: [cadastrados | falhou com <erro>].
+```
+
+### Rollback
+
+```
+supabase secrets unset FEATURE_SIMPLES_NACIONAL_LOOKUP RECEITAWS_TOKEN
+```
+
+Rollback dos secrets é sempre seguro: com `FEATURE_SIMPLES_NACIONAL_LOOKUP` ausente, o código trata como `"false"` (ADR-001). Sem `RECEITAWS_TOKEN`, o helper `consultarSimplesNacional` emite log de erro e retorna `status="failed"` — nenhum fluxo do sistema quebra.
+
+### Critério de aceite da Tarefa 2
+
+- [ ] `FEATURE_SIMPLES_NACIONAL_LOOKUP = "false"` cadastrada em **staging**.
+- [ ] `RECEITAWS_TOKEN = <valor>` cadastrada em **staging**.
+- [ ] Mesmas duas secrets cadastradas em **produção**.
+- [ ] `supabase secrets list` mostra ambos os nomes nos dois ambientes.
+
+---
+
+## Tarefa 3 — Ativar feature flag em staging
+
+**Feature associada:** F-001 — Consulta Simples Nacional
+**MCP:** Supabase MCP (projeto `xxoiqfraeolsqsmsheue`)
+**Pré-requisito:** Tarefa 1 + Tarefa 2 concluídas; PR `feat/simples-nacional-lookup` com deploy Netlify de preview já testado visualmente pelo humano.
+
+### Objetivo
+
+Ligar `FEATURE_SIMPLES_NACIONAL_LOOKUP = "true"` apenas no ambiente de staging e validar end-to-end com CNPJ público antes de tocar em produção.
+
+### Pré-condições
+
+1. Tarefa 2 concluída em staging.
+2. Branch F-001 testada em preview Netlify (humano executou smoke visual).
+3. Plano: rodar **apenas em staging** — nunca subir flag em prod sem passar por aqui.
+4. Janela: qualquer hora — staging não tem usuários finais.
+
+### Operação (cole no Cursor Agent)
+
+```
+Usando Supabase MCP (projeto xxoiqfraeolsqsmsheue, ambiente staging),
+execute os seguintes passos:
+
+1. Trocar o valor do secret FEATURE_SIMPLES_NACIONAL_LOOKUP para "true"
+   em staging. Confirmar no `supabase secrets list`.
+
+2. Aguardar 30s (propagação das Edge Functions).
+
+3. Via Supabase SQL Editor (ou MCP), criar 1 cliente PJ de teste usando
+   um CNPJ público válido — sugestão: Magazine Luiza (CNPJ 47.960.950/0001-21).
+   Usar chamada `POST /create-cliente-v2` autenticado como backoffice.
+
+4. Verificar nos logs da Edge Function:
+   - Evento `receitaws.lookup` com `outcome: "ok"` e CNPJ mascarado.
+   - Row em `cliente` com `optante_simples_nacional` setado (true ou false)
+     e `optante_simples_nacional_consultado_em` ≈ now().
+
+5. Criar 1 pedido-de-teste para esse cliente e chamar
+   `POST /tiny-enviar-pedido-venda-v1 { dry_run: true }`.
+   - Confirmar log `natureza.resolvida` com `tinyValorEscolhido`
+     coerente com a flag do cliente.
+   - Confirmar log `receitaws.lookup` (revalidacao ocorreu no envio).
+
+6. Reportar: [flag on + smoke passou | smoke falhou com <erro>].
+
+Se falhar em qualquer passo, rodar Rollback imediatamente.
+```
+
+### Rollback
+
+Trocar o secret de volta para `"false"`:
+
+```
+supabase secrets set FEATURE_SIMPLES_NACIONAL_LOOKUP=false
+```
+
+Verificar via `supabase secrets list` e testar que criar cliente PJ **não** emite `receitaws.lookup`.
+
+### Critério de aceite da Tarefa 3
+
+- [ ] Flag `FEATURE_SIMPLES_NACIONAL_LOOKUP = "true"` em staging.
+- [ ] Criar cliente PJ com CNPJ público → `optante_simples_nacional` populado.
+- [ ] Dry-run de pedido → logs `receitaws.lookup` e `natureza.resolvida` emitidos.
+- [ ] Sem regressão em fluxos de cliente PF (consulta não é chamada — CA-002).
+
+---
+
+## Tarefa 4 — Ativar feature flag em produção
+
+**Feature associada:** F-001 — Consulta Simples Nacional
+**MCP:** Supabase MCP (projeto `xxoiqfraeolsqsmsheue`)
+**Pré-requisito:** Tarefa 1 + 2 + 3 concluídas; PR mergeado em `main`; deploy Netlify de produção concluído.
+
+### Objetivo
+
+Ligar a feature flag em produção, após smoke verde em staging. Esta é a **única** operação em produção desta feature — todas as anteriores são preparação.
+
+### Pré-condições
+
+1. Tarefa 3 concluída em staging, smoke verde.
+2. PR `feat/simples-nacional-lookup` mergeado; deploy Netlify de `main` rodando em proseller.app.br.
+3. Backup recente confirmado (últimas 24h).
+4. Horário de baixo tráfego preferencial (antes das 9h ou após 20h BR).
+5. Humano em standby para monitorar primeiros 30 minutos pós-ligação.
+
+### Operação (cole no Cursor Agent)
+
+```
+Usando Supabase MCP (projeto xxoiqfraeolsqsmsheue, ambiente PRODUCTION),
+execute:
+
+1. Trocar o valor do secret FEATURE_SIMPLES_NACIONAL_LOOKUP para "true"
+   em PRODUÇÃO. Confirmar via `supabase secrets list`.
+
+2. Aguardar 30s.
+
+3. Monitorar logs por 5 minutos:
+   - Volume de `receitaws.lookup` proporcional a criação de clientes PJ
+     + envios de pedido PJ.
+   - Qualquer `outcome: "timeout" | "rate_limited" | "invalid_response"`
+     em volume > 5% é sinal de alerta — considerar Rollback.
+   - Nenhum erro 5xx em `create-cliente-v2` ou `tiny-enviar-pedido-venda-v1`.
+
+4. Pedir ao humano que faça 1 cadastro real de cliente PJ + 1 envio
+   real de pedido, e valide visualmente que a NF Tiny sai com a
+   natureza correta.
+
+5. Reportar: [flag on em prod + smoke verde | Rollback executado por <motivo>].
+```
+
+### Rollback
+
+Em caso de qualquer anomalia (taxa alta de falha ReceitaWS, erro 5xx, NF com regime errado):
+
+```
+supabase secrets set FEATURE_SIMPLES_NACIONAL_LOOKUP=false
+```
+
+Rollback da flag é **imediato** e reversível. A migration 108 não precisa ser revertida — colunas ficam lá, com valores `null` para clientes que ainda não foram consultados; comportamento pré-F-001 é restaurado ao desligar a flag (CA-008).
+
+### Critério de aceite da Tarefa 4
+
+- [ ] `FEATURE_SIMPLES_NACIONAL_LOOKUP = "true"` em produção.
+- [ ] Primeiros 30 minutos sem 5xx ou taxa anormal de falha ReceitaWS.
+- [ ] Validação manual pelo humano: 1 cadastro PJ + 1 envio Tiny com NF correta.
+- [ ] `TODO.md §1` atualizado marcando F-001 como concluída com SHA/PR.
 
 ---
 
