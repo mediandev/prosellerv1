@@ -156,12 +156,27 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 - **Supertest não encaixa em Edge Functions Deno** — o TODO §3 R-5 listava "Supertest", mas Edge Functions rodam em Deno (não Node), e Supertest assume Node HTTP server. Recomendação em `docs/plans/skills-manifest.md §5`: usar `deno test` + `supabase functions serve` para integração de Edge Functions, reservando Supertest só se aparecer algum servidor Node no projeto. Atualizar R-5 quando a feature da suíte de testes for aberta.
 - **`npm install` gerou 11 vulnerabilidades auditadas (1 moderate, 8 high, 2 critical)** nas dependências existentes — detectadas ao instalar zod na fase SPEC. Não relacionado a zod; são dependências herdadas. Tratar em onda dedicada de segurança (`npm audit fix` controlado, não `--force`).
 - **F-001 consulta ReceitaWS a cada envio de pedido Tiny (ADR-004).** Decisão tributária do cliente — sem cache por janela. Monitorar quota ReceitaWS consumida no primeiro mês após ligar a flag em produção; se aproximar do limite do plano pago, reabrir ADR-004 para considerar cache curto (TTL 24h) com revalidação sob mudança de status.
+- Automatizar deploy de Edge Functions em GitHub Action ao mergear main (evita INC-001 recorrer).
+- Quota ReceitaWS API Pública 3/min — monitorar logs receitaws.lookup.rate_limited; migrar para plano Comercial se recorrente.
 
 ---
 
-## 5. Bugs abertos
+## 5. Bugs / incidentes
 
-_Nenhum registrado aqui. Quando aparecer, usar formato:_
+🐛 INC-001 · 2026-04-24 · Cursor MCP publicou stub "// test" em
+create-cliente-v2 em produção durante deploy de F-001.
+- Reprodução: Cursor agent invocou `deploy_edge_function` com
+  payload minimalista de validação; sobrescreveu versão de produção.
+- Impacto: janela de ~minutos com create-cliente-v2 retornando
+  "// test" em produção. Nenhum cliente afetado confirmado.
+- Resolução: `npx supabase functions deploy create-cliente-v2
+  --project-ref xxoiqfraeolsqsmsheue` a partir do código em main
+  pós-merge PR #4. Também redeployadas
+  tiny-empresa-natureza-operacao-v2 e tiny-enviar-pedido-venda-v1
+  pelo mesmo canal.
+- Status: resolvido. Lição → ADR-005.
+
+_Formato para próximos bugs:_
 
 ```
 ### 🐛 BUG-NNN · <título>
