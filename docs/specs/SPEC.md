@@ -4,7 +4,8 @@
 > Primeira feature speccada retroativamente: **F-001 · Consulta Simples Nacional**.
 > Demais módulos em produção serão speccados retroativamente na Onda R-3 do TODO.
 >
-> Versão: 0.2 — Data: 2026-04-22 — Referência PRD: ainda não existe (R-2 pendente).
+> Versão: 0.3 — Data: 2026-04-24 — Referência PRD: ainda não existe (R-2 pendente).
+> **Changelog v0.3 (2026-04-24):** DP-006 resolvida — RF-003 ganha short-circuit por empresa (skip ReceitaWS quando empresa não tem nenhum mapeamento com dual-ID); CA-007 ganha sub-caso E.
 > **Changelog v0.2 (2026-04-22):** DP-001/002/003 resolvidas em call com Valentim Nunes; RF-003 virou revalidação por pedido (ADR-004); CB-003 eliminado pelo toggle UI; Anti-SPEC proíbe edição manual do campo optante.
 
 ---
@@ -41,6 +42,7 @@ Fora de F-001: F-002 e ondas R-1…R-5 têm seu próprio escopo futuro.
 - **Cobre:** CA-005, CA-007
 - **Contrato:** reusa `ReceitaWsSimplesResponse`
 - **Notas:** Motivo da revalidação por pedido (e não por janela de tempo): o cliente pode sair do Simples fora das janelas anuais se incluir atividade não-permitida — decisão confirmada por Valentim Nunes em 2026-04-22 (ver ADR-004). Se a revalidação falhar, usa o valor persistido (mesmo que antigo) e anota no log. Apenas se o valor for `null` E a revalidação falhar o pedido prossegue tratando como "não-simples" (fallback documentado em CB-002).
+- **Otimização (DP-006, 2026-04-24):** Se a empresa do pedido não possuir **nenhum** mapeamento ativo em `tiny_empresa_natureza_operacao` com `tiny_valor_simples` não-null e não-vazio, pular a consulta ReceitaWS e usar `tiny_valor` padrão direto. O resultado nunca mudaria a natureza escolhida, então evitar a chamada HTTP economiza latência e quota. Fallback registrado no log como `no_dual_company`. A probe é um `COUNT` com `head:true` antes do lookup; erro no probe → fail-safe mantém comportamento pré-DP-006.
 
 ### RF-004 — Mapeamento dual de natureza de operação Tiny
 - **Descrição:** A tabela de mapeamento `(empresa × natureza de operação ProSeller → valor Tiny)` deve aceitar um segundo valor Tiny opcional, usado quando o destinatário é optante do Simples Nacional. Quando o 2º valor é `null`, o sistema usa o 1º para todos os clientes (comportamento atual preservado).
@@ -229,6 +231,16 @@ Given: cliente.optante_simples_nacional=null, mapeamento.tiny_valor="1001", mape
 When: envia pedido
 Then: payload Tiny.natureza_operacao = "1001"
   And: log "natureza.fallback_null_optante" emitido
+
+Cenário E — Empresa sem dual-ID (DP-006, 2026-04-24):
+Given: cliente PJ; empresa do pedido NÃO possui nenhum mapeamento ativo
+  com tiny_valor_simples preenchido (nem a linha relevante, nem nenhuma outra)
+  E feature flag ligada
+When: envia pedido
+Then: ReceitaWS NÃO é chamada
+  And: cliente.optante_simples_nacional_consultado_em NÃO é atualizado
+  And: payload Tiny.natureza_operacao = tiny_valor (padrão) da linha relevante
+  And: log natureza.resolvida emitido com fallbackUsed="no_dual_company"
 ```
 
 ### CA-008 — Feature flag desligada preserva comportamento atual (cobre RF-006)
@@ -359,7 +371,7 @@ Leitura: env var `FEATURE_SIMPLES_NACIONAL_LOOKUP` (`"true"` | `"false"` | ausen
 
 ### 11.a — Pendentes
 
-_Nenhuma. Todas as DPs de F-001 foram resolvidas em call com Valentim Nunes em 2026-04-22 — ver §11.b._
+_Nenhuma. DP-001/002/003 resolvidas em 2026-04-22; DP-006 resolvida em 2026-04-24. Ver §11.b._
 
 ### 11.b — Resolvidas
 
@@ -385,6 +397,13 @@ _Nenhuma. Todas as DPs de F-001 foram resolvidas em call com Valentim Nunes em 2
 - **Motivação:** o caso "só simples preenchido" deixa de existir estruturalmente; a UI torna impossível criar o estado inválido.
 - **Trechos atualizados:** CB-003 (reescrita como "eliminado pelo toggle UI"); RF-004 (toggle descrito); Fluxo F-3 (UI com switch por linha). Resumo da UX do toggle: switch por linha, off por default, label "Habilitar natureza para Simples Nacional".
 
+#### DP-006 — Otimização do envio Tiny para empresas sem dual-ID → **RESOLVIDA**
+- **Resolvida em:** 2026-04-24 por Valentim Nunes (cliente) + Eduardo Sousa (formalização).
+- **Decisão:** **Short-circuit por empresa.** Antes de chamar ReceitaWS no envio de pedido Tiny, o sistema verifica se a empresa do pedido possui algum mapeamento ativo com `tiny_valor_simples` preenchido. Se não houver nenhum, pula a consulta ReceitaWS **inteiramente** (não atualiza `optante_simples_nacional_consultado_em` do cliente) e usa `tiny_valor` padrão direto. O log `natureza.resolvida` é emitido com `fallbackUsed="no_dual_company"` para diferenciar do fallback per-row (`no_dual`).
+- **Motivação:** quando a empresa não tem dual-ID configurado em nenhuma natureza, o resultado da consulta ReceitaWS nunca mudaria a natureza escolhida — a chamada HTTP consome quota/latência sem influir no outcome. Empresa com perfil exclusivamente PJ-não-optante (ou que ainda não configurou o dual-ID) não paga a latência/quota enquanto não estiver pronta.
+- **Trechos atualizados:** RF-003 (cláusula de otimização com probe `COUNT`); CA-007 sub-caso E (novo cenário "Empresa sem dual-ID"); CONTRACTS §4 (enum `fallbackUsed` ganha `"no_dual_company"`).
+- **Segurança:** fail-safe — se a probe de `COUNT` falhar (erro de banco), o sistema mantém `companyHasDualMapping=true` (chama ReceitaWS como antes), preservando correção acima de performance.
+
 ---
 
 ## 12. Aprovação
@@ -398,7 +417,8 @@ _Nenhuma. Todas as DPs de F-001 foram resolvidas em call com Valentim Nunes em 2
 - [x] Rastreabilidade RF ↔ F-001
 - [x] Quatro ADRs identificados como pré-requisitos de execução (ADR-001 a ADR-004)
 - [x] **Decisões pendentes (DP-001 a DP-003) resolvidas em 2026-04-22 por Valentim Nunes (cliente) + Eduardo Sousa**
-- [x] SPEC revisada e aprovada (v0.2)
+- [x] **DP-006 resolvida em 2026-04-24 (short-circuit por empresa sem dual-ID) — RF-003 e CA-007 sub-caso E atualizados**
+- [x] SPEC revisada e aprovada (v0.3)
 
 ---
 

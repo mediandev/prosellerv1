@@ -23,6 +23,7 @@ Artefatos produzidos (commits em `main`):
 - [x] **SPEC v0.2 atualizada com DPs resolvidas** — `a0d0823`.
 - [x] **ADR-004 criado** (revalidação ReceitaWS a cada envio de pedido Tiny) — `a0d0823`.
 - [x] **Suíte Vitest + `deno test` introduzida** como F-002 (merge PR #1, `dd50c31`).
+- [x] **DP-006 resolvida (2026-04-24)** — short-circuit no envio quando empresa não tem dual-ID; implementada em `f992841` na branch feat/simples-nacional-lookup; SPEC v0.3.
 
 Bloqueadores restantes:
 - [ ] **Migration 108 aplicada em staging** via Cursor MCP (brief em `docs/plans/cursor-brief.md §Tarefa 1`). Exige confirmação humana explícita.

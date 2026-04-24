@@ -3,7 +3,7 @@
 > Espelho **legível** dos contratos. A **fonte de verdade são os schemas Zod** em `packages/shared/types/`.
 > Este arquivo apenas referencia e descreve — nunca duplica a definição.
 >
-> Versão: 0.2 — Referência: SPEC v0.2 (F-001 apenas — DPs resolvidas 2026-04-22)
+> Versão: 0.3 — Referência: SPEC v0.3 (F-001 — DPs 001/002/003 resolvidas 2026-04-22; DP-006 resolvida 2026-04-24)
 
 ---
 
@@ -158,6 +158,16 @@ Emitido a cada chamada à ReceitaWS. Campos: `traceId`, `cnpjMasked`, `httpStatu
 ### `natureza.resolvida` — schema `NaturezaOperacaoResolucao`
 
 Emitido a cada decisão de `tiny_valor` no envio Tiny. Campos: `traceId`, `empresaId`, `naturezaOperacaoId`, `optanteAplicado`, `tinyValorEscolhido`, `fallbackUsed`.
+
+`fallbackUsed` é um enum com os valores:
+
+| Valor | Significado |
+|---|---|
+| `none` | Mapeamento com dual-ID e optante definido (`true`/`false`) → escolha determinística. |
+| `no_dual` | A linha específica do mapeamento não tem `tinyValorSimples` preenchido; empresa até pode ter outras linhas com dual, mas esta não. Usa `tinyValor`. |
+| `no_dual_company` | **DP-006 (2026-04-24):** a empresa inteira do pedido não possui nenhum mapeamento ativo com `tinyValorSimples`. ReceitaWS **não foi chamada**. Usa `tinyValor`. |
+| `null_optante` | Mapeamento com dual-ID mas `optanteSimples` é `null` (cliente PF ou revalidação falhou sem valor persistido). Usa `tinyValor`. |
+| `revalidation_failed` | Reservado para futuras distinções; atualmente coberto por `null_optante`. |
 
 ---
 
