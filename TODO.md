@@ -9,28 +9,26 @@
 
 ## 1. Em andamento
 
-**F-001 · Consulta Simples Nacional — EM EXECUÇÃO na branch `feat/simples-nacional-lookup`.**
+**F-001 · Consulta Simples Nacional — ATIVA EM PRODUÇÃO desde 2026-04-24, aguardando validação end-to-end do Valentim.**
 
-Artefatos produzidos (commits em `main`):
-- [x] SPEC em `docs/specs/SPEC.md` (6 RFs, 8 CAs, 7 CBs) — `cf1ea26`.
-- [x] Schemas Zod em `packages/shared/types/` (api, cliente, natureza-operacao, simples-nacional) — `cf1ea26`.
-- [x] `docs/contracts/CONTRACTS.md` espelho — `cf1ea26`.
-- [x] ADR-001 (feature flag env var), ADR-002 (ReceitaWS), ADR-003 (dual-ID nullable) — `cf1ea26`.
-- [x] `zod@3.23.8` + alias `@shared/*` (tsconfig + vite + package-lock) — `cf1ea26`.
-- [x] `docs/plans/skills-manifest.md` — 5× tool_nativa + 1× MCP Supabase, zero skills novas — `6dba32b`.
-- [x] `docs/plans/cursor-brief.md` — Tarefa 1 (Migration 108) com rollback obrigatório — `6c29740`; fix Passo 0 PRÉ-MCP — `b3be6bf`.
-- [x] **DPs resolvidas em 2026-04-22 via call com Valentim Nunes** (ver SPEC §11.b).
-- [x] **SPEC v0.2 atualizada com DPs resolvidas** — `a0d0823`.
-- [x] **ADR-004 criado** (revalidação ReceitaWS a cada envio de pedido Tiny) — `a0d0823`.
-- [x] **Suíte Vitest + `deno test` introduzida** como F-002 (merge PR #1, `dd50c31`).
-- [x] **DP-006 resolvida (2026-04-24)** — short-circuit no envio quando empresa não tem dual-ID; implementada em `f992841` na branch feat/simples-nacional-lookup; SPEC v0.3.
+Estado da entrega:
+- [x] SPEC v0.3 + CONTRACTS + ADR-001..004 + Zod em `packages/shared/types/` — `cf1ea26`, `a0d0823`, `569bcbf`.
+- [x] Suíte Vitest + `deno test` (F-002) — merge PR #1 `dd50c31`.
+- [x] Migration 108 aplicada **em produção** via Cursor MCP (2026-04-24).
+- [x] Secret `FEATURE_SIMPLES_NACIONAL_LOOKUP` cadastrada (inicialmente `false`, depois `true`). `RECEITAWS_TOKEN` pulado — API Pública basta no MVP (ver ADR-002).
+- [x] PR #4 (feat/simples-nacional-lookup) mergeado em main — merge commit `4a770bb`.
+- [x] 3 Edge Functions redeployadas via `supabase functions deploy` CLI (`create-cliente-v2`, `tiny-empresa-natureza-operacao-v2`, `tiny-enviar-pedido-venda-v1`).
+- [x] Códigos duais da DAP cadastrados na UI via toggle (Venda: 781495108/781284632 · Bonificação: 781496980/657287750). Cântico mantida 1:1.
+- [x] Feature flag trocada para `true` em produção.
+- [x] INC-001 (deploy Cursor MCP publicou stub `// test`) documentado + ADR-005 — `c7d9a51`.
 
-Bloqueadores restantes:
-- [ ] **Migration 108 aplicada em staging** via Cursor MCP (brief em `docs/plans/cursor-brief.md §Tarefa 1`). Exige confirmação humana explícita.
-- [ ] **Migration 108 aplicada em produção** após smoke test verde em staging.
-- [ ] **Secrets Supabase** cadastrados: `FEATURE_SIMPLES_NACIONAL_LOOKUP` (`"false"` no início) e `RECEITAWS_TOKEN` (plano pago). Ver `docs/plans/cursor-brief.md §Tarefa 2`.
-- [ ] Merge do PR `feat/simples-nacional-lookup` após smoke em preview Netlify.
-- [ ] Ligar a flag em staging, validar, depois em produção (`cursor-brief §Tarefa 3/4`).
+Único bloqueador para mover F-001 para §6:
+- [ ] **Validação end-to-end pelo Valentim** — enviado HTML `docs/specs/teste-simples-nacional-valentim.html` com 2 testes (cliente Simples e não-Simples). Aguardando retorno dele com os códigos Tiny observados.
+
+Retomada rápida:
+- Se Valentim responder OK → mandar prompt **completo** (do histórico da sessão) no Claude Code CLI para mover F-001 para §6 e encerrar.
+- Se vier erro → desligar flag (`FEATURE_SIMPLES_NACIONAL_LOOKUP=false` no painel Supabase), avaliar e investigar.
+- Log em tempo real: Supabase → Edge Functions → `tiny-enviar-pedido-venda-v1` → Logs. Eventos esperados: `receitaws.lookup` + `natureza.resolvida`.
 
 ---
 
