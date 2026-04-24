@@ -65,7 +65,7 @@ async function listByEmpresaRest(empresaId: string): Promise<TinyEmpresaNatureza
   url.searchParams.set('deleted_at', 'is.null');
   url.searchParams.set(
     'select',
-    'id,empresa_id,natureza_operacao_id,tiny_valor,ativo,natureza_operacao:natureza_operacao_id(id,nome)'
+    'id,empresa_id,natureza_operacao_id,tiny_valor,tiny_valor_simples,ativo,natureza_operacao:natureza_operacao_id(id,nome)'
   );
   url.searchParams.set('order', 'natureza_operacao_id.asc');
 
@@ -86,6 +86,7 @@ async function listByEmpresaRest(empresaId: string): Promise<TinyEmpresaNatureza
     naturezaOperacaoId: String(row.natureza_operacao_id),
     naturezaOperacaoNome: row.natureza_operacao?.nome || '',
     tinyValor: row.tiny_valor || '',
+    tinyValorSimples: row.tiny_valor_simples ?? null,
     ativo: row.ativo ?? true,
   }));
 }
@@ -97,6 +98,13 @@ async function upsertRest(input: TinyEmpresaNaturezaOperacaoUpsertInput) {
   const empresaId = Number(input.empresaId);
   const naturezaOperacaoId = Number(input.naturezaOperacaoId);
   const tinyValor = String(input.tinyValor || '').trim();
+  const tinyValorSimplesRaw = input.tinyValorSimples;
+  const tinyValorSimples =
+    tinyValorSimplesRaw === undefined ||
+    tinyValorSimplesRaw === null ||
+    (typeof tinyValorSimplesRaw === 'string' && tinyValorSimplesRaw.trim() === '')
+      ? null
+      : String(tinyValorSimplesRaw).trim();
 
   if (!tinyValor) {
     const url = new URL(`${SUPABASE_URL}/rest/v1/tiny_empresa_natureza_operacao`);
@@ -133,6 +141,7 @@ async function upsertRest(input: TinyEmpresaNaturezaOperacaoUpsertInput) {
         empresa_id: empresaId,
         natureza_operacao_id: naturezaOperacaoId,
         tiny_valor: tinyValor,
+        tiny_valor_simples: tinyValorSimples,
         ativo: input.ativo !== false,
         deleted_at: null,
         updated_at: new Date().toISOString(),
@@ -151,6 +160,7 @@ async function upsertRest(input: TinyEmpresaNaturezaOperacaoUpsertInput) {
     empresaId: String(row?.empresa_id || input.empresaId),
     naturezaOperacaoId: String(row?.natureza_operacao_id || input.naturezaOperacaoId),
     tinyValor: row?.tiny_valor || tinyValor,
+    tinyValorSimples: row?.tiny_valor_simples ?? tinyValorSimples,
     ativo: row?.ativo ?? (input.ativo !== false),
   };
 }
@@ -177,7 +187,12 @@ export const tinyNaturezaOperacaoService = {
 
   async saveBulk(
     empresaId: string,
-    items: Array<{ naturezaOperacaoId: string; tinyValor: string; ativo?: boolean }>
+    items: Array<{
+      naturezaOperacaoId: string;
+      tinyValor: string;
+      tinyValorSimples?: string | null;
+      ativo?: boolean;
+    }>
   ) {
     await Promise.all(
       items.map((item) =>
@@ -185,6 +200,7 @@ export const tinyNaturezaOperacaoService = {
           empresaId,
           naturezaOperacaoId: item.naturezaOperacaoId,
           tinyValor: item.tinyValor,
+          tinyValorSimples: item.tinyValorSimples ?? null,
           ativo: item.ativo ?? true,
         })
       )
