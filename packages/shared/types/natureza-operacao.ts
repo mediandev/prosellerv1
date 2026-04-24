@@ -50,6 +50,6 @@ export const NaturezaOperacaoResolucao = z.object({
   naturezaOperacaoId: z.number().int(),
   optanteAplicado: z.boolean().nullable(),
   tinyValorEscolhido: z.string(),
-  fallbackUsed: z.enum(["none", "no_dual", "null_optante", "revalidation_failed"]),
+  fallbackUsed: z.enum(["none", "no_dual", "no_dual_company", "null_optante", "revalidation_failed"]),
 });
 export type NaturezaOperacaoResolucao = z.infer<typeof NaturezaOperacaoResolucao>;

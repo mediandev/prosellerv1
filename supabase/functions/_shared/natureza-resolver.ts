@@ -9,6 +9,7 @@
 export type FallbackUsed =
   | "none"
   | "no_dual"
+  | "no_dual_company"
   | "null_optante"
   | "revalidation_failed";
 
@@ -20,6 +21,14 @@ export interface NaturezaMapeamento {
 export interface ResolveNaturezaParams {
   mapeamento: NaturezaMapeamento;
   optanteSimples: boolean | null;
+  /**
+   * DP-006 (2026-04-24): quando `false`, a empresa inteira não possui nenhum
+   * mapeamento ativo com `tiny_valor_simples` preenchido — o caller já
+   * evitou a consulta ReceitaWS, e aqui apenas retornamos `tinyValor` com
+   * fallback `no_dual_company` para registrar a razão no log.
+   * Default (ausente ou `true`): comportamento pré-DP-006 (avalia per-row).
+   */
+  companyHasDualMapping?: boolean;
 }
 
 export interface ResolveNaturezaResult {
@@ -29,6 +38,7 @@ export interface ResolveNaturezaResult {
 
 /**
  * Escolhe `tiny_valor` para o payload Tiny aplicando as regras de F-001 (CA-007):
+ *  - DP-006: `companyHasDualMapping === false` → `tinyValor`, fallback "no_dual_company".
  *  - Mapeamento sem dual (`tinyValorSimples` null/vazio) → usa `tinyValor`, fallback "no_dual".
  *  - Mapeamento com dual e `optanteSimples === null` → usa `tinyValor`, fallback "null_optante".
  *  - Mapeamento com dual e `optanteSimples === true` → usa `tinyValorSimples`, fallback "none".
@@ -42,7 +52,15 @@ export interface ResolveNaturezaResult {
 export function resolveNaturezaTiny(
   params: ResolveNaturezaParams,
 ): ResolveNaturezaResult {
-  const { mapeamento, optanteSimples } = params;
+  const { mapeamento, optanteSimples, companyHasDualMapping } = params;
+
+  // DP-006 · Short-circuit: empresa inteira sem dual-ID. Precede regras
+  // per-row porque, se a empresa não tem NENHUM mapeamento com Simples,
+  // o log deve indicar a razão empresa-level (e não row-level).
+  if (companyHasDualMapping === false) {
+    return { tinyValor: mapeamento.tinyValor, fallbackUsed: "no_dual_company" };
+  }
+
   const tinyValorSimples =
     mapeamento.tinyValorSimples === null ||
     mapeamento.tinyValorSimples === ""

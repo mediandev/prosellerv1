@@ -400,34 +400,67 @@ serve(async (req) => {
     // F-001 · Revalidacao Simples Nacional a cada envio de pedido Tiny (ADR-004).
     // Sem janela de tempo: sempre chama ReceitaWS se cliente e PJ e a flag esta on.
     // Fallback: se lookup falhar, usa valor persistido em cliente.optante_simples_nacional.
+    //
+    // DP-006 (2026-04-24): otimizacao empresa-level. Se a empresa do pedido nao
+    // tem NENHUM mapeamento ativo com tiny_valor_simples preenchido, nao faz
+    // sentido consultar ReceitaWS — o resultado nunca mudaria a natureza
+    // escolhida. Short-circuit: puxamos um count antes do lookup e pulamos todo
+    // o bloco Simples Nacional se a empresa nao esta configurada para tal.
     const featureSimplesEnabled =
       (Deno.env.get('FEATURE_SIMPLES_NACIONAL_LOOKUP') || '').toLowerCase() === 'true'
     let optanteSimples: boolean | null =
       (clienteBase as any)?.optante_simples_nacional ?? null
+    let companyHasDualMapping = true
 
     if (featureSimplesEnabled && tipoPessoa === 'J' && cpfCnpj.length === 14) {
-      const lookup = await consultarSimplesNacional({ cnpj: cpfCnpj, traceId })
-      if (lookup.status === 'ok') {
-        optanteSimples = lookup.optante
-        const { error: persistOptanteError } = await supabase
-          .from('cliente')
-          .update({
-            optante_simples_nacional: lookup.optante,
-            optante_simples_nacional_consultado_em: lookup.consultadoEm,
-          })
-          .eq('cliente_id', pedido.cliente_id)
+      // DP-006 · Probe empresa-level.
+      const { count: dualCount, error: dualCountError } = await supabase
+        .from('tiny_empresa_natureza_operacao')
+        .select('id', { count: 'exact', head: true })
+        .eq('empresa_id', empresaId)
+        .eq('ativo', true)
+        .is('deleted_at', null)
+        .not('tiny_valor_simples', 'is', null)
+        .neq('tiny_valor_simples', '')
 
-        if (persistOptanteError) {
-          // Best-effort: persistencia falhou, mas temos o valor em memoria para este envio.
-          console.warn('[TINY] Persistencia de optante_simples_nacional falhou (non-blocking):', {
-            traceId,
-            code: persistOptanteError.code,
-            message: persistOptanteError.message,
-          })
-        }
+      if (dualCountError) {
+        // Fail-safe: em caso de erro no probe, mantem comportamento pre-DP-006
+        // (chama ReceitaWS como se houvesse dual-mapping).
+        console.warn('[TINY] Count dual mapeamentos falhou (non-blocking):', {
+          traceId,
+          code: dualCountError.code,
+          message: dualCountError.message,
+        })
+        companyHasDualMapping = true
+      } else {
+        companyHasDualMapping = (dualCount ?? 0) > 0
       }
-      // lookup.status = 'inconclusive' | 'failed' → mantem optanteSimples = valor persistido
-      // (ou null); helper ja emitiu receitaws.lookup com outcome.
+
+      if (companyHasDualMapping) {
+        const lookup = await consultarSimplesNacional({ cnpj: cpfCnpj, traceId })
+        if (lookup.status === 'ok') {
+          optanteSimples = lookup.optante
+          const { error: persistOptanteError } = await supabase
+            .from('cliente')
+            .update({
+              optante_simples_nacional: lookup.optante,
+              optante_simples_nacional_consultado_em: lookup.consultadoEm,
+            })
+            .eq('cliente_id', pedido.cliente_id)
+
+          if (persistOptanteError) {
+            // Best-effort: persistencia falhou, mas temos o valor em memoria para este envio.
+            console.warn('[TINY] Persistencia de optante_simples_nacional falhou (non-blocking):', {
+              traceId,
+              code: persistOptanteError.code,
+              message: persistOptanteError.message,
+            })
+          }
+        }
+        // lookup.status = 'inconclusive' | 'failed' → mantem optanteSimples = valor persistido
+        // (ou null); helper ja emitiu receitaws.lookup com outcome.
+      }
+      // else (DP-006): empresa sem dual-mapping → nao chama ReceitaWS.
     }
 
     // 4b) Itens do pedido
@@ -574,10 +607,11 @@ serve(async (req) => {
       },
     }
 
-    // F-001 · Resolucao final da natureza_operacao Tiny (CA-007).
+    // F-001 · Resolucao final da natureza_operacao Tiny (CA-007 + DP-006).
     const resolved = resolveNaturezaTiny({
       mapeamento: { tinyValor: mapTinyValorBase, tinyValorSimples: mapTinyValorSimples },
       optanteSimples,
+      companyHasDualMapping,
     })
     const tinyNaturezaValor = resolved.tinyValor
     console.log(JSON.stringify({
@@ -607,6 +641,7 @@ serve(async (req) => {
           },
           simples_nacional: {
             feature_enabled: featureSimplesEnabled,
+            company_has_dual_mapping: companyHasDualMapping,
             optante_aplicado: optanteSimples,
             fallback_used: resolved.fallbackUsed,
           },

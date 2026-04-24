@@ -73,3 +73,42 @@ Deno.test("resolveNaturezaTiny: optante=false sem dual usa tinyValor com fallbac
   assertEquals(result.tinyValor, "1001");
   assertEquals(result.fallbackUsed, "no_dual");
 });
+
+// DP-006 (2026-04-24): short-circuit por empresa. Quando o caller passa
+// companyHasDualMapping=false, a função retorna tinyValor padrão com fallback
+// "no_dual_company" — independente do per-row tinyValorSimples e do optante.
+// No caller (tiny-enviar-pedido-venda-v1), esse caminho evita a chamada a
+// ReceitaWS completamente.
+Deno.test("resolveNaturezaTiny: short-circuit companyHasDualMapping=false retorna no_dual_company", () => {
+  const result = resolveNaturezaTiny({
+    mapeamento: { tinyValor: "1001", tinyValorSimples: null },
+    optanteSimples: true,
+    companyHasDualMapping: false,
+  });
+  assertEquals(result.tinyValor, "1001");
+  assertEquals(result.fallbackUsed, "no_dual_company");
+});
+
+// DP-006 borda: companyHasDualMapping=false precede tinyValorSimples na mesma
+// row (cenário estruturalmente inconsistente — se a empresa tem 1 dual, a probe
+// retornaria >0 — mas garante que o flag empresa-level tem prioridade).
+Deno.test("resolveNaturezaTiny: companyHasDualMapping=false precede tinyValorSimples na mesma row", () => {
+  const result = resolveNaturezaTiny({
+    mapeamento: { tinyValor: "1001", tinyValorSimples: "2002" },
+    optanteSimples: true,
+    companyHasDualMapping: false,
+  });
+  assertEquals(result.tinyValor, "1001");
+  assertEquals(result.fallbackUsed, "no_dual_company");
+});
+
+// DP-006 regressão: companyHasDualMapping=true mantém comportamento pré-DP-006.
+Deno.test("resolveNaturezaTiny: companyHasDualMapping=true com dual e optante=true escolhe Simples", () => {
+  const result = resolveNaturezaTiny({
+    mapeamento: { tinyValor: "1001", tinyValorSimples: "2002" },
+    optanteSimples: true,
+    companyHasDualMapping: true,
+  });
+  assertEquals(result.tinyValor, "2002");
+  assertEquals(result.fallbackUsed, "none");
+});
