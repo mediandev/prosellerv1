@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { consultarSimplesNacional } from '../_shared/receitaws-client.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -324,6 +325,41 @@ serve(async (req) => {
     }
 
     console.log('[CREATE-CLIENTE-V2] RPC call successful:', { clienteId: rpcData?.[0]?.cliente_id })
+
+    // F-001 · Consulta Simples Nacional (best-effort). Nao bloqueia resposta 201 (CA-004).
+    // Apenas para cliente PJ (CNPJ 14 digitos) e com a feature flag ligada (CA-002, CA-003, CA-008).
+    const featureEnabled = (Deno.env.get('FEATURE_SIMPLES_NACIONAL_LOOKUP') || '').toLowerCase() === 'true'
+    const clienteIdFinal = rpcData?.[0]?.cliente_id
+    const cpfCnpjSanitized = sanitizedData.cpf_cnpj || ''
+    const isPJ = cpfCnpjSanitized.length === 14
+
+    if (featureEnabled && isPJ && clienteIdFinal) {
+      const traceId = crypto.randomUUID()
+      const lookup = await consultarSimplesNacional({ cnpj: cpfCnpjSanitized, traceId })
+
+      if (lookup.status === 'ok') {
+        const { error: simplesUpdError } = await supabase
+          .from('cliente')
+          .update({
+            optante_simples_nacional: lookup.optante,
+            optante_simples_nacional_consultado_em: lookup.consultadoEm,
+          })
+          .eq('cliente_id', clienteIdFinal)
+
+        if (simplesUpdError) {
+          console.error('[CREATE-CLIENTE-V2] ReceitaWS persist error (non-blocking):', {
+            message: simplesUpdError.message,
+            code: simplesUpdError.code,
+            trace_id: traceId,
+          })
+        } else if (rpcData[0]) {
+          rpcData[0].optante_simples_nacional = lookup.optante
+          rpcData[0].optante_simples_nacional_consultado_em = lookup.consultadoEm
+        }
+      }
+      // status 'inconclusive' | 'failed': helper ja emitiu o log receitaws.lookup.
+      // Campos no banco ficam null, comportamento dentro do esperado (CA-004, CB-001).
+    }
 
     const duration = Date.now() - startTime
     console.log(`[CREATE-CLIENTE-V2] SUCCESS: Cliente created: ${rpcData[0]?.cliente_id} by ${user.id} (${duration}ms)`)

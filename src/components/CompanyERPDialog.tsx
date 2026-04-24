@@ -29,6 +29,11 @@ export function CompanyERPDialog({ open, onOpenChange, company, onSuccess }: Com
   const [naturezas, setNaturezas] = useState<NaturezaOperacao[]>([]);
   const [loadingNaturezas, setLoadingNaturezas] = useState(false);
   const [tinyNaturezaMap, setTinyNaturezaMap] = useState<Record<string, string>>({});
+  // F-001 · Dual-ID Simples Nacional. Estado do 2o campo (quando optante) e
+  // do toggle por linha. Toggle OFF por default → exibe 1 campo (comportamento
+  // pre-F-001). Toggle ON → exibe 2 campos, ambos obrigatorios ao salvar.
+  const [tinyNaturezaSimplesMap, setTinyNaturezaSimplesMap] = useState<Record<string, string>>({});
+  const [simplesEnabledMap, setSimplesEnabledMap] = useState<Record<string, boolean>>({});
   
   const [config, setConfig] = useState({
     tipo: 'tiny',
@@ -100,10 +105,34 @@ export function CompanyERPDialog({ open, onOpenChange, company, onSuccess }: Com
         {}
       );
 
+      const mappedSimples = mapeamentosData.reduce(
+        (acc: Record<string, string>, item: any) => {
+          if (item.tinyValorSimples) {
+            acc[String(item.naturezaOperacaoId)] = String(item.tinyValorSimples);
+          }
+          return acc;
+        },
+        {}
+      );
+
+      const enabledInit = mapeamentosData.reduce(
+        (acc: Record<string, boolean>, item: any) => {
+          if (item.tinyValorSimples) {
+            acc[String(item.naturezaOperacaoId)] = true;
+          }
+          return acc;
+        },
+        {}
+      );
+
       setTinyNaturezaMap(mapped);
+      setTinyNaturezaSimplesMap(mappedSimples);
+      setSimplesEnabledMap(enabledInit);
     } catch (error) {
       console.error('[CompanyERPDialog] Erro ao carregar mapeamento de naturezas:', error);
       setTinyNaturezaMap({});
+      setTinyNaturezaSimplesMap({});
+      setSimplesEnabledMap({});
     } finally {
       setLoadingNaturezas(false);
     }
@@ -175,6 +204,24 @@ export function CompanyERPDialog({ open, onOpenChange, company, onSuccess }: Com
       return;
     }
 
+    // F-001 · Validar rows com toggle Simples Nacional ligado.
+    // Toggle ON exige tinyValor E tinyValorSimples preenchidos (RF-004 / CB-003).
+    const linhasInconsistentes = naturezas.filter((n) => {
+      if (!simplesEnabledMap[n.id]) return false;
+      const padrao = (tinyNaturezaMap[n.id] || '').trim();
+      const simples = (tinyNaturezaSimplesMap[n.id] || '').trim();
+      return !padrao || !simples;
+    });
+
+    if (linhasInconsistentes.length > 0) {
+      toast.error(
+        `Preencha o ID Tiny padrao e o ID Tiny Simples em: ${linhasInconsistentes
+          .map((n) => n.nome)
+          .join(', ')}`
+      );
+      return;
+    }
+
     setSalvando(true);
 
     try {
@@ -186,6 +233,9 @@ export function CompanyERPDialog({ open, onOpenChange, company, onSuccess }: Com
           naturezas.map((natureza) => ({
             naturezaOperacaoId: natureza.id,
             tinyValor: (tinyNaturezaMap[natureza.id] || '').trim(),
+            tinyValorSimples: simplesEnabledMap[natureza.id]
+              ? (tinyNaturezaSimplesMap[natureza.id] || '').trim() || null
+              : null,
             ativo: true,
           }))
         );
@@ -449,25 +499,86 @@ export function CompanyERPDialog({ open, onOpenChange, company, onSuccess }: Com
               ) : naturezas.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nenhuma natureza ativa encontrada.</p>
               ) : (
-                <div className="space-y-3">
-                  {naturezas.map((natureza) => (
-                    <div key={natureza.id} className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
-                      <div>
-                        <p className="text-sm font-medium">{natureza.nome}</p>
-                        <p className="text-xs text-muted-foreground">Natureza ID {natureza.id}</p>
+                <div className="space-y-4">
+                  {naturezas.map((natureza) => {
+                    const simplesOn = Boolean(simplesEnabledMap[natureza.id]);
+                    return (
+                      <div key={natureza.id} className="border rounded-md p-3 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">{natureza.nome}</p>
+                            <p className="text-xs text-muted-foreground">Natureza ID {natureza.id}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Label
+                              htmlFor={`simples-${natureza.id}`}
+                              className="text-xs text-muted-foreground"
+                            >
+                              Habilitar natureza para Simples Nacional
+                            </Label>
+                            <Switch
+                              id={`simples-${natureza.id}`}
+                              checked={simplesOn}
+                              onCheckedChange={(checked) => {
+                                setSimplesEnabledMap((prev) => ({
+                                  ...prev,
+                                  [natureza.id]: checked,
+                                }));
+                                if (!checked) {
+                                  setTinyNaturezaSimplesMap((prev) => {
+                                    const next = { ...prev };
+                                    delete next[natureza.id];
+                                    return next;
+                                  });
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className={`grid gap-3 ${simplesOn ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
+                          <div className="space-y-1">
+                            <Label htmlFor={`tiny-${natureza.id}`} className="text-xs text-muted-foreground">
+                              ID Tiny padrão
+                            </Label>
+                            <Input
+                              id={`tiny-${natureza.id}`}
+                              value={tinyNaturezaMap[natureza.id] || ''}
+                              onChange={(e) =>
+                                setTinyNaturezaMap((prev) => ({
+                                  ...prev,
+                                  [natureza.id]: e.target.value,
+                                }))
+                              }
+                              placeholder="Ex: 5102 ou código da natureza no Tiny"
+                            />
+                          </div>
+
+                          {simplesOn && (
+                            <div className="space-y-1">
+                              <Label
+                                htmlFor={`tiny-simples-${natureza.id}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                ID Tiny quando optante Simples
+                              </Label>
+                              <Input
+                                id={`tiny-simples-${natureza.id}`}
+                                value={tinyNaturezaSimplesMap[natureza.id] || ''}
+                                onChange={(e) =>
+                                  setTinyNaturezaSimplesMap((prev) => ({
+                                    ...prev,
+                                    [natureza.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder="Código da natureza no Tiny para clientes Simples"
+                              />
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <Input
-                        value={tinyNaturezaMap[natureza.id] || ''}
-                        onChange={(e) =>
-                          setTinyNaturezaMap((prev) => ({
-                            ...prev,
-                            [natureza.id]: e.target.value,
-                          }))
-                        }
-                        placeholder="Ex: 5102 ou código da natureza no Tiny"
-                      />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

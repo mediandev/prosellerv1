@@ -157,6 +157,11 @@ export interface Cliente {
   aprovadoPor?: string;
   dataAprovacao?: string;
   
+  // F-001 · Simples Nacional (read-only na UI; populado via ReceitaWS).
+  // Para cliente PF ou quando a feature flag esta off: permanece null.
+  optanteSimplesNacional?: boolean | null;
+  optanteSimplesNacionalConsultadoEm?: string | null;
+
   // Metadados
   dataCadastro: string;
   dataAtualizacao: string;

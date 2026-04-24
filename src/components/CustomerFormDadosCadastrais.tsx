@@ -21,7 +21,8 @@ import { Badge } from './ui/badge';
 import { Checkbox } from './ui/checkbox';
 import { Separator } from './ui/separator';
 import { Combobox } from './ui/combobox';
-import { Loader2, Plus, Pencil, Trash2, MapPin, CreditCard, Search, Hash, Edit } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, MapPin, CreditCard, Search, Hash, Edit, Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { municipiosPorUF, UFS } from '../data/municipios';
 import { customerCodeService } from '../services/customerCodeService';
 
@@ -829,6 +830,32 @@ export function CustomerFormDadosCadastrais({
                 </Button>
               )}
             </div>
+
+            {/* F-001 · Optante Simples Nacional (read-only, so para PJ). */}
+            {formData.tipoPessoa === 'Pessoa Jurídica' && (
+              <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
+                <span>Optante Simples Nacional:</span>
+                {formData.optanteSimplesNacional === true ? (
+                  <Badge variant="secondary">Sim</Badge>
+                ) : formData.optanteSimplesNacional === false ? (
+                  <Badge variant="outline">Não</Badge>
+                ) : (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center gap-1">
+                          <Badge variant="outline">—</Badge>
+                          <Info className="h-3 w-3" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Não consultado ou ReceitaWS indisponível no último envio.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

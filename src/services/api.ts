@@ -587,6 +587,15 @@ function mapClienteFromApi(item: any): any {
     motivoRejeicao: item.motivoRejeicao ?? item.motivo_rejeicao ?? '',
     aprovadoPor: item.aprovadoPor ?? item.aprovado_por ?? '',
     dataAprovacao: item.dataAprovacao ?? item.data_aprovacao ?? '',
+    // F-001 · Simples Nacional (nullable; aparece apos migration 108).
+    optanteSimplesNacional:
+      item.optanteSimplesNacional ??
+      item.optante_simples_nacional ??
+      null,
+    optanteSimplesNacionalConsultadoEm:
+      item.optanteSimplesNacionalConsultadoEm ??
+      item.optante_simples_nacional_consultado_em ??
+      null,
     createdAt: item.createdAt ? new Date(item.createdAt) : (item.created_at ? new Date(item.created_at) : new Date()),
     updatedAt: item.updatedAt ? new Date(item.updatedAt) : (item.updated_at ? new Date(item.updated_at) : new Date()),
   };

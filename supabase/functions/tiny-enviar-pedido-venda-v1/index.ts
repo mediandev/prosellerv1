@@ -4,6 +4,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { validateJWT } from '../_shared/auth.ts'
 import { formatErrorResponse, createAuthorizationError, createBadRequestError, createNotFoundError } from '../_shared/errors.ts'
 import { corsHeaders, createHttpSuccessResponse } from '../_shared/types.ts'
+import { consultarSimplesNacional } from '../_shared/receitaws-client.ts'
+import { resolveNaturezaTiny } from '../_shared/natureza-resolver.ts'
 
 type TinyRetorno = {
   retorno?: any
@@ -324,10 +326,10 @@ serve(async (req) => {
       naturezaOperacaoId = parseInt(String(natureza.id), 10)
     }
 
-    // 3b) Buscar mapeamento natureza Tiny por empresa
+    // 3b) Buscar mapeamento natureza Tiny por empresa (inclui dual-ID F-001)
     const { data: mapNat, error: mapNatError } = await supabase
       .from('tiny_empresa_natureza_operacao')
-      .select('tiny_valor')
+      .select('tiny_valor, tiny_valor_simples')
       .eq('empresa_id', empresaId)
       .eq('natureza_operacao_id', naturezaOperacaoId)
       .eq('ativo', true)
@@ -344,10 +346,14 @@ serve(async (req) => {
       })
     }
 
-    const tinyNaturezaValor = String(mapNat.tiny_valor).trim()
-    if (!tinyNaturezaValor) {
+    const mapTinyValorBase = String(mapNat.tiny_valor).trim()
+    if (!mapTinyValorBase) {
       throw createBadRequestError('Mapeamento Tiny invalido (tiny_valor vazio)', { empresa_id: empresaId, natureza_operacao_id: naturezaOperacaoId })
     }
+    const mapTinyValorSimples =
+      mapNat.tiny_valor_simples === null || mapNat.tiny_valor_simples === undefined
+        ? null
+        : String(mapNat.tiny_valor_simples).trim() || null
 
     // 4) Cliente completo
     const { data: cliente, error: clienteError } = await supabase
@@ -373,10 +379,11 @@ serve(async (req) => {
 
     const contatoCodigo = String(cliente.cliente_id)
 
-    // `cliente_completo` nao expoe IE_isento; buscar na tabela base `cliente`.
+    // `cliente_completo` nao expoe IE_isento nem optante_simples_nacional;
+    // buscar na tabela base `cliente` (F-001 adiciona optante ao select).
     const { data: clienteBase, error: clienteBaseError } = await supabase
       .from('cliente')
-      .select('IE_isento')
+      .select('IE_isento, optante_simples_nacional')
       .eq('cliente_id', pedido.cliente_id)
       .maybeSingle()
     if (clienteBaseError) {
@@ -389,6 +396,72 @@ serve(async (req) => {
     const ieIsento = Boolean((clienteBase as any)?.IE_isento)
     const inscricaoEstadual = String(cliente.inscricao_estadual || '').trim()
     const ieFinal = inscricaoEstadual ? inscricaoEstadual : (ieIsento ? 'ISENTO' : '')
+
+    // F-001 · Revalidacao Simples Nacional a cada envio de pedido Tiny (ADR-004).
+    // Sem janela de tempo: sempre chama ReceitaWS se cliente e PJ e a flag esta on.
+    // Fallback: se lookup falhar, usa valor persistido em cliente.optante_simples_nacional.
+    //
+    // DP-006 (2026-04-24): otimizacao empresa-level. Se a empresa do pedido nao
+    // tem NENHUM mapeamento ativo com tiny_valor_simples preenchido, nao faz
+    // sentido consultar ReceitaWS — o resultado nunca mudaria a natureza
+    // escolhida. Short-circuit: puxamos um count antes do lookup e pulamos todo
+    // o bloco Simples Nacional se a empresa nao esta configurada para tal.
+    const featureSimplesEnabled =
+      (Deno.env.get('FEATURE_SIMPLES_NACIONAL_LOOKUP') || '').toLowerCase() === 'true'
+    let optanteSimples: boolean | null =
+      (clienteBase as any)?.optante_simples_nacional ?? null
+    let companyHasDualMapping = true
+
+    if (featureSimplesEnabled && tipoPessoa === 'J' && cpfCnpj.length === 14) {
+      // DP-006 · Probe empresa-level.
+      const { count: dualCount, error: dualCountError } = await supabase
+        .from('tiny_empresa_natureza_operacao')
+        .select('id', { count: 'exact', head: true })
+        .eq('empresa_id', empresaId)
+        .eq('ativo', true)
+        .is('deleted_at', null)
+        .not('tiny_valor_simples', 'is', null)
+        .neq('tiny_valor_simples', '')
+
+      if (dualCountError) {
+        // Fail-safe: em caso de erro no probe, mantem comportamento pre-DP-006
+        // (chama ReceitaWS como se houvesse dual-mapping).
+        console.warn('[TINY] Count dual mapeamentos falhou (non-blocking):', {
+          traceId,
+          code: dualCountError.code,
+          message: dualCountError.message,
+        })
+        companyHasDualMapping = true
+      } else {
+        companyHasDualMapping = (dualCount ?? 0) > 0
+      }
+
+      if (companyHasDualMapping) {
+        const lookup = await consultarSimplesNacional({ cnpj: cpfCnpj, traceId })
+        if (lookup.status === 'ok') {
+          optanteSimples = lookup.optante
+          const { error: persistOptanteError } = await supabase
+            .from('cliente')
+            .update({
+              optante_simples_nacional: lookup.optante,
+              optante_simples_nacional_consultado_em: lookup.consultadoEm,
+            })
+            .eq('cliente_id', pedido.cliente_id)
+
+          if (persistOptanteError) {
+            // Best-effort: persistencia falhou, mas temos o valor em memoria para este envio.
+            console.warn('[TINY] Persistencia de optante_simples_nacional falhou (non-blocking):', {
+              traceId,
+              code: persistOptanteError.code,
+              message: persistOptanteError.message,
+            })
+          }
+        }
+        // lookup.status = 'inconclusive' | 'failed' → mantem optanteSimples = valor persistido
+        // (ou null); helper ja emitiu receitaws.lookup com outcome.
+      }
+      // else (DP-006): empresa sem dual-mapping → nao chama ReceitaWS.
+    }
 
     // 4b) Itens do pedido
     const { data: itensDb, error: itensError } = await supabase
@@ -534,8 +607,24 @@ serve(async (req) => {
       },
     }
 
-    // Mantemos natureza operacao se houver mapeamento (opcional no payload)
-    if (tinyNaturezaValor) pedidoTiny.pedido.natureza_operacao = String(tinyNaturezaValor).trim()
+    // F-001 · Resolucao final da natureza_operacao Tiny (CA-007 + DP-006).
+    const resolved = resolveNaturezaTiny({
+      mapeamento: { tinyValor: mapTinyValorBase, tinyValorSimples: mapTinyValorSimples },
+      optanteSimples,
+      companyHasDualMapping,
+    })
+    const tinyNaturezaValor = resolved.tinyValor
+    console.log(JSON.stringify({
+      event: 'natureza.resolvida',
+      traceId,
+      empresaId: Number(empresaId),
+      naturezaOperacaoId: Number(naturezaOperacaoId),
+      optanteAplicado: optanteSimples,
+      tinyValorEscolhido: tinyNaturezaValor,
+      fallbackUsed: resolved.fallbackUsed,
+    }))
+
+    if (tinyNaturezaValor) pedidoTiny.pedido.natureza_operacao = tinyNaturezaValor
 
     if (dryRun) {
       const duration = Date.now() - startTime
@@ -549,6 +638,12 @@ serve(async (req) => {
             natureza_operacao: tinyNaturezaValor,
             id_vendedor: tinyVendedorId,
             nome_vendedor: tinyVendedorNome,
+          },
+          simples_nacional: {
+            feature_enabled: featureSimplesEnabled,
+            company_has_dual_mapping: companyHasDualMapping,
+            optante_aplicado: optanteSimples,
+            fallback_used: resolved.fallbackUsed,
           },
           pedido: pedidoTiny,
         },

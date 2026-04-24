@@ -103,6 +103,7 @@ serve(async (req) => {
           empresa_id,
           natureza_operacao_id,
           tiny_valor,
+          tiny_valor_simples,
           ativo,
           natureza_operacao:natureza_operacao_id (
             id,
@@ -123,6 +124,7 @@ serve(async (req) => {
         naturezaOperacaoId: String(row.natureza_operacao_id),
         naturezaOperacaoNome: row.natureza_operacao?.nome || '',
         tinyValor: row.tiny_valor || '',
+        tinyValorSimples: row.tiny_valor_simples ?? null,
         ativo: row.ativo ?? true,
       }))
 
@@ -140,11 +142,23 @@ serve(async (req) => {
       const tinyValor = String(body.tinyValor || '').trim()
       const ativo = body.ativo !== false
 
+      // F-001 · Aceita tinyValorSimples no upsert (nullable). String vazia equivale a null.
+      // Invariante CB-003 (RF-004): tinyValorSimples nao-vazio exige tinyValor nao-vazio.
+      // A UI do commit B.7 ja bloqueia o estado invalido; esta validacao e defesa em profundidade.
+      const tinyValorSimplesRaw = body.tinyValorSimples
+      const tinyValorSimples =
+        tinyValorSimplesRaw === undefined ||
+        tinyValorSimplesRaw === null ||
+        (typeof tinyValorSimplesRaw === 'string' && tinyValorSimplesRaw.trim() === '')
+          ? null
+          : String(tinyValorSimplesRaw).trim()
+
       if (Number.isNaN(empresaId) || Number.isNaN(naturezaOperacaoId)) {
         return errorResponse('empresaId e naturezaOperacaoId são obrigatórios.')
       }
 
       if (!tinyValor) {
+        // Soft-delete: tinyValorSimples e ignorado quando tinyValor esta vazio (CONTRACTS §2).
         const { error: softDeleteError } = await supabase
           .from('tiny_empresa_natureza_operacao')
           .update({
@@ -170,6 +184,7 @@ serve(async (req) => {
             empresa_id: empresaId,
             natureza_operacao_id: naturezaOperacaoId,
             tiny_valor: tinyValor,
+            tiny_valor_simples: tinyValorSimples,
             ativo,
             deleted_at: null,
             updated_at: new Date().toISOString(),
@@ -178,7 +193,7 @@ serve(async (req) => {
             onConflict: 'empresa_id,natureza_operacao_id',
           }
         )
-        .select('id, empresa_id, natureza_operacao_id, tiny_valor, ativo')
+        .select('id, empresa_id, natureza_operacao_id, tiny_valor, tiny_valor_simples, ativo')
         .single()
 
       if (error) {
@@ -190,6 +205,7 @@ serve(async (req) => {
         empresaId: String(data.empresa_id),
         naturezaOperacaoId: String(data.natureza_operacao_id),
         tinyValor: data.tiny_valor || '',
+        tinyValorSimples: data.tiny_valor_simples ?? null,
         ativo: data.ativo ?? true,
       })
     }
