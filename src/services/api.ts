@@ -250,6 +250,39 @@ export const refreshAuthToken = async (): Promise<boolean> => {
   }
 };
 
+// Helpers PostgREST diretos para campos do dados_vendedor que não passam pelo RPC.
+// Usados para o idtiny (ID do vendedor no Tiny ERP) — gravado e lido sem mexer
+// em update_dados_vendedor_v2 nem em get_dados_vendedor_completo_v2.
+async function fetchDadosVendedorIdtiny(userId: string): Promise<string> {
+  const token = getAuthToken();
+  const url = `${SUPABASE_URL}/rest/v1/dados_vendedor?user_id=eq.${userId}&select=idtiny&deleted_at=is.null`;
+  const res = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: token ? `Bearer ${token}` : `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  if (!res.ok) return '';
+  const rows = await res.json();
+  return rows?.[0]?.idtiny || '';
+}
+
+async function updateDadosVendedorIdtiny(userId: string, idtiny: string): Promise<void> {
+  const token = getAuthToken();
+  const url = `${SUPABASE_URL}/rest/v1/dados_vendedor?user_id=eq.${userId}`;
+  const value = (idtiny ?? '').trim();
+  await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: token ? `Bearer ${token}` : `Bearer ${SUPABASE_ANON_KEY}`,
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({ idtiny: value || null }),
+  });
+}
+
 // Helper para chamadas às Edge Functions com retry automático em caso de token expirado
 async function callEdgeFunction(
   functionName: string,
@@ -1281,6 +1314,7 @@ export const api = {
               permissoes: permissionIdsToSellerPermissionMatrix(response.permissoes),
             },
             integracoes: [],
+            idTiny: '',
             vendas: {
               total: 0,
               mes: 0,
@@ -1295,6 +1329,8 @@ export const api = {
             },
             historico: [],
           };
+
+          seller.idTiny = await fetchDadosVendedorIdtiny(response.user_id);
 
           return [seller];
         }
@@ -2520,6 +2556,10 @@ export const api = {
           }
         }
 
+        if (data.idTiny !== undefined) {
+          await updateDadosVendedorIdtiny(createdUser.user_id, data.idTiny);
+        }
+
         // Converter para formato Seller
         const seller = usuarioToSeller(createdUser);
 
@@ -2927,6 +2967,10 @@ export const api = {
         const updatedUser = userResponse.user || userResponse;
 
         console.log('[API] Usuário vendedor atualizado:', updatedUser.user_id);
+
+        if (data.idTiny !== undefined) {
+          await updateDadosVendedorIdtiny(String(id), data.idTiny);
+        }
 
         // Converter para formato Seller e mesclar dados adicionais
         const seller = usuarioToSeller(updatedUser);
