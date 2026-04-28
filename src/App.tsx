@@ -11,7 +11,8 @@ import {
   UserCircle,
   Wallet,
   DollarSign,
-  LogOut
+  LogOut,
+  Sparkles
 } from "lucide-react";
 import { format } from "date-fns@4.1.0";
 import { ptBR } from "date-fns@4.1.0/locale";
@@ -60,6 +61,7 @@ import { DemoModeBadge } from "./components/DemoModeBadge";
 import { MetasManagement } from "./components/MetasManagement";
 import { Button } from "./components/ui/button";
 import { Sheet, SheetContent, SheetTitle, VisuallyHidden } from "./components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./components/ui/tooltip";
 import { Toaster } from "./components/ui/sonner";
 // Dashboard agora usa dados reais do Supabase via dashboardDataService [updated: 2025-11-16]
 import { Transaction } from "./services/dashboardDataService";
@@ -137,7 +139,7 @@ function Sidebar({ currentPage, onPageChange, canAccessPage }: SidebarProps) {
 
 function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.19";
+  const systemVersion = "V 1.21";
   
   if (!usuario) return null;
   
@@ -173,7 +175,27 @@ function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
       </Button>
 
       <div className="gap-3 p-3 rounded-lg w-full">
-        <p className="flex items-center justify-center text-[11px] text-muted-foreground ">Versão {systemVersion}</p>
+        <div className="flex items-center justify-center gap-1 text-[11px] text-muted-foreground">
+          <span>Versão {systemVersion}</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="Novidades desta versão"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Sparkles className="h-3 w-3" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              <p className="font-medium mb-1">Novidades em V 1.21</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-left">
+                <li>Inserção direta do ID Tiny do vendedor via frontend (aba Integrações)</li>
+                <li>Persistência completa dos dados do vendedor no cadastro</li>
+              </ul>
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </div>
       
       <Button

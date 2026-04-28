@@ -132,6 +132,7 @@ export interface Seller {
   
   // Integrações
   integracoes: ERPIntegration[];
+  idTiny?: string;
   
   // Performance (dados existentes)
   vendas: {

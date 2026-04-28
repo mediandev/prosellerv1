@@ -224,6 +224,7 @@ export function SellerFormPage({
               permissoes: getDefaultSellerPermissionMatrix(),
             },
             integracoes: vendedorData.integracoes || [],
+            idTiny: vendedorData.idTiny || '',
           };
           
           setFormData(mappedData);
