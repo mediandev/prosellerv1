@@ -3,7 +3,7 @@
 > Estado vivo do projeto. Único arquivo de controle, junto com `git log`.
 > Atualizar ao final de cada sessão.
 
-**Última atualização:** 2026-04-29 (sessão 2)
+**Última atualização:** 2026-04-29 (sessão 3 — INC-003)
 
 ---
 
@@ -23,7 +23,7 @@ Estado da entrega:
 - [x] INC-001 (deploy Cursor MCP publicou stub `// test`) documentado + ADR-005 — `c7d9a51`.
 
 Único bloqueador para mover F-001 para §6:
-- [ ] **Validação end-to-end pelo Valentim** — enviado HTML `docs/specs/teste-simples-nacional-valentim.html` com 2 testes (cliente Simples e não-Simples). **INC-002 corrigido em prod hoje (2026-04-29, merge `87080e0`, deploy CLI das 2 funcs)** — pedir Valentim refazer Teste A (esperado 781284632/657287750 + log `receitaws.lookup outcome=ok simplesOptante=true`).
+- [ ] **Validação end-to-end pelo Valentim** — enviado HTML `docs/specs/teste-simples-nacional-valentim.html` com 2 testes (cliente Simples e não-Simples). **INC-002 corrigido em prod hoje (2026-04-29, merge `87080e0`, deploy CLI das 2 funcs)** — pedir Valentim refazer Teste A (esperado 781284632/657287750 + log `receitaws.lookup outcome=ok simplesOptante=true`). **INC-003 corrigido em prod hoje (merge `40da033`, deploy CLI de `clientes-v2`)** — ficha do cliente passa a exibir "Sim" no campo Optante Simples Nacional (antes mostrava "—" porque o mapper omitia o campo).
 
 Retomada rápida:
 - Se Valentim responder OK → mandar prompt **completo** (do histórico da sessão) no Claude Code CLI para mover F-001 para §6 e encerrar.
@@ -156,6 +156,8 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 - **F-001 consulta ReceitaWS a cada envio de pedido Tiny (ADR-004).** Decisão tributária do cliente — sem cache por janela. Monitorar quota ReceitaWS consumida no primeiro mês após ligar a flag em produção; se aproximar do limite do plano pago, reabrir ADR-004 para considerar cache curto (TTL 24h) com revalidação sob mudança de status.
 - Automatizar deploy de Edge Functions em GitHub Action ao mergear main (evita INC-001 recorrer).
 - Quota ReceitaWS API Pública 3/min — monitorar logs receitaws.lookup.rate_limited; migrar para plano Comercial se recorrente.
+- **Auditoria de READ Edge Functions ao adicionar coluna nova:** quando uma feature adiciona campo novo ao schema, criar checklist obrigatório de Edge Functions de leitura a auditar. **INC-003 surgiu porque a auditoria pré-deploy de F-001 cobriu apenas os fluxos de escrita (`create-cliente-v2`, `tiny-empresa-natureza-operacao-v2`, `tiny-enviar-pedido-venda-v1`) e ignorou o GET de `clientes-v2` que serializa a entidade pra ficha.** Próxima feature que adicionar coluna em `cliente`/`empresa`/`pedido_venda` deve listar todas as Edge Functions GET dessa entidade no PR antes de mergear.
+- **`mapClienteCompleto` não tem teste unit:** vive dentro de `supabase/functions/clientes-v2/index.ts` que é uma `serve()` entry point e não exporta. Extrair pra `_shared/cliente-mapper.ts` na próxima feature que tocar `clientes-v2` (não fazer oportunisticamente). Débito identificado no fix do INC-003.
 
 ---
 
@@ -173,6 +175,35 @@ create-cliente-v2 em produção durante deploy de F-001.
   tiny-empresa-natureza-operacao-v2 e tiny-enviar-pedido-venda-v1
   pelo mesmo canal.
 - Status: resolvido. Lição → ADR-005.
+
+🐛 INC-003 · 2026-04-29 · `clientes-v2` GET não incluía
+`optante_simples_nacional` no `mapClienteCompleto`, fazendo a ficha
+do cliente exibir "—" mesmo após o backend gravar o campo
+corretamente.
+- Reprodução: cliente reportou em call agora — após INC-002
+  (PR #5) ter corrigido a gravação do campo, a UI continuava
+  mostrando "—" para 2KJ Perfumaria (cliente_id 6658) cujo
+  banco já tinha `optante_simples_nacional=true` desde 18:14:06
+  UTC do mesmo dia.
+- Diagnóstico (Supabase MCP):
+  - Banco: ✅ campo populado.
+  - RPC `get_cliente_completo_v2`: ✅ retorna o campo via
+    `row_to_json(c)`.
+  - Edge Function `clientes-v2` GET (versão 42, deploy
+    2026-04-13): ❌ helper `mapClienteCompleto` chamava o RPC,
+    recebia o campo, mas omitia ao serializar — frontend
+    recebia `undefined` → ternário caía em "—".
+  - Frontend (`api.ts` L624-630, `types/customer.ts` L162-163,
+    `CustomerFormDadosCadastrais.tsx` L838): ✅ já lia
+    camelCase com fallback snake_case.
+- Resolução: 9 linhas em `mapClienteCompleto` (PR #7, merge
+  `40da033`) + redeploy de `clientes-v2` via supabase CLI.
+- Lição: quando F-001 introduziu colunas novas em `cliente`,
+  a auditoria pré-deploy cobriu só os fluxos de escrita
+  (`create-cliente-v2`, `tiny-enviar-pedido-venda-v1`) e
+  ignorou o GET de `clientes-v2` que serializa a entidade
+  pra ficha. Débito de processo registrado em §4.
+- Status: corrigido em prod, validação humana sugerida.
 
 🐛 INC-002 · 2026-04-24/29 · ReceitaWS client em F-001 fazia
 early-return quando `RECEITAWS_TOKEN` ausente, causando fallback
