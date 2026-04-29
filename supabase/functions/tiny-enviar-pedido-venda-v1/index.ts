@@ -6,6 +6,7 @@ import { formatErrorResponse, createAuthorizationError, createBadRequestError, c
 import { corsHeaders, createHttpSuccessResponse } from '../_shared/types.ts'
 import { consultarSimplesNacional } from '../_shared/receitaws-client.ts'
 import { resolveNaturezaTiny } from '../_shared/natureza-resolver.ts'
+import { formatDateBR } from '../_shared/date-br.ts'
 
 type TinyRetorno = {
   retorno?: any
@@ -18,13 +19,6 @@ function newTraceId(): string {
 
 function digitsOnly(input: string): string {
   return input.replace(/\D/g, '')
-}
-
-function formatDateBR(date: Date): string {
-  const dd = String(date.getDate()).padStart(2, '0')
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const yyyy = String(date.getFullYear())
-  return `${dd}/${mm}/${yyyy}`
 }
 
 function toNumber(value: any, fallback = 0): number {
@@ -560,7 +554,9 @@ serve(async (req) => {
     })()
 
     // 6) Montar Payload Tiny (JSON)
-    const dataPedido = new Date().toISOString().slice(0, 10).split('-').reverse().join('/')
+    // BUG-001: data formatada em America/Sao_Paulo. Edge Functions Deno
+    // rodam UTC; `toISOString()` flipava o dia para D+1 entre 21h-23h59 BRT.
+    const dataPedido = formatDateBR(new Date())
     const descontoExtra = toNumber(pedido.valor_desconto_extra, 0)
 
     const parcelasTiny = parcelas.map((p) => ({

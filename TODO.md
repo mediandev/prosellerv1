@@ -3,7 +3,7 @@
 > Estado vivo do projeto. Único arquivo de controle, junto com `git log`.
 > Atualizar ao final de cada sessão.
 
-**Última atualização:** 2026-04-29
+**Última atualização:** 2026-04-29 (sessão 2)
 
 ---
 
@@ -203,22 +203,38 @@ desde o flip da flag (24/abr).
 
 🐛 BUG-001 · Pedidos chegam no Tiny com data do dia seguinte
 (fuso horário). Reproduz em todos os envios.
-- Área: `tiny-enviar-pedido-venda-v1` (ou caller).
+- Área: `tiny-enviar-pedido-venda-v1` L563 (`new Date()
+  .toISOString().slice(0,10)` em runtime UTC virava D+1 entre
+  21h-23h59 BRT).
 - Workaround atual: nenhum — ajuste manual no Tiny.
 - Origem: reportado pelo Valentim na call de 2026-04-29.
+- Status: **EM CORREÇÃO** — branch
+  `fix/timezone-e-vendedor-backoffice`, commit `0b5a454`.
+  Helper `_shared/date-br.ts` com `Intl.DateTimeFormat
+  timeZone: America/Sao_Paulo`. 4 testes Deno cobrindo bordas.
 
 🐛 BUG-002 · ProSeller não permite enviar pedido ao Tiny se
 cliente estiver sem vendedor vinculado.
 - Decisão necessária: aceitar fluxo backoffice sem vendedor?
 - Área: validação no caminho de envio Tiny.
 - Origem: reportado pelo Valentim na call de 2026-04-29.
+- Status: **AGUARDANDO DECISÃO DE PRODUTO do Valentim** —
+  manter regra atual (vendedor obrigatório) ou liberar envio
+  sem vendedor para usuário backoffice? Sem decisão, não há
+  implementação possível. Não entra na PR de BUG-001/003.
 
 🐛 BUG-003 · ProSeller não permite alterar vendedor na edição
 do pedido (mesmo para usuário backoffice).
-- Comportamento esperado: vendedor pode = manter restrição;
+- Comportamento esperado: vendedor comum = manter restrição;
   backoffice = deveria poder alterar.
-- Área: edição de pedido (UI + backend).
+- Área: UI (`SaleFormPage.tsx`). Backend (`pedido-venda-v2`
+  PUT) já aceitava `vendedorId` — só faltou expor na UI.
 - Origem: reportado pelo Valentim na call de 2026-04-29.
+- Status: **EM CORREÇÃO** — mesma branch
+  `fix/timezone-e-vendedor-backoffice`, commit `6313cc2`.
+  Select shadcn condicional ao `usuario.tipo === 'backoffice'`,
+  carrega `apiService.get('vendedores', { ativo: true })`
+  apenas para backoffice. 5 testes Vitest smoke inline.
 
 _Formato para próximos bugs:_
 
