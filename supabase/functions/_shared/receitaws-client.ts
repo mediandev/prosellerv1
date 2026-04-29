@@ -52,15 +52,21 @@ function emitLog(log: SimplesNacionalLookupLog): void {
   console.log(JSON.stringify(log));
 }
 
+const RATE_LIMIT_RETRY_DELAY_MS = 1_500;
+
 /**
  * Consulta ReceitaWS pelo CNPJ e devolve um resultado normalizado pronto para
  * persistir no cliente.
  *
  * - Timeout 5s (AbortController) — DP-002 resolvida 2026-04-22.
  * - Token opcional via `RECEITAWS_TOKEN` (ADR-002):
- *     ausente → API Pública (3 req/min, somente CNPJs em cache);
+ *     ausente → API Pública (3 req/min nominais, ~1 req/s na prática);
  *     presente → API Comercial (Bearer no header Authorization).
  *   No MVP F-001 operamos sem token — o helper segue chamando a API Pública.
+ * - **INC-004 (rate limit recovery)**: ao receber HTTP 429, espera
+ *   `RATE_LIMIT_RETRY_DELAY_MS` e tenta UMA vez mais. Mitiga o cenário em que
+ *   o primeiro envio de pedido para um cliente ainda não consultado bate em
+ *   janela de rate limit e cai com `optanteSimples=null` no resolver.
  * - Resposta bruta NUNCA persistida (Anti-SPEC §6).
  * - `simples.optante` ausente → status `inconclusive` com reason `missing_field`
  *   (CB-001 · plano gratuito não retorna o objeto `simples`).
@@ -70,17 +76,35 @@ export async function consultarSimplesNacional(params: {
   traceId: string;
   timeoutMs?: number;
 }): Promise<SimplesNacionalLookupResult> {
+  const first = await attemptLookup(params, 1);
+  if (first.status === "failed" && first.reason === "rate_limited") {
+    await new Promise((r) => setTimeout(r, RATE_LIMIT_RETRY_DELAY_MS));
+    return attemptLookup(params, 2);
+  }
+  return first;
+}
+
+async function attemptLookup(
+  params: {
+    cnpj: string;
+    traceId: string;
+    timeoutMs?: number;
+  },
+  attempt: 1 | 2,
+): Promise<SimplesNacionalLookupResult> {
   const { cnpj, traceId } = params;
   const timeoutMs = params.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const cnpjMasked = maskCnpj(cnpj);
   const start = Date.now();
   const digits = (cnpj || "").replace(/\D/g, "");
+  // attempt is exposed via traceId suffix in logs to distinguish retries.
+  const traceIdAttempt = attempt === 1 ? traceId : `${traceId}/retry`;
 
   if (digits.length !== 14) {
     const durationMs = Date.now() - start;
     emitLog({
       event: "receitaws.lookup",
-      traceId,
+      traceId: traceIdAttempt,
       cnpjMasked,
       httpStatus: null,
       simplesOptante: null,
@@ -199,7 +223,7 @@ export async function consultarSimplesNacional(params: {
 
     emitLog({
       event: "receitaws.lookup",
-      traceId,
+      traceId: traceIdAttempt,
       cnpjMasked,
       httpStatus: res.status,
       simplesOptante: optanteRaw,
@@ -218,7 +242,7 @@ export async function consultarSimplesNacional(params: {
     const outcome: LookupOutcome = isAbort ? "timeout" : "network_error";
     emitLog({
       event: "receitaws.lookup",
-      traceId,
+      traceId: traceIdAttempt,
       cnpjMasked,
       httpStatus: null,
       simplesOptante: null,
