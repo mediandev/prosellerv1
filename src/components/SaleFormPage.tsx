@@ -292,6 +292,9 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   const [naturezas, setNaturezas] = useState<NaturezaOperacao[]>([]);
   const [condicoes, setCondicoes] = useState<CondicaoPagamento[]>([]);
   const [listasPreco, setListasPreco] = useState<any[]>([]);
+  // BUG-003: backoffice precisa trocar o vendedor na edição do pedido. Lista
+  // só é carregada quando isBackoffice (vendedor comum não enxerga o Select).
+  const [vendedoresList, setVendedoresList] = useState<Array<{ id: string; nome: string }>>([]);
   const [loading, setLoading] = useState(true);
 
   // Estado para controlar validação visual de campos
@@ -545,12 +548,14 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
       const deveCarregarCatalogoProdutos = false;
 
-      const [produtosAPI, naturezasAPI, condicoesAPI, listasPrecoAPI, vendaExistenteAPI] = await Promise.all([
+      const [produtosAPI, naturezasAPI, condicoesAPI, listasPrecoAPI, vendaExistenteAPI, vendedoresAPI] = await Promise.all([
         deveCarregarCatalogoProdutos ? api.get('produtos').catch(() => []) : Promise.resolve([]),
         api.naturezasOperacao.list({ apenasAtivas: true, page: 1, limit: 100 }).catch(() => []),
         api.get('condicoes-pagamento').catch(() => []),
         api.get('listasPreco').catch(() => []),
-        vendaId && modo !== 'criar' ? api.getById('vendas', vendaId).catch(() => null) : Promise.resolve(null)
+        vendaId && modo !== 'criar' ? api.getById('vendas', vendaId).catch(() => null) : Promise.resolve(null),
+        // BUG-003: lista de vendedores só serve ao backoffice trocar o vendedor.
+        isBackoffice ? api.get('vendedores', { params: { ativo: true } }).catch(() => []) : Promise.resolve([])
       ]);
 
       console.log('[VENDAS] Naturezas recebidas da API:', {
@@ -567,6 +572,13 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       setNaturezas(removeDuplicatesById(naturezasAPI));
       setCondicoes(removeDuplicatesById(condicoesAPI));
       setListasPreco(removeDuplicatesById(listasPrecoAPI));
+      // BUG-003: normaliza só id+nome para alimentar o Select de vendedores.
+      const vendedoresArr = Array.isArray(vendedoresAPI) ? vendedoresAPI : [];
+      setVendedoresList(
+        vendedoresArr
+          .filter((v: any) => v && v.id && v.nome)
+          .map((v: any) => ({ id: String(v.id), nome: String(v.nome) }))
+      );
 
       // Se for edição, carregar venda existente
       if (vendaId && modo !== 'criar') {
@@ -2442,11 +2454,47 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
 
                   <div className="space-y-2">
                     <Label>Vendedor</Label>
-                    <Input
-                      value={formData.nomeVendedor || ''}
-                      disabled
-                      className="bg-muted"
-                    />
+                    {isBackoffice ? (
+                      <>
+                        <Select
+                          value={formData.vendedorId || ''}
+                          onValueChange={(value) => {
+                            const vendedor = vendedoresList.find(v => v.id === value);
+                            setFormData({
+                              ...formData,
+                              vendedorId: value,
+                              nomeVendedor: vendedor?.nome || '',
+                            });
+                          }}
+                          disabled={isReadOnly || pedidoBloqueado}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione um vendedor" />
+                          </SelectTrigger>
+                          <SelectContent position="popper" sideOffset={4} align="start" className="max-h-[300px] w-full min-w-[var(--radix-select-trigger-width)]">
+                            {/* Garante que o vendedor atual aparece mesmo se não estiver na lista de ativos. */}
+                            {formData.vendedorId &&
+                              !vendedoresList.some(v => v.id === formData.vendedorId) &&
+                              formData.nomeVendedor && (
+                                <SelectItem value={formData.vendedorId}>
+                                  {formData.nomeVendedor} (atual)
+                                </SelectItem>
+                              )}
+                            {vendedoresList.map(v => (
+                              <SelectItem key={v.id} value={v.id}>
+                                {v.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </>
+                    ) : (
+                      <Input
+                        value={formData.nomeVendedor || ''}
+                        disabled
+                        className="bg-muted"
+                      />
+                    )}
                   </div>
 
                   <div className="space-y-2">
