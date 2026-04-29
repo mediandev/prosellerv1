@@ -3,7 +3,7 @@
 > Estado vivo do projeto. Único arquivo de controle, junto com `git log`.
 > Atualizar ao final de cada sessão.
 
-**Última atualização:** 2026-04-24
+**Última atualização:** 2026-04-29
 
 ---
 
@@ -23,7 +23,7 @@ Estado da entrega:
 - [x] INC-001 (deploy Cursor MCP publicou stub `// test`) documentado + ADR-005 — `c7d9a51`.
 
 Único bloqueador para mover F-001 para §6:
-- [ ] **Validação end-to-end pelo Valentim** — enviado HTML `docs/specs/teste-simples-nacional-valentim.html` com 2 testes (cliente Simples e não-Simples). Aguardando retorno dele com os códigos Tiny observados.
+- [ ] **Validação end-to-end pelo Valentim** — enviado HTML `docs/specs/teste-simples-nacional-valentim.html` com 2 testes (cliente Simples e não-Simples). **INC-002 corrigido em prod hoje (2026-04-29, merge `87080e0`, deploy CLI das 2 funcs)** — pedir Valentim refazer Teste A (esperado 781284632/657287750 + log `receitaws.lookup outcome=ok simplesOptante=true`).
 
 Retomada rápida:
 - Se Valentim responder OK → mandar prompt **completo** (do histórico da sessão) no Claude Code CLI para mover F-001 para §6 e encerrar.
@@ -173,6 +173,52 @@ create-cliente-v2 em produção durante deploy de F-001.
   tiny-empresa-natureza-operacao-v2 e tiny-enviar-pedido-venda-v1
   pelo mesmo canal.
 - Status: resolvido. Lição → ADR-005.
+
+🐛 INC-002 · 2026-04-24/29 · ReceitaWS client em F-001 fazia
+early-return quando `RECEITAWS_TOKEN` ausente, causando fallback
+para `tinyValor` padrão em todos os pedidos de clientes Simples
+desde o flip da flag (24/abr).
+- Reprodução: cliente reportou via WhatsApp pedido de empresa
+  optante do Simples (2KJ Perfumaria, CNPJ 39.511.470/0001-55)
+  chegando no Tiny com código não-Simples (781495108 em vez de
+  781284632; 781496980 em vez de 657287750).
+- Impacto: todos os clientes optantes do Simples desde
+  2026-04-24 enviaram pedidos com natureza tributária errada.
+  Precisa de retificação manual no Tiny pelo backoffice
+  (escopo do Valentim, não do dev).
+- Causa raiz: `supabase/functions/_shared/receitaws-client.ts`
+  L96-115 fazia `if (!token) return failed/network_error` antes
+  de chamar a rede. Por decisão de produto (ADR-002 + DP-005),
+  o token nunca foi cadastrado — API Pública basta no MVP.
+- Resolução: hotfix em `fix/f001-receitaws-sem-token` (PR #5,
+  merge `87080e0`). Helper agora opera sem token (API Pública)
+  por default; com token entra como Bearer (API Comercial).
+  Deploy direto via supabase CLI das 2 funcs que importam o
+  helper: `create-cliente-v2`, `tiny-enviar-pedido-venda-v1`.
+- Lição: revisão de código pré-merge não pegou — guardião
+  Harness vai exigir leitura do helper completo, não só busca
+  por keywords (já tinha "sem token + fallback gracioso" como
+  suposto comportamento, mas implementação fazia early-return).
+- Status: corrigido em prod, smoke real do Valentim pendente.
+
+🐛 BUG-001 · Pedidos chegam no Tiny com data do dia seguinte
+(fuso horário). Reproduz em todos os envios.
+- Área: `tiny-enviar-pedido-venda-v1` (ou caller).
+- Workaround atual: nenhum — ajuste manual no Tiny.
+- Origem: reportado pelo Valentim na call de 2026-04-29.
+
+🐛 BUG-002 · ProSeller não permite enviar pedido ao Tiny se
+cliente estiver sem vendedor vinculado.
+- Decisão necessária: aceitar fluxo backoffice sem vendedor?
+- Área: validação no caminho de envio Tiny.
+- Origem: reportado pelo Valentim na call de 2026-04-29.
+
+🐛 BUG-003 · ProSeller não permite alterar vendedor na edição
+do pedido (mesmo para usuário backoffice).
+- Comportamento esperado: vendedor pode = manter restrição;
+  backoffice = deveria poder alterar.
+- Área: edição de pedido (UI + backend).
+- Origem: reportado pelo Valentim na call de 2026-04-29.
 
 _Formato para próximos bugs:_
 
