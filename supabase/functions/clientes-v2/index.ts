@@ -194,6 +194,15 @@ function mapClienteCompleto(rpc: {
           .filter((id: string | null): id is string => Boolean(id))
         : [],
     empresaFaturamento: (c as any).empresaFaturamento != null ? String((c as any).empresaFaturamento) : undefined,
+    // INC-003: F-001 grava optante_simples_nacional na tabela cliente, mas
+    // o mapper omitia o campo — ficha do cliente exibia "—" mesmo com
+    // banco populado. Frontend (api.ts L624-630, types/customer.ts L162-163)
+    // já espera estes nomes em camelCase.
+    optanteSimplesNacional:
+      (c as any).optante_simples_nacional ?? (c as any).optanteSimplesNacional ?? null,
+    optanteSimplesNacionalConsultadoEm:
+      (c as any).optante_simples_nacional_consultado_em ??
+        (c as any).optanteSimplesNacionalConsultadoEm ?? null,
     vendedoresAtribuidos: vendedores.map((v: any) => ({ id: v.user_id ?? v.id, nome: v.nome ?? '', email: v.email ?? '' })),
     vendedorAtribuido: vendedorAtribuido ? { id: (vendedorAtribuido as any).user_id ?? (vendedorAtribuido as any).id, nome: (vendedorAtribuido as any).nome ?? '', email: (vendedorAtribuido as any).email ?? '' } : undefined,
     contato: {
