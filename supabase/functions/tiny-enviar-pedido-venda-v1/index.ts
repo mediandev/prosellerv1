@@ -450,9 +450,40 @@ serve(async (req) => {
               message: persistOptanteError.message,
             })
           }
+        } else if (optanteSimples === null) {
+          // INC-004 · lookup falhou (rate_limit/timeout/missing_field) E o
+          // clienteBase.optante_simples_nacional capturado no inicio do request
+          // ainda era null. Releitura defensiva: outro envio paralelo (ou um
+          // create-cliente-v2 anterior) pode ter populado o campo entre a
+          // leitura inicial e este momento. Sem isso, o pedido cairia em
+          // fallback "null_optante" e usaria o tinyValor padrao mesmo quando
+          // o cliente JA esta classificado como Simples no banco.
+          const { data: refreshCliente, error: refreshError } = await supabase
+            .from('cliente')
+            .select('optante_simples_nacional')
+            .eq('cliente_id', pedido.cliente_id)
+            .maybeSingle()
+          if (refreshError) {
+            console.warn('[TINY] Re-leitura de optante_simples_nacional falhou (non-blocking):', {
+              traceId,
+              code: refreshError.code,
+              message: refreshError.message,
+            })
+          } else {
+            const refreshed = (refreshCliente as any)?.optante_simples_nacional
+            if (refreshed === true || refreshed === false) {
+              optanteSimples = refreshed
+              console.log(JSON.stringify({
+                event: 'optante_simples.refresh',
+                traceId,
+                clienteId: pedido.cliente_id,
+                optanteRefrescado: refreshed,
+              }))
+            }
+          }
         }
-        // lookup.status = 'inconclusive' | 'failed' → mantem optanteSimples = valor persistido
-        // (ou null); helper ja emitiu receitaws.lookup com outcome.
+        // demais lookup.status = 'inconclusive' | 'failed' com optanteSimples ja
+        // preenchido pela releitura inicial → mantem o valor.
       }
       // else (DP-006): empresa sem dual-mapping → nao chama ReceitaWS.
     }
