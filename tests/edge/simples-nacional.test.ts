@@ -11,6 +11,7 @@
 
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { resolveNaturezaTiny } from "../../supabase/functions/_shared/natureza-resolver.ts";
+import { consultarSimplesNacional } from "../../supabase/functions/_shared/receitaws-client.ts";
 
 // Cenário A (CA-007): optante=true + dual configurado → tinyValorSimples
 Deno.test("resolveNaturezaTiny: optante=true com dual escolhe tinyValorSimples", () => {
@@ -111,4 +112,89 @@ Deno.test("resolveNaturezaTiny: companyHasDualMapping=true com dual e optante=tr
   });
   assertEquals(result.tinyValor, "2002");
   assertEquals(result.fallbackUsed, "none");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// receitaws-client (INC-002 hotfix): operação sem token = API Pública.
+// Substituímos `globalThis.fetch` e `Deno.env.get` por stubs determinísticos
+// para validar que o header Authorization é construído condicionalmente.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type FetchInit = { method?: string; headers?: Record<string, string> };
+
+function stubFetch(responseBody: unknown, status = 200) {
+  const calls: Array<{ url: string; init: FetchInit }> = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    const headers = (init?.headers || {}) as Record<string, string>;
+    calls.push({ url, init: { method: init?.method, headers } });
+    return Promise.resolve(
+      new Response(JSON.stringify(responseBody), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    // deno-lint-ignore no-explicit-any
+  }) as any;
+  const restore = () => {
+    globalThis.fetch = original;
+  };
+  return { calls, restore };
+}
+
+function stubEnv(values: Record<string, string | undefined>) {
+  const originalGet = Deno.env.get.bind(Deno.env);
+  Deno.env.get = ((name: string) => {
+    if (name in values) return values[name];
+    return originalGet(name);
+    // deno-lint-ignore no-explicit-any
+  }) as any;
+  return () => {
+    Deno.env.get = originalGet;
+  };
+}
+
+const SIMPLES_OPTANTE_BODY = {
+  cnpj: "39.511.470/0001-55",
+  simples: { optante: true },
+};
+
+// INC-002 cenário 1: sem token → fetch chamado sem header Authorization, status=ok.
+Deno.test("consultarSimplesNacional: sem token chama API Publica sem Authorization", async () => {
+  const restoreEnv = stubEnv({ RECEITAWS_TOKEN: undefined });
+  const { calls, restore: restoreFetch } = stubFetch(SIMPLES_OPTANTE_BODY, 200);
+  try {
+    const result = await consultarSimplesNacional({
+      cnpj: "39511470000155",
+      traceId: "trace-no-token",
+    });
+    assertEquals(result.status, "ok");
+    assertEquals(result.optante, true);
+    assertEquals(calls.length, 1);
+    assertEquals(calls[0].init.headers?.["Authorization"], undefined);
+    assertEquals(calls[0].init.headers?.["Accept"], "application/json");
+  } finally {
+    restoreFetch();
+    restoreEnv();
+  }
+});
+
+// INC-002 cenário 2: com token → fetch chamado com Authorization Bearer.
+Deno.test("consultarSimplesNacional: com token chama API Comercial com Bearer", async () => {
+  const restoreEnv = stubEnv({ RECEITAWS_TOKEN: "abc123" });
+  const { calls, restore: restoreFetch } = stubFetch(SIMPLES_OPTANTE_BODY, 200);
+  try {
+    const result = await consultarSimplesNacional({
+      cnpj: "39511470000155",
+      traceId: "trace-with-token",
+    });
+    assertEquals(result.status, "ok");
+    assertEquals(result.optante, true);
+    assertEquals(calls.length, 1);
+    assertEquals(calls[0].init.headers?.["Authorization"], "Bearer abc123");
+  } finally {
+    restoreFetch();
+    restoreEnv();
+  }
 });

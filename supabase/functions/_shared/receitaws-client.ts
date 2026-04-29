@@ -57,8 +57,10 @@ function emitLog(log: SimplesNacionalLookupLog): void {
  * persistir no cliente.
  *
  * - Timeout 5s (AbortController) — DP-002 resolvida 2026-04-22.
- * - Token lido de `RECEITAWS_TOKEN` (ADR-002). Ausente → retorna failed com
- *   outcome `network_error` (sem chamada à rede), preservando graceful degradation.
+ * - Token opcional via `RECEITAWS_TOKEN` (ADR-002):
+ *     ausente → API Pública (3 req/min, somente CNPJs em cache);
+ *     presente → API Comercial (Bearer no header Authorization).
+ *   No MVP F-001 operamos sem token — o helper segue chamando a API Pública.
  * - Resposta bruta NUNCA persistida (Anti-SPEC §6).
  * - `simples.optante` ausente → status `inconclusive` com reason `missing_field`
  *   (CB-001 · plano gratuito não retorna o objeto `simples`).
@@ -94,37 +96,21 @@ export async function consultarSimplesNacional(params: {
   }
 
   const token = (Deno.env.get("RECEITAWS_TOKEN") || "").trim();
-  if (!token) {
-    const durationMs = Date.now() - start;
-    emitLog({
-      event: "receitaws.lookup",
-      traceId,
-      cnpjMasked,
-      httpStatus: null,
-      simplesOptante: null,
-      durationMs,
-      outcome: "network_error",
-    });
-    console.warn("[RECEITAWS] RECEITAWS_TOKEN ausente — caindo em fallback.");
-    return {
-      status: "failed",
-      optante: null,
-      reason: "network_error",
-      consultadoEm: nowIso(),
-    };
-  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const url = `${RECEITAWS_BASE_URL}/${digits}`;
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
     const res = await fetch(url, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
+      headers,
       signal: controller.signal,
     });
 
