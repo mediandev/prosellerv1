@@ -450,14 +450,19 @@ serve(async (req) => {
               message: persistOptanteError.message,
             })
           }
-        } else if (optanteSimples === null) {
-          // INC-004 · lookup falhou (rate_limit/timeout/missing_field) E o
-          // clienteBase.optante_simples_nacional capturado no inicio do request
-          // ainda era null. Releitura defensiva: outro envio paralelo (ou um
-          // create-cliente-v2 anterior) pode ter populado o campo entre a
-          // leitura inicial e este momento. Sem isso, o pedido cairia em
-          // fallback "null_optante" e usaria o tinyValor padrao mesmo quando
-          // o cliente JA esta classificado como Simples no banco.
+        } else {
+          // INC-004 + INC-005 · lookup falhou (rate_limit/timeout/missing_field/
+          // invalid_response). SEMPRE re-le o cliente do banco antes de cair
+          // em fallback. O `clienteBase` capturado no inicio do request pode
+          // estar desatualizado em duas situacoes:
+          //   (a) outro envio paralelo populou optante_simples_nacional entre
+          //       a leitura inicial e o lookup deste pedido (race vista em
+          //       producao em 30/abr).
+          //   (b) o `clienteBase.optante_simples_nacional` em memoria nao
+          //       reflete uma escrita feita por algum outro fluxo
+          //       (ex: create-cliente-v2 chamado segundos antes).
+          // A re-leitura captura o valor mais recente e EVITA que um lookup
+          // falho descarte um optante=true ja conhecido pelo banco.
           const { data: refreshCliente, error: refreshError } = await supabase
             .from('cliente')
             .select('optante_simples_nacional')
@@ -472,18 +477,19 @@ serve(async (req) => {
           } else {
             const refreshed = (refreshCliente as any)?.optante_simples_nacional
             if (refreshed === true || refreshed === false) {
+              const previo = optanteSimples
               optanteSimples = refreshed
               console.log(JSON.stringify({
                 event: 'optante_simples.refresh',
                 traceId,
                 clienteId: pedido.cliente_id,
+                optanteAnterior: previo,
                 optanteRefrescado: refreshed,
+                lookupReason: lookup.reason,
               }))
             }
           }
         }
-        // demais lookup.status = 'inconclusive' | 'failed' com optanteSimples ja
-        // preenchido pela releitura inicial → mantem o valor.
       }
       // else (DP-006): empresa sem dual-mapping → nao chama ReceitaWS.
     }
