@@ -52,7 +52,7 @@ function emitLog(log: SimplesNacionalLookupLog): void {
   console.log(JSON.stringify(log));
 }
 
-const RATE_LIMIT_RETRY_DELAY_MS = 1_500;
+const RATE_LIMIT_RETRY_DELAY_MS = 3_000;
 
 /**
  * Consulta ReceitaWS pelo CNPJ e devolve um resultado normalizado pronto para
@@ -176,9 +176,41 @@ async function attemptLookup(
       };
     }
 
+    // INC-005: ReceitaWS retorna rate-limit em formatos NÃO documentados:
+    //   (a) HTTP 429 (caso oficial — tratado acima)
+    //   (b) HTTP 200 com body em TEXTO PLANO "Too many requests, please try again later."
+    //       (observado em produção em 30/abr/2026 — passava a aparecer como
+    //       invalid_response e o retry de rate_limited não disparava, e o
+    //       fallback escolhia tinyValor padrão mesmo para cliente Simples)
+    // Lemos o body como texto e depois decidimos. Se for texto com "Too many",
+    // tratamos como rate_limited e o wrapper fará o retry com backoff.
+    const rawBody = await res.text();
+    const lowerSnippet = rawBody.slice(0, 256).toLowerCase();
+    const looksRateLimited =
+      lowerSnippet.includes("too many requests") ||
+      lowerSnippet.includes("muitas requisi") ||
+      (lowerSnippet.includes("limite") && lowerSnippet.includes("excedido"));
+    if (looksRateLimited) {
+      emitLog({
+        event: "receitaws.lookup",
+        traceId: traceIdAttempt,
+        cnpjMasked,
+        httpStatus: res.status,
+        simplesOptante: null,
+        durationMs,
+        outcome: "rate_limited",
+      });
+      return {
+        status: "failed",
+        optante: null,
+        reason: "rate_limited",
+        consultadoEm: nowIso(),
+      };
+    }
+
     let body: unknown = null;
     try {
-      body = await res.json();
+      body = JSON.parse(rawBody);
     } catch {
       emitLog({
         event: "receitaws.lookup",
