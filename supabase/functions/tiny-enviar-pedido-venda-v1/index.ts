@@ -693,13 +693,19 @@ serve(async (req) => {
       throw createBadRequestError('Tiny nao retornou id do pedido', { tiny: tinyResp })
     }
 
-    // Atualizar pedido local
+    // Atualizar pedido local + auditoria F-001 (INC-006).
+    // Persistimos a decisao do resolveNaturezaTiny no proprio pedido para
+    // permitir auditoria via SQL sem depender de logs do Logflare ou do
+    // painel do Tiny. Migration 112 introduz as 3 colunas.
     const { error: updError } = await supabase
       .from('pedido_venda')
       .update({
         id_tiny: String(registro.id),
         numero_pedido: registro.numero || pedido.numero_pedido || null,
         updated_at: new Date().toISOString(),
+        tiny_natureza_enviada: tinyNaturezaValor || null,
+        tiny_optante_aplicado: optanteSimples,
+        tiny_fallback_used: resolved.fallbackUsed,
       })
       .eq('pedido_venda_ID', pedidoId)
 
