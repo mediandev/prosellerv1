@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -105,6 +105,72 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     totalDebitos
   };
 
+  // Detecção de período anterior em aberto com saldo (Saldo Anterior não calculado)
+  const [periodoAnteriorPendente, setPeriodoAnteriorPendente] = useState<{
+    periodo: string;
+    saldoFinal: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    const checarPeriodoAnterior = async () => {
+      if (!relatorio?.periodo || !relatorio?.vendedorId) {
+        setPeriodoAnteriorPendente(null);
+        return;
+      }
+      // Só faz sentido alertar quando o saldo anterior chegou zero
+      if (Math.abs(relatorio.saldoAnterior || 0) > 0.001) {
+        setPeriodoAnteriorPendente(null);
+        return;
+      }
+
+      const parts = relatorio.periodo.split('-');
+      if (parts.length !== 2) return;
+      let ano = parseInt(parts[0], 10);
+      let mes = parseInt(parts[1], 10);
+      if (Number.isNaN(ano) || Number.isNaN(mes)) return;
+      if (mes === 1) {
+        ano -= 1;
+        mes = 12;
+      } else {
+        mes -= 1;
+      }
+      const periodoAnterior = `${ano.toString().padStart(4, '0')}-${mes.toString().padStart(2, '0')}`;
+
+      try {
+        const data = await api.comissoes.getRelatorio(periodoAnterior, relatorio.vendedorId);
+        if (cancelado) return;
+        const linha = Array.isArray(data) ? data.find((r: any) => r.vendedor_id === relatorio.vendedorId) : null;
+        if (!linha) {
+          setPeriodoAnteriorPendente(null);
+          return;
+        }
+        const status = String(linha.status || 'aberto');
+        const saldoFinal = Number(linha.saldo_final || 0);
+        const temMovimento =
+          Number(linha.total_comissao || 0) !== 0 ||
+          Number(linha.total_creditos || 0) !== 0 ||
+          Number(linha.total_debitos || 0) !== 0 ||
+          Number(linha.saldo_anterior || 0) !== 0;
+        const aberto = status !== 'fechado' && status !== 'pago';
+        if (aberto && temMovimento && Math.abs(saldoFinal) > 0.001) {
+          setPeriodoAnteriorPendente({ periodo: periodoAnterior, saldoFinal });
+        } else {
+          setPeriodoAnteriorPendente(null);
+        }
+      } catch (err) {
+        console.error('[REL] Erro ao verificar período anterior:', err);
+        if (!cancelado) setPeriodoAnteriorPendente(null);
+      }
+    };
+
+    checarPeriodoAnterior();
+    return () => {
+      cancelado = true;
+    };
+  }, [relatorio?.periodo, relatorio?.vendedorId, relatorio?.saldoAnterior]);
+
   // Formulário de lançamento manual
   const [formLancamento, setFormLancamento] = useState({
     tipo: "credito" as "credito" | "debito",
@@ -205,7 +271,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     // Título
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
-    doc.text('RELATORIO DE COMISSOES', pageWidth / 2, yPos, { align: 'center' });
+    doc.text('RELATÓRIO DE COMISSÕES', pageWidth / 2, yPos, { align: 'center' });
     yPos += 10;
 
     // Linha divisória 1
@@ -216,7 +282,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     // Informações do Vendedor
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('INFORMACOES DO VENDEDOR', 15, yPos);
+    doc.text('INFORMAÇÕES DO VENDEDOR', 15, yPos);
     yPos += 8;
 
     doc.setFontSize(10);
@@ -225,7 +291,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     yPos += 6;
     doc.text('ID: ' + relatorio.vendedorId, 15, yPos);
     yPos += 6;
-    doc.text('Periodo: ' + formatPeriodo(relatorio.periodo), 15, yPos);
+    doc.text('Período: ' + formatPeriodo(relatorio.periodo), 15, yPos);
     yPos += 6;
     doc.text('Status: ' + relatorio.status.toUpperCase(), 15, yPos);
     yPos += 8;
@@ -234,6 +300,31 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     doc.setDrawColor(200, 200, 200);
     doc.line(15, yPos, pageWidth - 15, yPos);
     yPos += 8;
+
+    // Aviso de período anterior em aberto (se aplicável)
+    if (periodoAnteriorPendente) {
+      doc.setFillColor(255, 243, 205); // amarelo claro
+      doc.setDrawColor(204, 154, 6);
+      doc.rect(15, yPos, pageWidth - 30, 26, 'FD');
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(133, 100, 4);
+      doc.text('⚠ Saldo Anterior não calculado', 18, yPos + 6);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      const linha1 =
+        'O período de ' +
+        formatPeriodo(periodoAnteriorPendente.periodo) +
+        ' está em aberto com saldo de ' +
+        formatCurrency(periodoAnteriorPendente.saldoFinal) +
+        '.';
+      const linha2 =
+        'Para que o saldo seja transportado, feche o ciclo em Comissões → menu (⋮) do período anterior → "Fechar Período".';
+      doc.text(linha1, 18, yPos + 13);
+      doc.text(linha2, 18, yPos + 19);
+      doc.setTextColor(0, 0, 0);
+      yPos += 32;
+    }
 
     // Resumo Financeiro
     doc.setFontSize(12);
@@ -246,25 +337,37 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     doc.text('Total de Vendas: ' + formatCurrency(dadosRelatorio.totalVendas), 15, yPos);
     doc.text('(' + dadosRelatorio.quantidadeVendas + ' ' + (dadosRelatorio.quantidadeVendas === 1 ? 'venda' : 'vendas') + ')', 80, yPos);
     yPos += 6;
-    doc.text('Total de Comissoes: ' + formatCurrency(dadosRelatorio.totalComissoes), 15, yPos);
+    doc.text('Total de Comissões: ' + formatCurrency(dadosRelatorio.totalComissoes), 15, yPos);
     yPos += 6;
 
     if (dadosRelatorio.totalCreditos > 0) {
       doc.setTextColor(0, 150, 0);
-      doc.text('Creditos: +' + formatCurrency(dadosRelatorio.totalCreditos), 15, yPos);
+      doc.text('Créditos: +' + formatCurrency(dadosRelatorio.totalCreditos), 15, yPos);
       doc.setTextColor(0, 0, 0);
       yPos += 6;
     }
 
     if (dadosRelatorio.totalDebitos > 0) {
       doc.setTextColor(200, 0, 0);
-      doc.text('Debitos: -' + formatCurrency(dadosRelatorio.totalDebitos), 15, yPos);
+      doc.text('Débitos: -' + formatCurrency(dadosRelatorio.totalDebitos), 15, yPos);
       doc.setTextColor(0, 0, 0);
       yPos += 6;
     }
 
+    // Saldo Anterior (sempre, inclusive zero) — antes de "Valor Líquido"
+    const saldoAnterior = relatorio.saldoAnterior || 0;
+    if (saldoAnterior > 0) {
+      doc.setTextColor(200, 0, 0);
+    } else if (saldoAnterior < 0) {
+      doc.setTextColor(0, 150, 0);
+    }
+    const sinalSaldoAnterior = saldoAnterior > 0 ? '+' : '';
+    doc.text('Saldo Anterior: ' + sinalSaldoAnterior + formatCurrency(saldoAnterior), 15, yPos);
+    doc.setTextColor(0, 0, 0);
+    yPos += 6;
+
     doc.setFont('helvetica', 'bold');
-    doc.text('Valor Liquido: ' + formatCurrency(relatorio.valorLiquido), 15, yPos);
+    doc.text('Valor Líquido: ' + formatCurrency(relatorio.valorLiquido), 15, yPos);
     yPos += 6;
 
     doc.setTextColor(0, 150, 0);
@@ -292,7 +395,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     if (dadosRelatorio.vendas.length > 0) {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
-      doc.text('VENDAS DO PERIODO (' + dadosRelatorio.quantidadeVendas + ')', 15, yPos);
+      doc.text('VENDAS DO PERÍODO (' + dadosRelatorio.quantidadeVendas + ')', 15, yPos);
       yPos += 5;
 
       const vendasData = dadosRelatorio.vendas.map(v => [
@@ -304,13 +407,26 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
         formatCurrency(v.valorComissao)
       ]);
 
+      const totalLabelVendas =
+        dadosRelatorio.quantidadeVendas + ' ' +
+        (dadosRelatorio.quantidadeVendas === 1 ? 'Venda' : 'Vendas');
+
       autoTable(doc, {
         startY: yPos,
-        head: [['ID', 'Cliente', 'Data', 'Valor Venda', '%', 'Comissao']],
+        head: [['ID', 'Cliente', 'Data', 'Valor Venda', '%', 'Comissão']],
         body: vendasData,
+        foot: [[
+          'Total',
+          totalLabelVendas,
+          '',
+          formatCurrency(dadosRelatorio.totalVendas),
+          '',
+          formatCurrency(dadosRelatorio.totalComissoes)
+        ]],
         theme: 'grid',
         headStyles: { fillColor: [41, 128, 185], fontSize: 9 },
         bodyStyles: { fontSize: 8 },
+        footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold', fontSize: 9 },
         columnStyles: {
           0: { cellWidth: 20 },
           1: { cellWidth: 50 },
@@ -333,19 +449,19 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
 
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
-      doc.text('LANCAMENTOS MANUAIS', 15, yPos);
+      doc.text('LANÇAMENTOS MANUAIS', 15, yPos);
       yPos += 5;
 
       const lancamentosData = [
         ...dadosRelatorio.lancamentosCredito.map(l => [
           format(new Date(l.data), 'dd/MM/yyyy'),
-          'CREDITO',
+          'CRÉDITO',
           l.descricao.substring(0, 40) + (l.descricao.length > 40 ? '...' : ''),
           formatCurrency(l.valor)
         ]),
         ...dadosRelatorio.lancamentosDebito.map(l => [
           format(new Date(l.data), 'dd/MM/yyyy'),
-          'DEBITO',
+          'DÉBITO',
           l.descricao.substring(0, 40) + (l.descricao.length > 40 ? '...' : ''),
           formatCurrency(l.valor)
         ])
@@ -353,7 +469,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
 
       autoTable(doc, {
         startY: yPos,
-        head: [['Data', 'Tipo', 'Descricao', 'Valor']],
+        head: [['Data', 'Tipo', 'Descrição', 'Valor']],
         body: lancamentosData,
         theme: 'grid',
         headStyles: { fillColor: [41, 128, 185], fontSize: 9 },
@@ -378,7 +494,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
 
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
-      doc.text('HISTORICO DE PAGAMENTOS', 15, yPos);
+      doc.text('HISTÓRICO DE PAGAMENTOS', 15, yPos);
       yPos += 5;
 
       const pagamentosData = dadosRelatorio.pagamentos.map(p => [
@@ -413,13 +529,13 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
       doc.setFontSize(8);
       doc.setTextColor(150, 150, 150);
       doc.text(
-        'Relatorio gerado em ' + format(new Date(), "dd/MM/yyyy 'as' HH:mm", { locale: ptBR }),
+        'Relatório gerado em ' + format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }),
         pageWidth / 2,
         doc.internal.pageSize.getHeight() - 10,
         { align: 'center' }
       );
       doc.text(
-        'Pagina ' + i + ' de ' + totalPages,
+        'Página ' + i + ' de ' + totalPages,
         pageWidth - 15,
         doc.internal.pageSize.getHeight() - 10,
         { align: 'right' }
@@ -1126,6 +1242,32 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
         </Card>
       )}
 
+      {/* Aviso: período anterior em aberto */}
+      {periodoAnteriorPendente && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="py-4">
+            <div className="flex gap-3">
+              <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="space-y-1 text-sm text-amber-900">
+                <div className="font-semibold">Saldo Anterior não calculado</div>
+                <div>
+                  O período de <strong>{formatPeriodo(periodoAnteriorPendente.periodo)}</strong> está
+                  em aberto com saldo de <strong>{formatCurrency(periodoAnteriorPendente.saldoFinal)}</strong>.
+                  Para que o saldo seja transportado para este relatório, é preciso fechar o ciclo do
+                  período anterior.
+                </div>
+                <div>
+                  <strong>Como fechar:</strong> acesse <em>Comissões</em>, localize a linha do vendedor
+                  no período <strong>{formatPeriodo(periodoAnteriorPendente.periodo)}</strong>, abra o
+                  menu de ações (<strong>⋮</strong>) e clique em <strong>"Fechar Período"</strong>.
+                  Depois recarregue este relatório.
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Resumo Financeiro */}
       <Card>
         <CardHeader>
@@ -1139,16 +1281,6 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
             <div className="flex justify-between items-center py-2">
               <span className="text-muted-foreground">Total de Comissões</span>
               <span className="font-medium">{formatCurrency(dadosRelatorio.totalComissoes)}</span>
-            </div>
-            <div className={`flex justify-between items-center py-2 ${relatorio.saldoAnterior > 0 ? 'text-red-600' : relatorio.saldoAnterior < 0 ? 'text-green-600' : 'text-muted-foreground'
-              }`}>
-              <span className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Saldo Anterior
-              </span>
-              <span className="font-medium">
-                {relatorio.saldoAnterior > 0 ? '+' : ''}{formatCurrency(relatorio.saldoAnterior)}
-              </span>
             </div>
             {dadosRelatorio.totalCreditos > 0 && (
               <div className="flex justify-between items-center py-2 text-green-600">
@@ -1168,6 +1300,16 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
                 <span className="font-medium">-{formatCurrency(dadosRelatorio.totalDebitos)}</span>
               </div>
             )}
+            <div className={`flex justify-between items-center py-2 ${relatorio.saldoAnterior > 0 ? 'text-red-600' : relatorio.saldoAnterior < 0 ? 'text-green-600' : 'text-muted-foreground'
+              }`}>
+              <span className="flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Saldo Anterior
+              </span>
+              <span className="font-medium">
+                {relatorio.saldoAnterior > 0 ? '+' : ''}{formatCurrency(relatorio.saldoAnterior)}
+              </span>
+            </div>
             <div className="flex justify-between items-center py-3 border-t font-semibold">
               <span>Valor Líquido</span>
               <span className="text-blue-600">{formatCurrency(valorLiquidoCalculado)}</span>

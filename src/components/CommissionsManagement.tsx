@@ -45,6 +45,7 @@ import {
   Edit,
   RotateCcw,
   Unlock,
+  Lock,
   Download,
   ChevronLeft,
   ChevronRight,
@@ -691,6 +692,37 @@ export function CommissionsManagement({
 
     toast.success(`Período ${formatPeriodo(relatorio.periodo)} reaberto com sucesso!`);
     setDialogReabrir(false);
+  };
+
+  // ========================================
+  // FECHAR PERÍODO (carrega saldo p/ próximo mês)
+  // ========================================
+
+  const handleFecharPeriodo = async (relatorioCompleto: RelatorioComissoesCompleto) => {
+    if (!canManageComissoes) {
+      toast.error("Você não tem permissão para fechar períodos");
+      return;
+    }
+    const r = relatorioCompleto.relatorio;
+    if (r.status === 'fechado' || r.status === 'pago') {
+      toast.info(`Período ${formatPeriodo(r.periodo)} já está ${r.status}.`);
+      return;
+    }
+
+    const confirmar = window.confirm(
+      `Fechar o período ${formatPeriodo(r.periodo)} de ${relatorioCompleto.vendedorNome}?\n\n` +
+      `O saldo final será transportado para o próximo período como "Saldo Anterior".`
+    );
+    if (!confirmar) return;
+
+    try {
+      await api.comissoes.fecharPeriodo(r.vendedorId, r.periodo);
+      toast.success(`Período ${formatPeriodo(r.periodo)} fechado com sucesso!`);
+      await carregarComissoes();
+    } catch (error: any) {
+      console.error('[COMISSOES] Erro ao fechar período:', error);
+      toast.error(`Erro ao fechar período: ${error?.message || 'desconhecido'}`);
+    }
   };
 
   // ========================================
@@ -1423,6 +1455,12 @@ export function CommissionsManagement({
                                 </DropdownMenuItem>
                               </>
                             )}
+                              {canManageComissoes && relCompleto.relatorio.status === "aberto" && (
+                                <DropdownMenuItem onClick={() => handleFecharPeriodo(relCompleto)}>
+                                  <Lock className="h-4 w-4 mr-2" />
+                                  Fechar Período
+                                </DropdownMenuItem>
+                              )}
                               {canEditComissoes && relCompleto.relatorio.status === "fechado" && (
                                 <DropdownMenuItem onClick={() => handleAbrirReabrir(relCompleto)}>
                                   <Unlock className="h-4 w-4 mr-2" />

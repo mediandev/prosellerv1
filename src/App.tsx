@@ -139,7 +139,7 @@ function Sidebar({ currentPage, onPageChange, canAccessPage }: SidebarProps) {
 
 function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.21";
+  const systemVersion = "V 1.22";
   
   if (!usuario) return null;
   
@@ -188,10 +188,13 @@ function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs">
-              <p className="font-medium mb-1">Novidades em V 1.21</p>
+              <p className="font-medium mb-1">Novidades em V 1.22</p>
               <ul className="list-disc pl-4 space-y-0.5 text-left">
-                <li>Inserção direta do ID Tiny do vendedor via frontend (aba Integrações)</li>
-                <li>Persistência completa dos dados do vendedor no cadastro</li>
+                <li>Relatório de comissões: Saldo Anterior antes do Valor Líquido</li>
+                <li>Linha de totalizadores na tabela de Vendas do Período (PDF)</li>
+                <li>Acentos e caracteres especiais corrigidos no PDF</li>
+                <li>Aviso quando o período anterior está em aberto, com instruções para fechar o ciclo</li>
+                <li>Nova ação "Fechar Período" no menu de cada relatório aberto</li>
               </ul>
             </TooltipContent>
           </Tooltip>

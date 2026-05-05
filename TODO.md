@@ -283,6 +283,7 @@ _Formato para próximos bugs:_
 
 | # | Feature / Commit | SHA | Data |
 |---|---|---|---|
+| — | feat(comissoes): saldo anterior + totalizadores + acentos + fechar periodo (V 1.22) | _pendente_ | 2026-05-05 |
 | 🟢 F-002 | Setup Vitest + deno test (merge PR #1) | `dd50c31` | 2026-04-21 |
 | — | fix: destaque do e-mail de comissões + flash de 10 clientes no dashboard | `ccaa811` | (pré-harness) |
 | — | feat: enviar PDF como anexo no email de comissões (V 1.18) | `50212af` | (pré-harness) |
