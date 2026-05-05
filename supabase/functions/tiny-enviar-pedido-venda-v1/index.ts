@@ -657,7 +657,19 @@ serve(async (req) => {
       fallbackUsed: resolved.fallbackUsed,
     }))
 
-    if (tinyNaturezaValor) pedidoTiny.pedido.natureza_operacao = tinyNaturezaValor
+    // INC-007: Tiny ignorava o campo `natureza_operacao` (sem prefixo) — caia
+    // silenciosamente na "Operacao Padrao para Vendas" configurada no Tiny.
+    // A documentacao oficial (api2-pedidos-incluir) define DOIS campos:
+    //   - pedido.id_natureza_operacao   (string) - Identificador
+    //   - pedido.nome_natureza_operacao (string) - Nome
+    // Como mapeamos por ID (tiny_valor armazena o codigo numerico), usamos
+    // `id_natureza_operacao`. Mantemos `natureza_operacao` para compatibilidade
+    // de leitura caso algum codigo legado dependa, mas a chave que o Tiny
+    // realmente respeita e `id_natureza_operacao`.
+    if (tinyNaturezaValor) {
+      pedidoTiny.pedido.id_natureza_operacao = tinyNaturezaValor
+      pedidoTiny.pedido.natureza_operacao = tinyNaturezaValor
+    }
 
     if (dryRun) {
       const duration = Date.now() - startTime
