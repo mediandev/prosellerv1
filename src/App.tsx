@@ -139,7 +139,7 @@ function Sidebar({ currentPage, onPageChange, canAccessPage }: SidebarProps) {
 
 function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.23";
+  const systemVersion = "V 1.24";
   
   if (!usuario) return null;
   
@@ -188,7 +188,11 @@ function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs">
-              <p className="font-medium mb-1">Novidades em V 1.23</p>
+              <p className="font-medium mb-1">Novidades em V 1.24</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-left">
+                <li>Configurações &gt; Usuários: exclusão de usuário volta a funcionar (preflight CORS corrigido)</li>
+              </ul>
+              <p className="font-medium mt-2 mb-1">V 1.23</p>
               <ul className="list-disc pl-4 space-y-0.5 text-left">
                 <li>Simples Nacional: pedidos passam a chegar no Tiny com a natureza correta conforme o regime do cliente</li>
               </ul>
