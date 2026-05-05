@@ -195,6 +195,7 @@ function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
                 <li>Acentos e caracteres especiais corrigidos no PDF</li>
                 <li>Aviso quando o período anterior está em aberto, com instruções para fechar o ciclo</li>
                 <li>Nova ação "Fechar Período" no menu de cada relatório aberto</li>
+                <li>Simples Nacional: pedidos passam a chegar no Tiny com a natureza correta conforme o regime do cliente</li>
               </ul>
             </TooltipContent>
           </Tooltip>
