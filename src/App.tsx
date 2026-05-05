@@ -139,7 +139,7 @@ function Sidebar({ currentPage, onPageChange, canAccessPage }: SidebarProps) {
 
 function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.25";
+  const systemVersion = "V 1.26";
   
   if (!usuario) return null;
   
@@ -188,7 +188,11 @@ function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs">
-              <p className="font-medium mb-1">Novidades em V 1.25</p>
+              <p className="font-medium mb-1">Novidades em V 1.26</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-left">
+                <li>Pedidos: ao reabrir um pedido salvo como rascunho em modo edição, a lista de produtos volta a aparecer no modal "Adicionar Item"</li>
+              </ul>
+              <p className="font-medium mt-2 mb-1">V 1.25</p>
               <ul className="list-disc pl-4 space-y-0.5 text-left">
                 <li>Configurações &gt; Usuários: segundo bug da exclusão (erro de banco) corrigido — exclusão agora conclui com sucesso</li>
               </ul>
