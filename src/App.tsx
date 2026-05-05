@@ -139,7 +139,7 @@ function Sidebar({ currentPage, onPageChange, canAccessPage }: SidebarProps) {
 
 function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.22";
+  const systemVersion = "V 1.23";
   
   if (!usuario) return null;
   
@@ -188,7 +188,11 @@ function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs">
-              <p className="font-medium mb-1">Novidades em V 1.22</p>
+              <p className="font-medium mb-1">Novidades em V 1.23</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-left">
+                <li>Simples Nacional: pedidos passam a chegar no Tiny com a natureza correta conforme o regime do cliente</li>
+              </ul>
+              <p className="font-medium mt-2 mb-1">V 1.22</p>
               <ul className="list-disc pl-4 space-y-0.5 text-left">
                 <li>Relatório de comissões: Saldo Anterior antes do Valor Líquido</li>
                 <li>Linha de totalizadores na tabela de Vendas do Período (PDF)</li>
