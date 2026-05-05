@@ -139,7 +139,7 @@ function Sidebar({ currentPage, onPageChange, canAccessPage }: SidebarProps) {
 
 function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.24";
+  const systemVersion = "V 1.25";
   
   if (!usuario) return null;
   
@@ -188,7 +188,11 @@ function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs">
-              <p className="font-medium mb-1">Novidades em V 1.24</p>
+              <p className="font-medium mb-1">Novidades em V 1.25</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-left">
+                <li>Configurações &gt; Usuários: segundo bug da exclusão (erro de banco) corrigido — exclusão agora conclui com sucesso</li>
+              </ul>
+              <p className="font-medium mt-2 mb-1">V 1.24</p>
               <ul className="list-disc pl-4 space-y-0.5 text-left">
                 <li>Configurações &gt; Usuários: exclusão de usuário volta a funcionar (preflight CORS corrigido)</li>
               </ul>
