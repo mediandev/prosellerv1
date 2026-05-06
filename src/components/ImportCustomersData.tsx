@@ -6,14 +6,20 @@ import { Alert, AlertDescription } from './ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
+import { Progress } from './ui/progress';
 import * as XLSX from 'xlsx';
+import { api } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 // Mapeamento de colunas: variações de nomes que o cliente pode usar → nome padrão do template
 const COLUMN_MAP: Record<string, string> = {
+  'código': 'Código',
+  'codigo': 'Código',
   'tipo pessoa': 'Tipo Pessoa',
   'tipo de pessoa': 'Tipo Pessoa',
   'cpf/cnpj': 'CPF/CNPJ',
   'cpf cnpj': 'CPF/CNPJ',
+  'cnpj / cpf': 'CPF/CNPJ',
   'cnpj': 'CPF/CNPJ',
   'cpf': 'CPF/CNPJ',
   'razão social': 'Razão Social',
@@ -24,9 +30,12 @@ const COLUMN_MAP: Record<string, string> = {
   'inscrição estadual': 'Inscrição Estadual',
   'inscricao estadual': 'Inscrição Estadual',
   'ie': 'Inscrição Estadual',
+  'ie / rg': 'Inscrição Estadual',
   'situação': 'Situação',
   'situacao': 'Situação',
   'status': 'Situação',
+  'situação proseller': 'Situação',
+  'situacao proseller': 'Situação',
   'segmento': 'Segmento Mercado',
   'segmento mercado': 'Segmento Mercado',
   'segmento de mercado': 'Segmento Mercado',
@@ -34,6 +43,7 @@ const COLUMN_MAP: Record<string, string> = {
   'grupo rede': 'Grupo/Rede',
   'grupo': 'Grupo/Rede',
   'rede': 'Grupo/Rede',
+  'nome rede': 'Grupo/Rede',
   'cep': 'CEP',
   'logradouro': 'Logradouro',
   'rua': 'Logradouro',
@@ -51,28 +61,38 @@ const COLUMN_MAP: Record<string, string> = {
   'cidade': 'Município',
   'site': 'Site',
   'website': 'Site',
+  'web site': 'Site',
   'e-mail': 'Email Principal',
   'email': 'Email Principal',
   'email principal': 'Email Principal',
   'email nf-e': 'Email NF-e',
   'email nfe': 'Email NF-e',
+  'e-mail nf': 'Email NF-e',
+  'e-mail para envio de notas fiscais': 'Email NF-e',
+  'email para envio de notas fiscais': 'Email NF-e',
   'telefone fixo': 'Telefone Fixo',
   'fone fixo': 'Telefone Fixo',
   'telefone': 'Telefone Fixo',
+  'fone': 'Telefone Fixo',
   'telefone celular': 'Telefone Celular',
   'celular': 'Telefone Celular',
   'empresa faturamento': 'Empresa Faturamento',
+  'empresa de faturamento': 'Empresa Faturamento',
   'vendedor (email)': 'Vendedor (Email)',
   'vendedor': 'Vendedor (Email)',
   'lista de preços': 'Lista de Preços',
   'lista de precos': 'Lista de Preços',
   'lista preços': 'Lista de Preços',
+  'lista de preço': 'Lista de Preços',
+  'lista de preco': 'Lista de Preços',
   'desconto padrão (%)': 'Desconto Padrão (%)',
   'desconto padrao (%)': 'Desconto Padrão (%)',
   'desconto padrão': 'Desconto Padrão (%)',
   'desconto padrao': 'Desconto Padrão (%)',
+  'desconto (%)': 'Desconto Padrão (%)',
   'desconto financeiro (%)': 'Desconto Financeiro (%)',
   'desconto financeiro': 'Desconto Financeiro (%)',
+  'desc fin': 'Desconto Financeiro (%)',
   'pedido mínimo (r$)': 'Pedido Mínimo (R$)',
   'pedido minimo (r$)': 'Pedido Mínimo (R$)',
   'pedido mínimo': 'Pedido Mínimo (R$)',
@@ -83,17 +103,45 @@ const COLUMN_MAP: Record<string, string> = {
   'observacoes internas': 'Observações Internas',
   'observações': 'Observações Internas',
   'observacoes': 'Observações Internas',
+  'observações nf': 'Observações Internas',
+  'observacoes nf': 'Observações Internas',
 };
 
 // Colunas do template na ordem correta
 const TEMPLATE_COLUMNS = [
-  'Tipo Pessoa', 'CPF/CNPJ', 'Razão Social', 'Nome Fantasia', 'Inscrição Estadual',
+  'Código', 'Tipo Pessoa', 'CPF/CNPJ', 'Razão Social', 'Nome Fantasia', 'Inscrição Estadual',
   'Situação', 'Segmento Mercado', 'Grupo/Rede', 'CEP', 'Logradouro', 'Número',
   'Complemento', 'Bairro', 'UF', 'Município', 'Site', 'Email Principal', 'Email NF-e',
   'Telefone Fixo', 'Telefone Celular', 'Empresa Faturamento', 'Vendedor (Email)',
   'Lista de Preços', 'Desconto Padrão (%)', 'Desconto Financeiro (%)', 'Pedido Mínimo (R$)',
   'Status Aprovação', 'Observações Internas',
 ];
+
+// Normalização para comparações case/accent-insensitive
+function deburr(s: string): string {
+  return String(s ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+// "SERGIO GLEZER  (5984)" → { name: "SERGIO GLEZER", code: "5984" }
+function splitVendedorValue(raw: string): { value: string; code: string | null } {
+  const trimmed = String(raw ?? '').trim();
+  const m = trimmed.match(/^(.*?)\s*\((\d+)\)\s*$/);
+  if (m) return { value: m[1].trim(), code: m[2] };
+  return { value: trimmed, code: null };
+}
+
+function toNumberOrNull(raw: any): number | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  const cleaned = String(raw).replace(/\./g, '').replace(',', '.').replace(/[^\d.\-]/g, '');
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
 
 function normalizeColumnName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -137,7 +185,9 @@ interface PreviewData {
 }
 
 export function ImportCustomersData() {
+  const { usuario } = useAuth();
   const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -216,6 +266,7 @@ export function ImportCustomersData() {
   const generateTemplate = () => {
     const template = [
       {
+        'Código': '',
         'Tipo Pessoa': 'Pessoa Jurídica',
         'CPF/CNPJ': '12.345.678/0001-90',
         'Razão Social': 'Empresa Exemplo Ltda',
@@ -247,12 +298,12 @@ export function ImportCustomersData() {
       },
     ];
 
-    const ws = XLSX.utils.json_to_sheet(template);
+    const ws = XLSX.utils.json_to_sheet(template, { header: TEMPLATE_COLUMNS });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Clientes');
 
     const colWidths = [
-      { wch: 18 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 20 },
+      { wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 35 }, { wch: 25 }, { wch: 20 },
       { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 30 },
       { wch: 10 }, { wch: 20 }, { wch: 20 }, { wch: 5 }, { wch: 25 },
       { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 18 }, { wch: 18 },
@@ -266,7 +317,8 @@ export function ImportCustomersData() {
 
   const validateRow = (row: any, rowNumber: number): string | null => {
     if (!row['Tipo Pessoa']) return 'Tipo de pessoa é obrigatório';
-    if (row['Tipo Pessoa'] !== 'Pessoa Física' && row['Tipo Pessoa'] !== 'Pessoa Jurídica') {
+    const tipoNorm = deburr(row['Tipo Pessoa']);
+    if (tipoNorm !== 'pessoa fisica' && tipoNorm !== 'pessoa juridica') {
       return 'Tipo de pessoa deve ser "Pessoa Física" ou "Pessoa Jurídica"';
     }
     if (!row['CPF/CNPJ']) return 'CPF/CNPJ é obrigatório';
@@ -278,17 +330,74 @@ export function ImportCustomersData() {
     if (!row['UF']) return 'UF é obrigatória';
     if (!row['Município']) return 'Município é obrigatório';
 
-    const situacoesValidas = ['Ativo', 'Inativo', 'Excluído'];
-    if (row['Situação'] && !situacoesValidas.includes(row['Situação'])) {
-      return 'Situação deve ser: Ativo, Inativo ou Excluído';
+    const situacoesValidas = ['ativo', 'inativo', 'excluido', 'analise', 'reprovado'];
+    if (row['Situação'] && !situacoesValidas.includes(deburr(row['Situação']))) {
+      return 'Situação deve ser: Ativo, Inativo, Excluído, Análise ou Reprovado';
     }
 
     const statusValidos = ['aprovado', 'pendente', 'rejeitado'];
-    if (row['Status Aprovação'] && !statusValidos.includes(row['Status Aprovação'])) {
+    if (row['Status Aprovação'] && !statusValidos.includes(String(row['Status Aprovação']).toLowerCase())) {
       return 'Status de aprovação deve ser: aprovado, pendente ou rejeitado';
     }
 
     return null;
+  };
+
+  // Normaliza Tipo Pessoa: aceita variações de caixa/acentos → forma canônica
+  const normalizeTipoPessoa = (raw: any): 'Pessoa Física' | 'Pessoa Jurídica' => {
+    return deburr(raw) === 'pessoa fisica' ? 'Pessoa Física' : 'Pessoa Jurídica';
+  };
+
+  // Normaliza Situação: aceita 'ATIVO' | 'ativo' | 'Ativo' → 'Ativo'
+  const normalizeSituacao = (raw: any): 'Ativo' | 'Inativo' | 'Excluído' | 'Análise' | 'Reprovado' => {
+    const m: Record<string, 'Ativo' | 'Inativo' | 'Excluído' | 'Análise' | 'Reprovado'> = {
+      'ativo': 'Ativo',
+      'inativo': 'Inativo',
+      'excluido': 'Excluído',
+      'analise': 'Análise',
+      'reprovado': 'Reprovado',
+    };
+    return m[deburr(raw)] || 'Ativo';
+  };
+
+  // Lookup helpers (case/accent-insensitive). Retornam o item ou undefined.
+  const findVendedor = (vendedores: any[], rawValue: string) => {
+    if (!rawValue) return undefined;
+    const { value } = splitVendedorValue(rawValue);
+    const target = deburr(value);
+    if (!target) return undefined;
+    // 1) match por email exato
+    const byEmail = vendedores.find((v: any) => deburr(v.email) === target);
+    if (byEmail) return byEmail;
+    // 2) match por nome exato
+    const byName = vendedores.find((v: any) => deburr(v.nome) === target);
+    if (byName) return byName;
+    // 3) fallback: nome contém alvo (ou alvo contém nome)
+    return vendedores.find((v: any) => deburr(v.nome).includes(target) || target.includes(deburr(v.nome)));
+  };
+
+  const findEmpresa = (empresas: any[], rawValue: string) => {
+    if (!rawValue) return undefined;
+    const target = deburr(rawValue);
+    if (!target) return undefined;
+    return empresas.find((e: any) => {
+      const rs = deburr(e.razaoSocial ?? e.razao_social ?? '');
+      const nf = deburr(e.nomeFantasia ?? e.nome_fantasia ?? '');
+      const nm = deburr(e.nome ?? '');
+      return rs === target || nf === target || nm === target ||
+        (rs && rs.includes(target)) || (nf && nf.includes(target)) || (nm && nm.includes(target));
+    });
+  };
+
+  const findLista = (listas: any[], rawValue: string) => {
+    if (!rawValue) return undefined;
+    const target = deburr(rawValue);
+    if (!target) return undefined;
+    return listas.find((l: any) => {
+      const nm = deburr(l.nome ?? '');
+      const cd = deburr(l.codigo ?? '');
+      return nm === target || cd === target || (nm && nm.includes(target)) || (cd && cd.includes(target));
+    });
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -296,14 +405,38 @@ export function ImportCustomersData() {
     if (!file) return;
 
     try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      let rawRows: Record<string, any>[] = [];
+
+      if (file.name.toLowerCase().endsWith('.csv')) {
+        const text = await file.text();
+        const firstLine = text.split('\n')[0];
+        const semicolons = (firstLine.match(/;/g) || []).length;
+        const commas = (firstLine.match(/,/g) || []).length;
+        const separator = semicolons > commas ? ';' : ',';
+        const lines = text.split('\n').filter(l => l.trim());
+        const headers = lines[0].split(separator).map(h => h.replace(/^"|"$/g, '').replace(/^﻿/, '').trim());
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(separator).map(v => v.replace(/^"|"$/g, '').trim());
+          const row: Record<string, any> = {};
+          headers.forEach((h, idx) => { row[h] = values[idx] || ''; });
+          rawRows.push(row);
+        }
+      } else {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data);
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+      }
+
+      // Aplica COLUMN_MAP automaticamente: aceita planilhas com nomes de coluna divergentes
+      // (ex.: "Tipo pessoa", "CNPJ / CPF", "Endereço", "Vendedor", "Lista de Preço") e
+      // converte para os nomes canônicos do template antes da validação.
+      const originalHeaders = rawRows.length > 0 ? Object.keys(rawRows[0]) : [];
+      const columnMapping = mapColumns(originalHeaders);
+      const mappedRows = convertFileData(rawRows, columnMapping);
 
       const errors: Array<{ row: number; message: string }> = [];
-
-      jsonData.forEach((row: any, index: number) => {
+      mappedRows.forEach((row: any, index: number) => {
         const rowNumber = index + 2;
         const error = validateRow(row, rowNumber);
         if (error) {
@@ -312,7 +445,7 @@ export function ImportCustomersData() {
       });
 
       setPreview({
-        data: jsonData,
+        data: mappedRows,
         fileName: file.name,
         validationErrors: errors,
       });
@@ -320,9 +453,9 @@ export function ImportCustomersData() {
       setResult(null);
 
     } catch (error) {
-      setResult({ 
-        success: 0, 
-        errors: [{ row: 0, message: 'Erro ao ler arquivo: ' + (error as Error).message }] 
+      setResult({
+        success: 0,
+        errors: [{ row: 0, message: 'Erro ao ler arquivo: ' + (error as Error).message }]
       });
     } finally {
       event.target.value = '';
@@ -333,26 +466,125 @@ export function ImportCustomersData() {
     if (!preview) return;
 
     setImporting(true);
+    setProgress(0);
+
+    const validRows = preview.data
+      .map((row: any, idx: number) => ({ row, rowNumber: idx + 2 }))
+      .filter(({ rowNumber }) => !preview.validationErrors.some((e) => e.row === rowNumber));
+
+    const errors: Array<{ row: number; message: string }> = [...preview.validationErrors];
+    let success = 0;
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Pré-resolução de lookups (1 fetch por entidade, reusada em todas as linhas)
+      const [vendedoresRaw, empresasRaw, listasRaw] = await Promise.all([
+        api.get('vendedores').catch(() => []),
+        api.get('empresas').catch(() => []),
+        api.get('listas-preco').catch(() => []),
+      ]);
+      const vendedores = Array.isArray(vendedoresRaw) ? vendedoresRaw : [];
+      const empresas = Array.isArray(empresasRaw) ? empresasRaw : [];
+      const listas = Array.isArray(listasRaw) ? listasRaw : [];
 
-      const successCount = preview.data.length - preview.validationErrors.length;
+      for (let i = 0; i < validRows.length; i++) {
+        const { row, rowNumber } = validRows[i];
+        setProgress(Math.round(((i + 1) / Math.max(validRows.length, 1)) * 100));
 
-      setResult({ 
-        success: successCount, 
-        errors: preview.validationErrors 
-      });
+        try {
+          // Lookups para a linha
+          const vendedor = findVendedor(vendedores, row['Vendedor (Email)']);
+          const empresa = findEmpresa(empresas, row['Empresa Faturamento']);
+          const lista = findLista(listas, row['Lista de Preços']);
+
+          // Aviso (não-bloqueante) quando referência não casa
+          const warns: string[] = [];
+          if (row['Vendedor (Email)'] && !vendedor) warns.push(`vendedor "${row['Vendedor (Email)']}" não encontrado`);
+          if (row['Empresa Faturamento'] && !empresa) warns.push(`empresa "${row['Empresa Faturamento']}" não encontrada`);
+          if (row['Lista de Preços'] && !lista) warns.push(`lista "${row['Lista de Preços']}" não encontrada`);
+
+          const tipoPessoa = normalizeTipoPessoa(row['Tipo Pessoa']);
+          const situacao = normalizeSituacao(row['Situação']);
+
+          const cliente: any = {
+            tipoPessoa,
+            cpfCnpj: String(row['CPF/CNPJ'] ?? '').trim(),
+            razaoSocial: String(row['Razão Social'] ?? '').trim(),
+            nomeFantasia: row['Nome Fantasia'] ? String(row['Nome Fantasia']).trim() : undefined,
+            inscricaoEstadual: row['Inscrição Estadual'] ? String(row['Inscrição Estadual']).trim() : undefined,
+            situacao,
+            segmentoMercado: row['Segmento Mercado'] ? String(row['Segmento Mercado']).trim() : '',
+            grupoRede: row['Grupo/Rede'] ? String(row['Grupo/Rede']).trim() : undefined,
+            cep: String(row['CEP'] ?? '').trim(),
+            logradouro: String(row['Logradouro'] ?? '').trim(),
+            numero: String(row['Número'] ?? '').trim(),
+            complemento: row['Complemento'] ? String(row['Complemento']).trim() : undefined,
+            bairro: String(row['Bairro'] ?? '').trim(),
+            uf: String(row['UF'] ?? '').trim().toUpperCase(),
+            municipio: String(row['Município'] ?? '').trim(),
+            enderecoEntregaDiferente: false,
+            site: row['Site'] ? String(row['Site']).trim() : undefined,
+            emailPrincipal: row['Email Principal'] ? String(row['Email Principal']).trim() : undefined,
+            emailNFe: row['Email NF-e'] ? String(row['Email NF-e']).trim() : undefined,
+            telefoneFixoPrincipal: row['Telefone Fixo'] ? String(row['Telefone Fixo']).trim() : undefined,
+            telefoneCelularPrincipal: row['Telefone Celular'] ? String(row['Telefone Celular']).trim() : undefined,
+            pessoasContato: [],
+            dadosBancarios: [],
+            descontoPadrao: toNumberOrNull(row['Desconto Padrão (%)']) ?? 0,
+            descontoFinanceiro: toNumberOrNull(row['Desconto Financeiro (%)']) ?? 0,
+            condicoesPagamentoAssociadas: [],
+            pedidoMinimo: toNumberOrNull(row['Pedido Mínimo (R$)']) ?? 0,
+            statusAprovacao: 'aprovado',
+            observacoesInternas: row['Observações Internas'] ? String(row['Observações Internas']).trim() : undefined,
+            codigo: row['Código'] ? String(row['Código']).trim() : undefined,
+            dataCadastro: new Date().toISOString(),
+            dataAtualizacao: new Date().toISOString(),
+            criadoPor: usuario?.nome || 'Importação',
+            atualizadoPor: usuario?.nome || 'Importação',
+          };
+
+          if (vendedor) {
+            cliente.vendedorAtribuido = { id: vendedor.id, nome: vendedor.nome ?? '', email: vendedor.email ?? '' };
+            cliente.vendedoresAtribuidos = [{ id: vendedor.id, nome: vendedor.nome ?? '', email: vendedor.email ?? '' }];
+          }
+          if (lista?.id) {
+            cliente.listaPrecos = String(lista.id);
+            cliente.lista_de_preco = Number(lista.id);
+          }
+
+          const created: any = await api.create('clientes', cliente);
+          const novoId = created?.id ?? created?.cliente?.cliente_id ?? created?.cliente_id;
+
+          // Empresa de Faturamento: POST não aceita; aplicar via PUT após create
+          if (novoId && empresa?.id != null) {
+            try {
+              await api.update('clientes', String(novoId), {
+                empresaFaturamentoId: Number(empresa.id),
+              });
+            } catch (e: any) {
+              warns.push(`empresa não vinculada: ${e?.message ?? 'erro no update'}`);
+            }
+          }
+
+          success++;
+          if (warns.length > 0) {
+            errors.push({ row: rowNumber, message: `Importado com avisos: ${warns.join('; ')}` });
+          }
+        } catch (e: any) {
+          errors.push({ row: rowNumber, message: e?.message || 'Erro ao salvar cliente' });
+        }
+      }
+
+      setResult({ success, errors });
       setShowPreview(false);
       setPreview(null);
-
-    } catch (error) {
-      setResult({ 
-        success: 0, 
-        errors: [{ row: 0, message: 'Erro ao importar: ' + (error as Error).message }] 
+    } catch (error: any) {
+      setResult({
+        success,
+        errors: [...errors, { row: 0, message: 'Erro ao importar: ' + (error?.message ?? String(error)) }],
       });
     } finally {
       setImporting(false);
+      setProgress(100);
     }
   };
 
@@ -472,6 +704,15 @@ export function ImportCustomersData() {
                   ))}
                 </div>
               </ScrollArea>
+            </div>
+          )}
+
+          {importing && (
+            <div className="space-y-2 pt-4 border-t">
+              <Progress value={progress} />
+              <p className="text-center text-sm text-muted-foreground">
+                Importando registros no Supabase... {progress}%
+              </p>
             </div>
           )}
 
