@@ -611,16 +611,19 @@ serve(async (req) => {
           nome: String(cliente.nome || '').trim(),
           nome_fantasia: String((cliente as any).nome_fantasia || '').trim(),
           tipo_pessoa: tipoPessoa,
-          cpf_cnpj: String((cliente as any).cpf_cnpj || '').trim(),
+          // INC-011: clientes importados via planilha (F-004) chegam com CEP/CNPJ/fone
+          // formatados ("07.250130", "61.585.865/0737-01", "(11) 3296-2301") e o Tiny
+          // rejeita CEP com `.`. Normalizamos no boundary do payload.
+          cpf_cnpj: digitsOnly(String((cliente as any).cpf_cnpj || '')),
           ie: ieFinal || '',
           endereco: String((cliente as any).rua || '').trim(),
           numero: String((cliente as any).numero || '').trim(),
           complemento: String((cliente as any).complemento || '').trim(),
           bairro: String((cliente as any).bairro || '').trim(),
-          cep: String((cliente as any).cep || '').trim(),
+          cep: digitsOnly(String((cliente as any).cep || '')),
           cidade: String((cliente as any).cidade || '').trim(),
           uf: String((cliente as any).uf || '').trim(),
-          fone: String((cliente as any).telefone || '').trim(),
+          fone: digitsOnly(String((cliente as any).telefone || '')),
         },
         numero_ordem_compra: String(pedido.ordem_cliente || '').trim() || undefined,
         obs: String(pedido.observacao || '').trim() || undefined,
