@@ -139,7 +139,7 @@ function Sidebar({ currentPage, onPageChange, canAccessPage }: SidebarProps) {
 
 function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.29";
+  const systemVersion = "V 1.30";
   
   if (!usuario) return null;
   
@@ -188,7 +188,11 @@ function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs">
-              <p className="font-medium mb-1">Novidades em V 1.29</p>
+              <p className="font-medium mb-1">Novidades em V 1.30</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-left">
+                <li>Botão "Imprimir" na visualização de pedidos, com layout próprio em A4 (cabeçalho da empresa, dados do cliente, itens, totais, pagamento e observações)</li>
+              </ul>
+              <p className="font-medium mt-2 mb-1">V 1.29</p>
               <ul className="list-disc pl-4 space-y-0.5 text-left">
                 <li>Pedidos: clientes importados via planilha agora enviam ao Tiny corretamente (CEP/CNPJ/telefone vinham com pontuação que o Tiny rejeitava)</li>
                 <li>Configurações &gt; Usuários: recriar um usuário com mesmo e-mail após excluir voltou a funcionar (erro de chave duplicada no banco corrigido)</li>
