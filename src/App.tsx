@@ -139,7 +139,7 @@ function Sidebar({ currentPage, onPageChange, canAccessPage }: SidebarProps) {
 
 function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.22";
+  const systemVersion = "V 1.23";
   
   if (!usuario) return null;
   
@@ -188,13 +188,9 @@ function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs">
-              <p className="font-medium mb-1">Novidades em V 1.22</p>
+              <p className="font-medium mb-1">Novidades em V 1.23</p>
               <ul className="list-disc pl-4 space-y-0.5 text-left">
-                <li>Relatório de comissões: Saldo Anterior antes do Valor Líquido</li>
-                <li>Linha de totalizadores na tabela de Vendas do Período (PDF)</li>
-                <li>Acentos e caracteres especiais corrigidos no PDF</li>
-                <li>Aviso quando o período anterior está em aberto, com instruções para fechar o ciclo</li>
-                <li>Nova ação "Fechar Período" no menu de cada relatório aberto</li>
+                <li>Botão "Imprimir" na visualização de pedidos, com layout próprio em A4 (cabeçalho da empresa, dados do cliente, itens, totais, pagamento e observações)</li>
               </ul>
             </TooltipContent>
           </Tooltip>

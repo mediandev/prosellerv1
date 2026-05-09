@@ -72,8 +72,10 @@ import {
   ChevronsUpDown,
   Receipt,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Printer
 } from 'lucide-react';
+import { PedidoPrintView } from './PedidoPrintView';
 import { toast } from 'sonner';
 import { formatCurrency, formatCNPJ, formatCPF } from '../lib/masks';
 import { mockNaturezasOperacao } from '../data/mockNaturezasOperacao';
@@ -1736,6 +1738,14 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   const renderActionButtons = () => {
     return (
       <div className="flex gap-2">
+        {/* Modo Visualização - Botão Imprimir */}
+        {isReadOnly && modo !== 'criar' && (
+          <Button variant="outline" onClick={() => window.print()}>
+            <Printer className="h-4 w-4 mr-2" />
+            Imprimir
+          </Button>
+        )}
+
         {/* Modo Visualização - Mostrar botão Editar */}
         {isReadOnly && modo !== 'criar' && podeEditar && !pedidoBloqueado && (
           <Button onClick={handleEntrarModoEdicao}>
@@ -3329,6 +3339,15 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
           </>
         )}
       </div>
+
+      {/* Layout de impressão (visível apenas em @media print) */}
+      {isReadOnly && modo !== 'criar' && (
+        <PedidoPrintView
+          venda={formData}
+          cliente={clientes.find((c) => c.id === formData.clienteId)}
+          empresa={companies.find((c) => String(c.id) === String(formData.empresaFaturamentoId))}
+        />
+      )}
     </div>
   );
 }
