@@ -3,7 +3,7 @@
 > Estado vivo do projeto. Único arquivo de controle, junto com `git log`.
 > Atualizar ao final de cada sessão.
 
-**Última atualização:** 2026-04-29 (sessão 3 — INC-003)
+**Última atualização:** 2026-05-06 (sessão — INC-008 + F-004 + INC-009 + INC-010 + INC-011 + INC-012)
 
 ---
 
@@ -62,6 +62,60 @@ Retomada rápida:
 - Edge Functions afetadas: `create-cliente-v2`, `tiny-empresa-natureza-operacao-v2`, `tiny-enviar-pedido-venda-v1`.
 
 **Branch:** `feat/simples-nacional-lookup`. Commits atômicos: (1) testes primeiro (`resolveNaturezaTiny` + toggle UI), (2) helper `natureza-resolver.ts`, (3) helper `receitaws-client.ts`, (4) integração em `create-cliente-v2`, (5) aceite dual-ID em `tiny-empresa-natureza-operacao-v2`, (6) revalidação por pedido em `tiny-enviar-pedido-venda-v1`, (7) toggle na UI de Mapeamento, (8) campo read-only na ficha do cliente.
+
+---
+
+### 🟢 F-004 · Importação de clientes via planilha (Concluída — V 1.27)
+
+**Motivação:** Valentim reportou em 2026-05-06 que o vendedor Sergio
+não conseguia cadastrar 6 clientes novos (TERUYA — DAP) e pediu
+import via planilha para acelerar. A UI já tinha o componente
+`ImportCustomersData` (Configurações &gt; Importação de Dados) com
+preview, validação e conversor — mas `handleConfirmImport` era um
+mock (timeout de 1.5s sem chamar API). Esta feature wireia a
+persistência real e adapta o mapeador para a planilha do Sergio.
+
+**Escopo entregue:**
+- `COLUMN_MAP` estendido com colunas da migração: `Código`,
+  `CNPJ / CPF`, `IE / RG`, `NOME REDE`, `Situação Proseller`,
+  `Endereço`, `Cidade`, `Estado`, `Fone`, `Web Site`,
+  `E-mail para envio de notas fiscais`, `Empresa de Faturamento`,
+  `Lista de Preço`, `Desc Fin`, `Desconto (%)`, `Observações NF`.
+- **`handleFileUpload` agora aplica COLUMN_MAP automaticamente**
+  (antes só `handleConvertFile` mapeava — usuário tinha que rodar
+  Converter → re-upload do CSV gerado). Detectado durante teste E2E
+  Playwright em 2026-05-06: planilha com `Tipo pessoa` (lowercase)
+  era rejeitada na validação porque `validateRow` lia `Tipo Pessoa`
+  do template. Fix elimina o passo extra de conversão.
+- Pré-resolução de lookups antes do loop: `api.get('vendedores')`,
+  `api.get('empresas')`, `api.get('listas-preco')`. Match
+  case/accent-insensitive por nome/razaoSocial/email/codigo.
+- Vendedor com sufixo `(NNN)` (ex.: `SERGIO GLEZER (5984)`) é
+  partido em nome + código antes do match.
+- Por linha: `api.create('clientes', cliente)` + `api.update` com
+  `empresaFaturamentoId` quando empresa resolve (POST do clientes-v2
+  não aceita o campo, PUT sim — split em 2 chamadas por linha).
+- Quando vendedor/empresa/lista não casam, registro é importado com
+  aviso na lista de erros (não-bloqueante) — backoffice corrige
+  manualmente depois.
+- Validação tornada case/accent-insensitive (`ATIVO` agora aceito;
+  `Pessoa Jurídica` em qualquer caixa).
+- Progress bar no preview durante o run.
+
+**Cobre:** caso de uso "Valentim recebe planilha do vendedor com
+clientes novos do mês e importa em lote em Configurações &gt;
+Importação de Dados &gt; Selecionar Arquivo".
+
+**Não cobre (pode virar F-NNN se demanda surgir):**
+- Condições de pagamento por linha (FORMA, PZ PGTO, DESC EXTRA da
+  planilha são lidas mas ignoradas no payload).
+- Segmento como ID (campo vai como texto livre via segmentoMercado).
+- Status: ✅ código pronto na branch `main`. **clientes-v2 v44
+  deployado em produção em 2026-05-06 14:27 BRT** (via Supabase
+  MCP — cliente_id 7352..7357 confirmados em DB com Sergio
+  vinculado em vendedoresatribuidos). **Pendente: deploy
+  Netlify** para a UI da importação ficar disponível em
+  proseller.app.br.
 
 ---
 
@@ -158,10 +212,134 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 - Quota ReceitaWS API Pública 3/min — monitorar logs receitaws.lookup.rate_limited; migrar para plano Comercial se recorrente.
 - **Auditoria de READ Edge Functions ao adicionar coluna nova:** quando uma feature adiciona campo novo ao schema, criar checklist obrigatório de Edge Functions de leitura a auditar. **INC-003 surgiu porque a auditoria pré-deploy de F-001 cobriu apenas os fluxos de escrita (`create-cliente-v2`, `tiny-empresa-natureza-operacao-v2`, `tiny-enviar-pedido-venda-v1`) e ignorou o GET de `clientes-v2` que serializa a entidade pra ficha.** Próxima feature que adicionar coluna em `cliente`/`empresa`/`pedido_venda` deve listar todas as Edge Functions GET dessa entidade no PR antes de mergear.
 - **`mapClienteCompleto` não tem teste unit:** vive dentro de `supabase/functions/clientes-v2/index.ts` que é uma `serve()` entry point e não exporta. Extrair pra `_shared/cliente-mapper.ts` na próxima feature que tocar `clientes-v2` (não fazer oportunisticamente). Débito identificado no fix do INC-003.
+- **F-004 import precisa normalizar CEP/CNPJ/fone na ENTRADA também (defesa em 2 camadas).** INC-011 mostrou que clientes importados pela planilha do Sergio via `ImportCustomersData.tsx` chegam ao banco com formatação Excel preservada (`07.250130`, `61.585.865/0737-01`, `(11) 3296-2301`). O fix do INC-011 sanitiza no boundary do Tiny (`tiny-enviar-pedido-venda-v1`), mas qualquer outro consumidor que dependa do formato canônico (ex.: integrações futuras, busca por CEP, validação no frontend) vai sofrer. Próxima onda do import deve aplicar `.replace(/\D/g, '')` em CEP/CNPJ/fone antes do `api.create('clientes', ...)`. Backfill dos clientes já importados é opcional (não bloqueia uso). Não fazer oportunisticamente — abrir feature dedicada quando F-004 voltar a ser tocada.
 
 ---
 
 ## 5. Bugs / incidentes
+
+🐛 INC-011 · 2026-05-06 · Pedidos de clientes importados via
+planilha (F-004) falhavam ao enviar ao Tiny ERP com toast
+"Erro retornado pelo Tiny".
+- Reprodução: Valentim reportou 3 pedidos RAIADROGASIL S/A
+  (pedido_venda_ID 456/457/458, vendedor "Empresa - Venda Direta",
+  OC 15419788/15421544/15424397) falhando no envio. Pedido 459
+  (Sergio, ELIZA KAZUMI, cliente cadastrado pela UI nativa)
+  passou no mesmo dia.
+- Hipótese inicial (descartada): "duplicação reusing id_tiny".
+  `SalesPage.handleDuplicarPedido` (L1130-1145) já strip-a `id`,
+  `numero`, `integracaoERP`, `createdAt`, `updatedAt`,
+  `createdBy`. Os 3 pedidos têm `id_tiny=NULL` e `ordem_cliente`
+  único — não é o duplicate.
+- Causa raiz: `tiny-enviar-pedido-venda-v1/index.ts:606-624`
+  enviava `cep`, `cpf_cnpj` e `fone` literalmente (apenas
+  `.trim()`). Clientes importados pela planilha do Sergio via
+  F-004 (V 1.27) chegam ao banco com formatação preservada do
+  Excel: CEP `07.250130` / `06.833073` / `14.097140`, CNPJ
+  `61.585.865/0737-01`, fone `(11) 3296-2301`. Tiny ERP rejeita
+  CEP com `.` retornando `status="Erro"` (toast vem de
+  `index.ts:138`). Outros 3 clientes do mesmo lote (TENDA
+  `18.076-005`, SAO RAFAEL `08.311-080`, NAVEGANTES `09.972-260`)
+  sofrem do mesmo problema latente.
+- Resolução: 3 substituições `.trim()` → `digitsOnly()` no
+  payload Tiny (helper já existe em L20). Sanitização no boundary
+  é idempotente — clientes com CEP limpo continuam funcionando.
+  Bump V 1.29.
+- Status: corrigido em prod, edge function v33 deployada via
+  Supabase MCP (2026-05-06 18:36 BRT). Smoke OPTIONS = 200 OK.
+  Pendente: deploy Netlify para a UI exibir V 1.29 + Valentim
+  reenviar pelos botões dos pedidos 456/457/458.
+- Lição: F-004 import deve normalizar CEP/CNPJ/fone na entrada
+  também (defesa em 2 camadas — registrado no §4 débito técnico).
+
+🐛 INC-012 · 2026-05-06 · Recriar usuário com mesmo e-mail após
+exclusão estourava `duplicate key value violates unique constraint
+user_pkey` (resolve BUG-006 e BUG-007 do backlog).
+- Reprodução: Valentim excluiu Karen (vendas@median.com.br,
+  user_id 32f2eceb-...) com sucesso (V 1.24/V 1.25 já corrigiram
+  preflight CORS e ambiguidade em `delete_user_v2`). Ao tentar
+  recriar com o mesmo e-mail, o backend devolvia
+  `Database operation failed: duplicate key value violates unique
+  constraint user_pkey`.
+- Causa raiz (cadeia, confirmada via Supabase MCP):
+  1. `delete_user_v2` faz só soft-delete em `public."user"`
+     (`UPDATE ... SET ativo=false, deleted_at=NOW()`). Não toca
+     em `auth.users` por design (preserva auditoria).
+  2. Na recriação, `create-user-v2` (Edge Function) chama
+     `supabaseAdmin.auth.admin.inviteUserByEmail(email)`. Como o
+     `auth.user` antigo continua vivo, o Supabase devolve o
+     **mesmo** `auth_user_id` antigo.
+  3. `create_user_v2` (RPC, 7-args) recebe esse `auth_user_id` e
+     fazia `INSERT INTO public."user"(user_id, ...)` — colidindo
+     com a PK da row soft-deleted que ainda guarda aquele `user_id`.
+- Resolução: migration **114** trocou o `INSERT` por
+  `INSERT ... ON CONFLICT ON CONSTRAINT user_pkey DO UPDATE SET
+   ativo=TRUE, deleted_at=NULL, deleted_by=NULL, ...`. Reativa a
+  row soft-deleted preservando `user_id` (FKs históricas
+  continuam apontando: `dados_vendedor.user_id`, audit logs etc.).
+  Edge Function `create-user-v2` não muda — assinatura do RPC
+  preservada. **Não bumpa versão** — V 1.29 já bumpada pela sessão
+  do BUG-001 Tiny CEP; entrada no tooltip foi adicionada como 2º
+  bullet da V 1.29.
+- Detalhe técnico: precisei usar
+  `ON CONFLICT ON CONSTRAINT user_pkey` (não `ON CONFLICT (user_id)`)
+  porque a função declara `user_id uuid` no `RETURNS TABLE` — a
+  referência bare colide com a variável OUT (mesmo padrão que
+  V 1.25 corrigiu em `delete_user_v2`).
+- Validação: dry-run via `BEGIN; SELECT create_user_v2(...,
+  p_auth_user_id := '32f2eceb-...'); ROLLBACK;` retornou Karen
+  com `ativo=true, deleted_at=null, deleted_by=null`. Estado em
+  produção preservado pelo ROLLBACK — Karen segue soft-deleted
+  até o Valentim recriar pela UI.
+- Status: corrigido em prod, validação humana sugerida (Valentim
+  recriar Karen pela UI de Configurações &gt; Usuários).
+
+🐛 INC-009 · 2026-05-06 · Desconto Padrão do cliente não persistia
+ao salvar via PUT.
+- Reprodução: Valentim alterou desconto de 13% para 10% no cliente
+  codigo 6985 (PERFUMARIA 8 DEZ) duas vezes; banco manteve 13%.
+- Causa raiz: `clientes-v2` rota PUT (linhas 559-594) chamava
+  `update_cliente_v2` sem enviar `p_desconto`. RPC tem o parâmetro
+  com default NULL e usa `desconto = COALESCE(p_desconto, c.desconto)`
+  — sem entrada, mantém valor antigo.
+- Resolução: 1 linha em PUT — `p_desconto: body.descontoPadrao ?? body.desconto ?? null`. Bump V 1.28.
+- Status: corrigido. clientes-v2 v45 deployado em prod (2026-05-06
+  via Supabase MCP).
+
+🐛 INC-010 · 2026-05-06 · Grupo/Rede do cliente não persistia ao
+salvar via PUT em alguns casos.
+- Reprodução: Valentim selecionou grupo TERUYA no cliente codigo
+  6938 (SHIGE TERUYA) duas vezes; banco manteve `grupo_id=NULL` e
+  `grupo_rede=NULL`.
+- Causa raiz: `clientes-v2` PUT só enviava `p_grupo_id` (UUID). Se
+  o lookup nome→UUID falhasse (collation, espaço, ambiguidade no
+  `.single()`), o texto do grupo também ficava perdido — RPC mantém
+  ambos os campos null.
+- Resolução: PUT agora resolve **tanto** UUID quanto nome (via
+  `maybeSingle`) e envia `p_grupo_id` + `p_grupo_rede` para o RPC,
+  garantindo que mesmo se a resolução falhar parcial, ao menos
+  o texto fica salvo. Bump V 1.28.
+- Status: corrigido junto com INC-009 (mesmo deploy).
+
+🐛 INC-008 · 2026-05-06 · Cadastro de cliente novo (vendedor logado
+ou backoffice atribuindo vendedor) falhava com `invalid input syntax
+for type uuid: '{"id":"…","nome":"…","email":"…"}'`.
+- Reprodução: Sergio (vendedor) tenta cadastrar cliente novo com seu
+  perfil auto-atribuído. Erro reportado pelo Valentim em 2026-05-06.
+- Causa raiz: `supabase/functions/clientes-v2/index.ts:376` (POST)
+  repassava `body.vendedoresAtribuidos` direto para a RPC
+  `create_cliente_v2`, que espera `uuid[]`. O form de Condição
+  Comercial (`CustomerFormCondicaoComercial.tsx:118`) seta esse
+  campo como array de objetos `[{id,nome,email}]`. PUT já tinha a
+  normalização correta (linhas 458-471), POST não.
+- Resolução: extrair IDs do array de objetos antes do RPC, espelhando
+  a lógica do PUT. Edit em ~15 linhas. Bump V 1.27.
+- Status: corrigido em código (V 1.27). **Pendente: deploy
+  `clientes-v2` em produção (`npx supabase functions deploy
+  clientes-v2`) — fix só toma efeito após deploy.**
+- Lição: divergência POST/PUT em handlers paralelos é fonte de bugs.
+  Próxima feature que tocar `clientes-v2` deve unificar normalização
+  de vendedoresAtribuidos em helper compartilhado (débito em §4).
 
 🐛 INC-001 · 2026-04-24 · Cursor MCP publicou stub "// test" em
 create-cliente-v2 em produção durante deploy de F-001.

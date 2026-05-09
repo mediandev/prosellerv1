@@ -23,6 +23,7 @@
 - **Edge Functions seguem padrão `-v2`** (ex.: `clientes-v2`, `dashboard-v2`). Features novas adotam o mesmo padrão ou documentam em ADR por que divergem.
 - **Duas camadas de dados convivem:** `src/data/mock*.ts` (seed/fallback) e `src/services/*.ts` (Supabase real). Em features novas, **somente Supabase real**. Mocks só permanecem como referência até serem extintos em onda dedicada.
 - **App.tsx tem 45 KB e roteamento manual por `useState<Page>`.** Não refatorar isso oportunisticamente — está no débito técnico. Ao adicionar página nova, seguir o mesmo padrão atual para não quebrar as outras.
+- **Toda PR que dispara deploy em produção bumpa `systemVersion` no Sidebar.** A variável fica em `src/App.tsx` (componente `SidebarUserInfo`, ~linha 142) e o tooltip ao lado do ícone ✨ lista o changelog. Padrão: criar nova seção "Novidades em V x.y" no topo do tooltip e descer a anterior para "V x.(y-1)" (ver V 1.23 como referência). Cliente cobra ver a versão mudar a cada entrega — fix técnico sem bump visível gera confusão e re-trabalho. Aplicar sempre que mexer em `src/`. Para deploy puramente backend (Edge Function, migration), avaliar caso a caso conforme o efeito visível ao usuário final.
 
 ---
 

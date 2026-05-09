@@ -362,6 +362,22 @@ serve(async (req) => {
 
       const cpfCnpj = body.cpfCnpj ?? body.cpf_cnpj ?? null
 
+      // Normalizar vendedoresAtribuidos: pode vir como array de IDs (string), array de objetos {id,...}
+      // ou apenas vendedorAtribuido (singular). RPC espera uuid[].
+      let vendedoresAtribuidosArray: string[] | null = null
+      const rawVendedores = body.vendedoresAtribuidos ?? body.vendedoresatribuidos
+      if (Array.isArray(rawVendedores) && rawVendedores.length > 0) {
+        vendedoresAtribuidosArray = rawVendedores
+          .map((v: any) => {
+            if (v && typeof v === 'object') return v.id ?? v.user_id ?? null
+            return v
+          })
+          .filter((id: any): id is string => typeof id === 'string' && id.length > 0)
+        if (vendedoresAtribuidosArray.length === 0) vendedoresAtribuidosArray = null
+      } else if (body.vendedorAtribuido?.id) {
+        vendedoresAtribuidosArray = [String(body.vendedorAtribuido.id)]
+      }
+
       const p = {
         p_nome: String(nome).trim(),
         p_nome_fantasia: body.nomeFantasia ?? body.nome_fantasia ?? null,
@@ -373,7 +389,7 @@ serve(async (req) => {
         p_lista_de_preco: body.listaPrecos ?? body.lista_de_preco != null ? Number(body.listaPrecos ?? body.lista_de_preco) : null,
         p_desconto_financeiro: body.descontoFinanceiro ?? body.desconto_financeiro ?? 0,
         p_pedido_minimo: body.pedidoMinimo ?? body.pedido_minimo ?? 0,
-        p_vendedoresatribuidos: body.vendedoresAtribuidos ?? body.vendedoresatribuidos ?? (body.vendedorAtribuido?.id ? [body.vendedorAtribuido.id] : null),
+        p_vendedoresatribuidos: vendedoresAtribuidosArray,
         p_observacao_interna: body.observacoesInternas ?? body.observacao_interna ?? null,
         p_tipo_segmento: body.segmentoId ?? body.segmento_id != null ? String(body.segmentoId ?? body.segmento_id) : null,
         p_telefone: body.telefoneFixoPrincipal ?? body.telefone ?? body.contato?.telefoneFixoPrincipal ?? null,
@@ -407,23 +423,31 @@ serve(async (req) => {
       if (!nome || String(nome).trim().length < 2) throw new Error('Nome deve ter pelo menos 2 caracteres')
       const requisitosLogisticos = extractRequisitosLogisticos(body)
 
-      // Extrair grupo_id (UUID) do grupoRede
+      // Extrair grupo_id (UUID) do grupoRede + nome para redundância (BUG-E)
       let grupoId: string | null = null
+      let grupoNome: string | null = null
       if (body.grupoRede || body.grupo_rede || body.grupoId || body.grupo_id) {
-        const grupoValue = body.grupoId ?? body.grupo_id ?? body.grupoRede ?? body.grupo_rede
-        // Verificar se e UUID (ID)
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(grupoValue))
-        if (isUUID) {
-          grupoId = String(grupoValue)
-        } else {
-          // Se for nome, buscar ID
-          const { data: grupoData, error: grupoError } = await supabase
-            .from('grupos_redes')
-            .select('id')
-            .ilike('nome', String(grupoValue).trim())
-            .single()
-          if (!grupoError && grupoData) {
-            grupoId = grupoData.id
+        const grupoValue = String(body.grupoId ?? body.grupo_id ?? body.grupoRede ?? body.grupo_rede ?? '').trim()
+        if (grupoValue) {
+          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(grupoValue)
+          if (isUUID) {
+            grupoId = grupoValue
+            // BUG-E: também buscar o nome para gravar em grupo_rede (texto), garantindo que
+            // o GET próximo retorne dados consistentes mesmo se grupo_id resolver diferente.
+            const { data: grupoData } = await supabase
+              .from('grupos_redes')
+              .select('nome')
+              .eq('id', grupoValue)
+              .maybeSingle()
+            if (grupoData?.nome) grupoNome = grupoData.nome
+          } else {
+            grupoNome = grupoValue
+            const { data: grupoData } = await supabase
+              .from('grupos_redes')
+              .select('id')
+              .ilike('nome', grupoValue)
+              .maybeSingle()
+            if (grupoData?.id) grupoId = grupoData.id
           }
         }
       }
@@ -549,7 +573,9 @@ serve(async (req) => {
         p_inscricao_estadual: body.inscricaoEstadual ?? body.inscricao_estadual ?? null,
         p_codigo: body.codigo ?? null,
         p_grupo_id: grupoId,
+        p_grupo_rede: grupoNome,
         p_lista_de_preco: body.listaPrecos ?? body.lista_de_preco != null ? Number(body.listaPrecos ?? body.lista_de_preco) : null,
+        p_desconto: body.descontoPadrao ?? body.desconto ?? null,
         p_desconto_financeiro: body.descontoFinanceiro ?? body.desconto_financeiro ?? null,
         p_pedido_minimo: body.pedidoMinimo ?? body.pedido_minimo ?? null,
         p_vendedoresatribuidos: vendedoresAtribuidosArray,

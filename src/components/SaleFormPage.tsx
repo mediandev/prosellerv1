@@ -323,6 +323,27 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       }));
   }, [formData.listaPrecoId, listasPreco]);
 
+  // Edge Function listas-preco-v2 GET sem ID retorna apenas total_produtos (count),
+  // produtos vem []. Em modo criar, processarCliente chama getById e injeta a lista
+  // hidratada; em editar/visualizar esse caminho nao executa, entao o modal de
+  // adicionar item ficaria sempre vazio. Aqui hidratamos sob demanda.
+  useEffect(() => {
+    if (modo === 'criar' || !formData.listaPrecoId) return;
+    const listaLocal = listasPreco.find(lp => lp.id === formData.listaPrecoId);
+    if (listaLocal?.produtos?.length) return;
+    api.getById('listas-preco', formData.listaPrecoId)
+      .then(hidratada => {
+        if (!hidratada) return;
+        setListasPreco(prev => {
+          const existe = prev.some(lp => lp.id === hidratada.id);
+          return existe
+            ? prev.map(lp => lp.id === hidratada.id ? hidratada : lp)
+            : [...prev, hidratada];
+        });
+      })
+      .catch(err => console.error('[VENDAS] Falha ao hidratar lista de preco em modo edit:', err));
+  }, [modo, formData.listaPrecoId]);
+
   const produtoSelecionadoNoCombobox = useMemo(
     () => produtosDisponiveisParaPedido.find(produto => produto.id === selectedProdutoId),
     [produtosDisponiveisParaPedido, selectedProdutoId]
