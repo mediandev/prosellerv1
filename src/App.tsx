@@ -55,6 +55,7 @@ import { AnaliseCurvaABCPage } from "./components/AnaliseCurvaABCPage";
 import { SolicitadoFaturadoReportPage } from "./components/SolicitadoFaturadoReportPage";
 import { TinyERPPedidosPage } from "./components/TinyERPPedidosPage";
 import { TinyERPModeIndicator } from "./components/TinyERPModeIndicator";
+import { ChangelogPage, CHANGELOG } from "./components/ChangelogPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { DataInitializer } from "./components/DataInitializerSimple";
 import { DemoModeBadge } from "./components/DemoModeBadge";
@@ -72,7 +73,7 @@ import { toast } from "sonner@2.0.3";
 import { api } from "./services/api";
 import { tinyERPSyncService } from "./services/tinyERPSync";
 
-type Page = "dashboard" | "vendas" | "equipe" | "clientes" | "comissoes" | "contacorrente" | "produtos" | "metas" | "relatorios" | "configuracoes" | "perfil" | "clientes-pendentes" | "tiny-erp";
+type Page = "dashboard" | "vendas" | "equipe" | "clientes" | "comissoes" | "contacorrente" | "produtos" | "metas" | "relatorios" | "configuracoes" | "perfil" | "clientes-pendentes" | "tiny-erp" | "changelog";
 type CustomerView = 'list' | 'create' | 'edit' | 'view';
 type PriceListView = 'settings' | 'create' | 'edit' | 'view';
 type SaleView = 'list' | 'create' | 'edit' | 'view';
@@ -131,15 +132,25 @@ function Sidebar({ currentPage, onPageChange, canAccessPage }: SidebarProps) {
       </nav>
       
       <div className="p-4 border-t flex-shrink-0 bg-card">
-        <SidebarUserInfo onOpenProfile={() => onPageChange("perfil")} />
+        <SidebarUserInfo
+          onOpenProfile={() => onPageChange("perfil")}
+          onOpenChangelog={() => onPageChange("changelog")}
+        />
       </div>
     </div>
   );
 }
 
-function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
+function SidebarUserInfo({
+  onOpenProfile,
+  onOpenChangelog,
+}: {
+  onOpenProfile: () => void;
+  onOpenChangelog: () => void;
+}) {
   const { usuario, logout } = useAuth();
   const systemVersion = "V 1.30";
+  const ultimaVersao = CHANGELOG[0];
   
   if (!usuario) return null;
   
@@ -181,56 +192,23 @@ function SidebarUserInfo({ onOpenProfile }: { onOpenProfile: () => void }) {
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label="Novidades desta versão"
+                aria-label="Ver novidades desta versão"
+                onClick={onOpenChangelog}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Sparkles className="h-3 w-3" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs">
-              <p className="font-medium mb-1">Novidades em V 1.30</p>
+              <p className="font-medium mb-1">Novidades em {ultimaVersao.version}</p>
               <ul className="list-disc pl-4 space-y-0.5 text-left">
-                <li>Botão "Imprimir" na visualização de pedidos, com layout próprio em A4 (cabeçalho da empresa, dados do cliente, itens, totais, pagamento e observações)</li>
+                {ultimaVersao.items.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
               </ul>
-              <p className="font-medium mt-2 mb-1">V 1.29</p>
-              <ul className="list-disc pl-4 space-y-0.5 text-left">
-                <li>Pedidos: clientes importados via planilha agora enviam ao Tiny corretamente (CEP/CNPJ/telefone vinham com pontuação que o Tiny rejeitava)</li>
-                <li>Configurações &gt; Usuários: recriar um usuário com mesmo e-mail após excluir voltou a funcionar (erro de chave duplicada no banco corrigido)</li>
-              </ul>
-              <p className="font-medium mt-2 mb-1">V 1.28</p>
-              <ul className="list-disc pl-4 space-y-0.5 text-left">
-                <li>Cliente: campo Desconto Padrão agora salva ao editar (estava sendo ignorado pelo backend)</li>
-                <li>Cliente: campo Grupo / Rede agora persiste corretamente ao editar — texto e ID são gravados juntos</li>
-              </ul>
-              <p className="font-medium mt-2 mb-1">V 1.27</p>
-              <ul className="list-disc pl-4 space-y-0.5 text-left">
-                <li>Cadastro de cliente: erro "invalid input syntax for type uuid" ao salvar um cliente novo com vendedor atribuído foi corrigido</li>
-                <li>Configurações &gt; Importação de Dados: importação de clientes via planilha agora persiste no banco (antes só simulava). Reconhece automaticamente colunas da planilha de migração (Código, Endereço, Cidade, Estado, Fone, NOME REDE, SITUAÇÃO PROSELLER, Vendedor, Empresa de Faturamento, Lista de Preço, DESC FIN, etc.)</li>
-              </ul>
-              <p className="font-medium mt-2 mb-1">V 1.26</p>
-              <ul className="list-disc pl-4 space-y-0.5 text-left">
-                <li>Pedidos: ao reabrir um pedido salvo como rascunho em modo edição, a lista de produtos volta a aparecer no modal "Adicionar Item"</li>
-              </ul>
-              <p className="font-medium mt-2 mb-1">V 1.25</p>
-              <ul className="list-disc pl-4 space-y-0.5 text-left">
-                <li>Configurações &gt; Usuários: segundo bug da exclusão (erro de banco) corrigido — exclusão agora conclui com sucesso</li>
-              </ul>
-              <p className="font-medium mt-2 mb-1">V 1.24</p>
-              <ul className="list-disc pl-4 space-y-0.5 text-left">
-                <li>Configurações &gt; Usuários: exclusão de usuário volta a funcionar (preflight CORS corrigido)</li>
-              </ul>
-              <p className="font-medium mt-2 mb-1">V 1.23</p>
-              <ul className="list-disc pl-4 space-y-0.5 text-left">
-                <li>Simples Nacional: pedidos passam a chegar no Tiny com a natureza correta conforme o regime do cliente</li>
-              </ul>
-              <p className="font-medium mt-2 mb-1">V 1.22</p>
-              <ul className="list-disc pl-4 space-y-0.5 text-left">
-                <li>Relatório de comissões: Saldo Anterior antes do Valor Líquido</li>
-                <li>Linha de totalizadores na tabela de Vendas do Período (PDF)</li>
-                <li>Acentos e caracteres especiais corrigidos no PDF</li>
-                <li>Aviso quando o período anterior está em aberto, com instruções para fechar o ciclo</li>
-                <li>Nova ação "Fechar Período" no menu de cada relatório aberto</li>
-              </ul>
+              <p className="mt-2 text-[11px] text-muted-foreground italic">
+                Clique para ver versões anteriores
+              </p>
             </TooltipContent>
           </Tooltip>
         </div>
@@ -300,6 +278,10 @@ const pageConfig: Record<Page, { title: string; description: string }> = {
   perfil: {
     title: "Meu Perfil",
     description: "Gerencie suas informações pessoais e preferências."
+  },
+  changelog: {
+    title: "Novidades",
+    description: "Histórico de versões e melhorias do sistema."
   }
 };
 
@@ -894,6 +876,8 @@ function AppContent() {
     switch (currentPage) {
       case "perfil":
         return <UserProfilePage />;
+      case "changelog":
+        return <ChangelogPage />;
       case "dashboard":
         return (
           <div className="space-y-6">
