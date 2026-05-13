@@ -3,7 +3,7 @@
 > Estado vivo do projeto. Único arquivo de controle, junto com `git log`.
 > Atualizar ao final de cada sessão.
 
-**Última atualização:** 2026-05-06 (sessão — INC-008 + F-004 + INC-009 + INC-010 + INC-011 + INC-012)
+**Última atualização:** 2026-05-07 (sessão — INC-013)
 
 ---
 
@@ -213,10 +213,70 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 - **Auditoria de READ Edge Functions ao adicionar coluna nova:** quando uma feature adiciona campo novo ao schema, criar checklist obrigatório de Edge Functions de leitura a auditar. **INC-003 surgiu porque a auditoria pré-deploy de F-001 cobriu apenas os fluxos de escrita (`create-cliente-v2`, `tiny-empresa-natureza-operacao-v2`, `tiny-enviar-pedido-venda-v1`) e ignorou o GET de `clientes-v2` que serializa a entidade pra ficha.** Próxima feature que adicionar coluna em `cliente`/`empresa`/`pedido_venda` deve listar todas as Edge Functions GET dessa entidade no PR antes de mergear.
 - **`mapClienteCompleto` não tem teste unit:** vive dentro de `supabase/functions/clientes-v2/index.ts` que é uma `serve()` entry point e não exporta. Extrair pra `_shared/cliente-mapper.ts` na próxima feature que tocar `clientes-v2` (não fazer oportunisticamente). Débito identificado no fix do INC-003.
 - **F-004 import precisa normalizar CEP/CNPJ/fone na ENTRADA também (defesa em 2 camadas).** INC-011 mostrou que clientes importados pela planilha do Sergio via `ImportCustomersData.tsx` chegam ao banco com formatação Excel preservada (`07.250130`, `61.585.865/0737-01`, `(11) 3296-2301`). O fix do INC-011 sanitiza no boundary do Tiny (`tiny-enviar-pedido-venda-v1`), mas qualquer outro consumidor que dependa do formato canônico (ex.: integrações futuras, busca por CEP, validação no frontend) vai sofrer. Próxima onda do import deve aplicar `.replace(/\D/g, '')` em CEP/CNPJ/fone antes do `api.create('clientes', ...)`. Backfill dos clientes já importados é opcional (não bloqueia uso). Não fazer oportunisticamente — abrir feature dedicada quando F-004 voltar a ser tocada.
+- **F-004 falha silenciosamente quando o cliente já existe (unique constraint).** `ImportCustomersData.tsx:554` chama `api.create('clientes', ...)` sem upsert. Se a row já existir por `codigo` ou `cpf_cnpj`, o backend retorna erro mas o try/catch interno do loop por linha (L572-574) só registra como "Importado com avisos" — usuário não percebe que a planilha **não atualizou** o cliente existente. INC-013 (Valentim 2026-05-07) é instância: pediu "processar de novo a planilha pra atualizar vendedor" porque achou que o import iria fazer upsert. Próxima feature que tocar o componente deve: (a) detectar conflito ANTES do POST (lookup por `codigo`/`cpf_cnpj` no início do loop), (b) oferecer toggle "Atualizar clientes existentes" no preview, (c) quando toggle ON, chamar `api.update` em vez de `api.create` na linha conflitante, (d) quando toggle OFF, mensagem explícita "cliente X já existe — pulando" em vez de "Importado com avisos". Não fazer oportunisticamente.
+- **`findVendedor` no `ImportCustomersData` falha quando planilha usa razão social no lugar do nome do vendedor.** Caso de teste: planilha Montoz 2026-05-01 traz `Vendedor = MONTOZ REPRESENTAÇÃO COMERCIAL LTDA`; vendedora cadastrada é `Valeria Montoz` (`gomes_val@hotmail.com`). Os 3 níveis de match (email, nome exato, includes mútuo) falham. INC-013 acabou não sendo causado por isso (os clientes da planilha já existiam e o create caiu na unique constraint), mas o bug está latente — qualquer planilha futura com vendedor por razão social vai falhar igual. Fix sugerido para a próxima feature que tocar o componente: aceitar `email` ou `user_id` literal na coluna 'Vendedor (Email)' (o nome da coluna até induz isso), com fallback para o match atual. Reaproveitar a estrutura `splitVendedorValue` para extrair email entre `<>` se vier formato `Nome <email@host>`.
+- **30 clientes com `vendedoresatribuidos` apontando para UUID inexistente** (estado pré-INC-013, agora corrigido). Origem: bulk update de jan/2026 e 03/mai/2026 gravou o UUID `c02341e2-7356-4ec1-86fe-119e16465101` que não existe em `public."user"` nem em `auth.users`. Não há `criado_por`/`atualizado_por` apontando para ele em nenhuma row. Provável: script ad-hoc de migração inicial de carteira ou hard-delete de user antigo deixando referências órfãs. **O fix do INC-013 só corrigiu os 30 clientes da Valéria** — pode haver outros clientes no banco com o mesmo UUID fantasma (não auditado). Próxima passada: query `SELECT cliente_id, codigo, nome FROM cliente WHERE 'c02341e2-7356-4ec1-86fe-119e16465101'::uuid = ANY(vendedoresatribuidos) AND deleted_at IS NULL;` — se retornar > 0, abrir INC-014 e auditar com Valentim quem deveria ser o vendedor real de cada um. Não fazer agora; abrir só se Valentim reportar mais clientes "sem vendedor".
 
 ---
 
 ## 5. Bugs / incidentes
+
+🐛 INC-013 · 2026-05-07 · 30 clientes da carteira da Valéria Montoz
+estavam apontando para um UUID de vendedor inexistente
+(`c02341e2-7356-4ec1-86fe-119e16465101`) em
+`cliente.vendedoresatribuidos`, fazendo a vendedora não enxergar nenhum
+cliente atribuído na UI.
+- Reprodução: Valentim reportou via WhatsApp 14:07 — "os clientes da
+  Valéria Montoz não ficaram vinculados a ela; conseguimos processar
+  de novo a planilha?". Planilha de referência:
+  `docs/2026.05.01_PROSELLER_CLIENTES_VEND MONTOZ.xlsx` (32 códigos).
+- Hipótese inicial (descartada após audit): "regressão do import
+  V 1.27 — `findVendedor` não casou `MONTOZ REPRESENTAÇÃO COMERCIAL
+  LTDA` com o nome cadastrado `Valeria Montoz`". Plausível pelo código,
+  mas o backup CSV mostrou que **nenhum dos 30 clientes foi tocado em
+  06-07/maio** (data do reclamado import). 22 deles têm `updated_at =
+  2026-01-13 21:50:13.382` (timestamp idêntico → bulk em jan/2026), 8
+  têm `updated_at = 2026-05-03 10:51:xx` (bulk em 03/maio). Ou seja, o
+  import V 1.27 **nunca rodou** efetivamente nesses clientes — eles já
+  existiam, e o `api.create` deve ter sido rejeitado silenciosamente
+  por unique constraint em `codigo`/`cpf_cnpj`, virando warning no
+  try/catch da linha do loop em `ImportCustomersData.tsx:572-574`.
+- Causa raiz: estado herdado de bulk imports anteriores
+  (jan/2026 e maio/2026) que gravaram o UUID fantasma
+  `c02341e2-7356-4ec1-86fe-119e16465101` em `vendedoresatribuidos`.
+  Esse UUID **não existe** em `public."user"` nem em `auth.users`
+  (rastreio raso negativo via Supabase MCP, 2026-05-07). Origem da
+  rotina que produziu o UUID: desconhecida — provavelmente script
+  ad-hoc de migração inicial de carteira ou hard-delete de user antigo
+  que deixou referências órfãs. Não há `criado_por` nem `atualizado_por`
+  apontando para esse UUID em outras linhas → não é auth.uid() de
+  ninguém ativo.
+- Resolução: UPDATE direto via Supabase MCP em transação
+  (`docs/plans/cursor-brief.md` Tarefa 5) — backup CSV em
+  `docs/plans/backup_inc013_montoz_2026-05-07.csv`. Lista final do
+  UPDATE: 30 clientes (excluído codigo 364 que já tinha Valéria, e
+  excluído codigo 6938 SHIGE TERUYA que está com Sergio Glezer desde
+  2026-05-05 — decisão pendente do Valentim sobre 6938).
+  `vendedoresatribuidos = ARRAY['18f0a888-5613-448e-9359-6d8ec7e27228']`
+  (Valéria), `atualizado_por = 'd08c824e-aeca-4018-8efa-e23fb1a5b5f1'`
+  (Valentim, valentim@cantico.com.br), `updated_at = NOW()`. Smoke test
+  pós-COMMIT: 30/30 OK, 364 intacto, 6938 intacto, nenhum cliente fora
+  da lista alterado nos últimos 5 minutos. Bump V 1.30 no Sidebar
+  com 1 bullet em "Novidades em V 1.30".
+- Status: corrigido em prod via SQL direto. V 1.29 já estava em
+  produção quando o INC-013 foi corrigido — por isso bumpou pra V 1.30
+  em vez de empilhar como 3º bullet da 1.29 (cliente cobra ver versão
+  mudar a cada entrega visível, CLAUDE.md). Pendente: deploy Netlify
+  para a UI exibir V 1.30. Validação humana: Valentim abrir 2-3
+  clientes na UI (5674 SIDNEI SEIKI, 4874 BELFACE, 2422 BELFACE SAO
+  CAETANO) + responder sobre o 6938.
+- Lição: o componente `ImportCustomersData` falha **silenciosamente**
+  quando `api.create` retorna erro de unique constraint — o usuário vê
+  "X importado com avisos" e não percebe que a linha não foi escrita.
+  Próxima feature que tocar o componente deve: (a) detectar conflito
+  por código/CNPJ ANTES do POST e oferecer modo "atualizar existente"
+  (upsert), (b) tornar o aviso explícito ("cliente já existe — vendedor
+  NÃO foi atualizado, edite manualmente"). Registrado no §4.
 
 🐛 INC-011 · 2026-05-06 · Pedidos de clientes importados via
 planilha (F-004) falhavam ao enviar ao Tiny ERP com toast
