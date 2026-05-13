@@ -1,77 +1,51 @@
--- Migration 115 · busca em list_clientes_v2:
---   (a) busca insensivel a acento via unaccent()
---   (b) busca CNPJ por digitos puros (REGEXP_REPLACE)
---   (c) busca tambem em c.grupo_rede
--- Reportado por Valentim em 13/05/2026.
---
--- Preserva a forma atual da funcao (JOIN com grupos_redes e segmento_cliente,
--- retornando grupo_rede_nome / segmento_nome / tipoPessoa). Backup do estado
--- pre-115 em docs/plans/backup_list_clientes_v2_pre_115.sql.
+-- Backup do `public.list_clientes_v2` antes da migration 115
+-- Captura via mcp__supabase__execute_sql -> pg_get_functiondef em 2026-05-13.
+-- Restaurar este arquivo via apply_migration reverte a função ao estado pré-115.
 
-CREATE EXTENSION IF NOT EXISTS unaccent;
-
-CREATE OR REPLACE FUNCTION public.list_clientes_v2(
-  p_limit integer DEFAULT 10,
-  p_page integer DEFAULT 1,
-  p_requesting_user_id uuid DEFAULT NULL::uuid,
-  p_search text DEFAULT NULL::text,
-  p_status_aprovacao_filter text DEFAULT NULL::text,
-  p_vendedor_filter uuid DEFAULT NULL::uuid
-)
-RETURNS json
-LANGUAGE plpgsql
-STABLE
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.list_clientes_v2(p_limit integer DEFAULT 10, p_page integer DEFAULT 1, p_requesting_user_id uuid DEFAULT NULL::uuid, p_search text DEFAULT NULL::text, p_status_aprovacao_filter text DEFAULT NULL::text, p_vendedor_filter uuid DEFAULT NULL::uuid)
+ RETURNS json
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_offset INTEGER;
   v_total_count INTEGER;
   v_user_tipo TEXT;
   v_clientes JSON;
-  v_search_norm TEXT;
-  v_search_digits TEXT;
 BEGIN
-  -- 1. VALIDACOES
+  -- 1. VALIDAÇÕES
   IF p_page < 1 THEN
     RAISE EXCEPTION 'Page must be greater than 0';
   END IF;
+
   IF p_limit < 1 OR p_limit > 100 THEN
     RAISE EXCEPTION 'Limit must be between 1 and 100';
   END IF;
 
-  -- 2. PERMISSAO
+  -- 2. VERIFICAR PERMISSÕES
   IF p_requesting_user_id IS NOT NULL THEN
     SELECT tipo INTO v_user_tipo
     FROM public.user
     WHERE user_id = p_requesting_user_id
-      AND ativo = TRUE
-      AND deleted_at IS NULL;
+    AND ativo = TRUE
+    AND deleted_at IS NULL;
   END IF;
 
   v_offset := (p_page - 1) * p_limit;
 
-  -- 3. NORMALIZACAO DO TERMO DE BUSCA
-  v_search_norm := CASE WHEN p_search IS NULL THEN NULL
-                        ELSE unaccent(LOWER(p_search)) END;
-  v_search_digits := CASE WHEN p_search IS NULL THEN NULL
-                           ELSE NULLIF(REGEXP_REPLACE(p_search, '[^0-9]', '', 'g'), '') END;
-
-  -- 4. CONTAR TOTAL
+  -- 3. CONTAR TOTAL
   SELECT COUNT(*)
   INTO v_total_count
   FROM public.cliente c
   WHERE c.deleted_at IS NULL
     AND (p_status_aprovacao_filter IS NULL OR c.status_aprovacao = p_status_aprovacao_filter)
     AND (
-      v_search_norm IS NULL OR
-      unaccent(LOWER(c.nome))                       LIKE '%' || v_search_norm || '%' OR
-      unaccent(LOWER(c.nome_fantasia))              LIKE '%' || v_search_norm || '%' OR
-      unaccent(LOWER(COALESCE(c.grupo_rede, '')))   LIKE '%' || v_search_norm || '%' OR
-      LOWER(c.codigo)                               LIKE '%' || LOWER(p_search) || '%' OR
-      LOWER(c.cpf_cnpj)                             LIKE '%' || LOWER(p_search) || '%' OR
-      (v_search_digits IS NOT NULL
-       AND LENGTH(v_search_digits) >= 3
-       AND REGEXP_REPLACE(COALESCE(c.cpf_cnpj, ''), '[^0-9]', '', 'g') LIKE '%' || v_search_digits || '%')
+      p_search IS NULL OR
+      LOWER(c.nome) LIKE '%' || LOWER(p_search) || '%' OR
+      LOWER(c.nome_fantasia) LIKE '%' || LOWER(p_search) || '%' OR
+      LOWER(c.cpf_cnpj) LIKE '%' || LOWER(p_search) || '%' OR
+      LOWER(c.codigo) LIKE '%' || LOWER(p_search) || '%'
     )
     AND (
       v_user_tipo = 'backoffice' OR
@@ -82,7 +56,8 @@ BEGIN
     )
     AND (p_vendedor_filter IS NULL OR p_vendedor_filter = ANY(c.vendedoresatribuidos));
 
-  -- 5. BUSCAR CLIENTES COM JOIN PARA grupo_rede_nome E segmento_nome
+  -- 4. BUSCAR CLIENTES COM JOIN PARA grupo_rede_nome E segmento_nome
+  -- Usar subquery para evitar problemas com GROUP BY
   SELECT JSON_BUILD_OBJECT(
     'clientes', COALESCE(
       (SELECT JSON_AGG(
@@ -123,15 +98,11 @@ BEGIN
         WHERE c.deleted_at IS NULL
           AND (p_status_aprovacao_filter IS NULL OR c.status_aprovacao = p_status_aprovacao_filter)
           AND (
-            v_search_norm IS NULL OR
-            unaccent(LOWER(c.nome))                       LIKE '%' || v_search_norm || '%' OR
-            unaccent(LOWER(c.nome_fantasia))              LIKE '%' || v_search_norm || '%' OR
-            unaccent(LOWER(COALESCE(c.grupo_rede, '')))   LIKE '%' || v_search_norm || '%' OR
-            LOWER(c.codigo)                               LIKE '%' || LOWER(p_search) || '%' OR
-            LOWER(c.cpf_cnpj)                             LIKE '%' || LOWER(p_search) || '%' OR
-            (v_search_digits IS NOT NULL
-             AND LENGTH(v_search_digits) >= 3
-             AND REGEXP_REPLACE(COALESCE(c.cpf_cnpj, ''), '[^0-9]', '', 'g') LIKE '%' || v_search_digits || '%')
+            p_search IS NULL OR
+            LOWER(c.nome) LIKE '%' || LOWER(p_search) || '%' OR
+            LOWER(c.nome_fantasia) LIKE '%' || LOWER(p_search) || '%' OR
+            LOWER(c.cpf_cnpj) LIKE '%' || LOWER(p_search) || '%' OR
+            LOWER(c.codigo) LIKE '%' || LOWER(p_search) || '%'
           )
           AND (
             v_user_tipo = 'backoffice' OR
@@ -155,12 +126,10 @@ BEGIN
   INTO v_clientes;
 
   RETURN v_clientes;
+
 EXCEPTION
   WHEN OTHERS THEN
     RAISE LOG 'Error in list_clientes_v2: %', SQLERRM;
     RAISE;
 END;
 $function$;
-
-COMMENT ON FUNCTION public.list_clientes_v2 IS
-'Lista clientes com busca acento-insensivel, CNPJ digits-only e match em grupo_rede (V 1.31, migration 115). Preserva JOIN com grupos_redes e segmento_cliente.';
