@@ -700,6 +700,10 @@ WHERE user_id IN ('48163ed8-bde1-416e-ab7a-61ffaa65ab63'::uuid,
 COMMIT;
 ```
 
+### Observação sobre o import (13/05/2026)
+
+As planilhas Karen e Eric trazem a coluna **`Vendedor`** com o **nome** do vendedor (texto, não email). O `COLUMN_MAP` em `ImportCustomersData.tsx:82` já mapeia essa coluna para a chave canônica, e o `findVendedor` (`ImportCustomersData.tsx:364-377`) tem 3 níveis de match: email exato → nome exato → `includes` mútuo. Karen casa por **nome exato** com `Empresa - Venda Direta ES` (já cadastrado no banco) e Eric casa por nome exato com `Eric Vidal Ferreira`. **Nenhum ajuste de código é necessário para o import** — desde que os vendedores estejam ativos e o nome cadastrado no banco bata literalmente com a planilha.
+
 ### Audit de conflitos das planilhas (rodado em 13/05/2026)
 
 Detectado via SQL (`cliente.codigo` ou `digits(cliente.cpf_cnpj)`):

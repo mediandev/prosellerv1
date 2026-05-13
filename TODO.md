@@ -221,6 +221,34 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 
 ## 5. Bugs / incidentes
 
+🐛 INC-014 · 2026-05-13 · Envio de pedido ao Tiny falhava com
+"Vendedor não Configurado" quando o `nome_fantasia` cadastrado
+no ProSeller não batia exatamente com o nome do vendedor no Tiny.
+- Reprodução: Valentim 11/05/2026 16:58–17:21 — pedidos do
+  representante Almeida (Lojas Livia) só passaram depois que ele
+  alinhou manualmente o `nome_fantasia` do `dados_vendedor` no
+  ProSeller com o nome cadastrado em Tiny. Workaround frágil.
+- Causa raiz: `tiny-enviar-pedido-venda-v1/index.ts` enviava
+  `pedido.nome_vendedor` no payload (linha ~632) além de
+  `id_vendedor`. O Tiny rejeita o pedido se o `nome_vendedor` não
+  bater literalmente com o registro do `id_vendedor` lá. Como o
+  `id_vendedor` (idtiny) já identifica o vendedor unicamente, o
+  `nome_vendedor` era redundante e fonte de regressão.
+- Resolução: 3 edits em `tiny-enviar-pedido-venda-v1` (commit
+  `3d46ef9`, V 1.31) — remove campo do payload, remove campo da
+  resposta `dryRun` e remove a validação pré-envio
+  `Vendedor sem nome_fantasia` (a validação `Vendedor sem idtiny`
+  segue ativa). Sem migration. Sem mudança no frontend.
+- Status: código mergeado em `main`, deploy da Edge Function
+  pendente (`npx supabase functions deploy tiny-enviar-pedido-venda-v1
+  --project-ref xxoiqfraeolsqsmsheue`). Smoke real do Valentim
+  pendente — re-enviar um pedido cujo vendedor tenha
+  `nome_fantasia` divergente do Tiny e confirmar `status: 'ok'`.
+- Lição: payload do Tiny deve enviar **só o estritamente necessário**
+  para identificar entidades por ID. Campos redundantes (nome,
+  descrição) viram fonte de drift quando o cadastro local e o ERP
+  divergem.
+
 🐛 INC-013 · 2026-05-07 · 30 clientes da carteira da Valéria Montoz
 estavam apontando para um UUID de vendedor inexistente
 (`c02341e2-7356-4ec1-86fe-119e16465101`) em
@@ -521,6 +549,10 @@ _Formato para próximos bugs:_
 
 | # | Feature / Commit | SHA | Data |
 |---|---|---|---|
+| — | docs(todo): registra INC-013 + lessons (V 1.31 carry-forward) | `71ee791` | 2026-05-13 |
+| — | feat(clientes): busca acento-insensivel + CNPJ digits-only + grupo/rede (V 1.31) | `1c5bd48` | 2026-05-13 |
+| — | fix(vendas): nao injetar 'OC: [Aguardando]' na NF quando OC esta vazio (V 1.31) | `0076386` | 2026-05-13 |
+| — | fix(tiny): vendedor identificado por id, sem exigir nome batendo com Tiny (V 1.31) | `3d46ef9` | 2026-05-13 |
 | — | feat(comissoes): saldo anterior + totalizadores + acentos + fechar periodo (V 1.22) | _pendente_ | 2026-05-05 |
 | 🟢 F-002 | Setup Vitest + deno test (merge PR #1) | `dd50c31` | 2026-04-21 |
 | — | fix: destaque do e-mail de comissões + flash de 10 clientes no dashboard | `ccaa811` | (pré-harness) |
