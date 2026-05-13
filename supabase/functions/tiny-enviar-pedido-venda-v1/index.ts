@@ -236,7 +236,9 @@ serve(async (req) => {
 
     // 1b) Carregar dados do vendedor para envio ao Tiny.
     // Regra: pedido.id_vendedor <- dados_vendedor.idtiny
-    //        pedido.nome_vendedor <- dados_vendedor.nome_fantasia
+    // Valentim 11/05/2026: nao enviamos mais `nome_vendedor`. O Tiny rejeitava
+    // ("Vendedor nao Configurado") quando o nome_fantasia local divergia do
+    // cadastro Tiny; o idtiny ja identifica o vendedor unicamente.
     const { data: vendedorData, error: vendedorError } = await supabase
       .from('dados_vendedor')
       .select('idtiny,nome_fantasia')
@@ -257,13 +259,9 @@ serve(async (req) => {
     }
 
     const tinyVendedorId = String((vendedorData as any).idtiny || '').trim()
-    const tinyVendedorNome = String((vendedorData as any).nome_fantasia || '').trim()
 
     if (!tinyVendedorId) {
       throw createBadRequestError('Vendedor sem idtiny para envio ao Tiny', { vendedor_uuid: vendedorUuid })
-    }
-    if (!tinyVendedorNome) {
-      throw createBadRequestError('Vendedor sem nome_fantasia para envio ao Tiny', { vendedor_uuid: vendedorUuid })
     }
 
     const empresaId = pedido.empresa_faturamento_id
@@ -629,7 +627,6 @@ serve(async (req) => {
         obs: String(pedido.observacao || '').trim() || undefined,
         obs_internas: String(pedido.observacao_interna || '').trim() || undefined,
         id_vendedor: tinyVendedorId,
-        nome_vendedor: tinyVendedorNome,
         valor_desconto: descontoExtra.toFixed(2),
         parcelas: parcelasTiny,
         itens: itens.map((it: any) => ({
@@ -685,7 +682,6 @@ serve(async (req) => {
             token_masked: maskToken(tinyToken),
             natureza_operacao: tinyNaturezaValor,
             id_vendedor: tinyVendedorId,
-            nome_vendedor: tinyVendedorNome,
           },
           simples_nacional: {
             feature_enabled: featureSimplesEnabled,
