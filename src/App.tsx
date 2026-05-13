@@ -149,7 +149,7 @@ function SidebarUserInfo({
   onOpenChangelog: () => void;
 }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.30";
+  const systemVersion = "V 1.31";
   const ultimaVersao = CHANGELOG[0];
   
   if (!usuario) return null;
