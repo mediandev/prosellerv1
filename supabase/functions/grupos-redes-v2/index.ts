@@ -206,8 +206,8 @@ serve(async (req) => {
       const body = await req.json()
       console.log('[GRUPOS-REDES-V2] Creating grupo/rede...', body)
 
-      if (user.tipo !== 'backoffice') {
-        throw new Error('Apenas usuários backoffice podem criar grupos/redes')
+      if (!['backoffice', 'vendedor'].includes(user.tipo)) {
+        throw new Error('Tipo de usuário inválido para criar grupos/redes')
       }
 
       if (!body.nome || body.nome.trim().length < 2) {

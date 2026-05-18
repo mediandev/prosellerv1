@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.32',
+    items: [
+      'Cadastro de cliente: inclusão rápida de Grupo / Rede pelo botão "+" ao lado do campo — antes de criar, o sistema mostra grupos parecidos para evitar duplicidade; você pode escolher um existente ou criar mesmo assim. Disponível também para vendedores.',
+      'Clientes: vendedores passam a visualizar na própria lista os clientes que cadastraram e ainda estão aguardando aprovação do backoffice (antes esses clientes "sumiam" até serem aprovados).',
+    ],
+  },
+  {
     version: 'V 1.31',
     items: [
       'Pedidos: envio ao Tiny não exige mais que o "Nome Fantasia" do vendedor bata com o cadastro do Tiny — passa a usar só o ID Tiny',

@@ -21,6 +21,7 @@ import { Badge } from './ui/badge';
 import { Checkbox } from './ui/checkbox';
 import { Separator } from './ui/separator';
 import { Combobox } from './ui/combobox';
+import { QuickCreateGrupoRedeDialog, type GrupoRedeMinimo } from './QuickCreateGrupoRedeDialog';
 import { Loader2, Plus, Pencil, Trash2, MapPin, CreditCard, Search, Hash, Edit, Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { municipiosPorUF, UFS } from '../data/municipios';
@@ -78,6 +79,7 @@ export function CustomerFormDadosCadastrais({
   const [contaBancariaEditando, setContaBancariaEditando] = useState<DadosBancariosCliente | null>(null);
   const [gruposRedes, setGruposRedes] = useState<Array<{ id: string; nome: string; descricao?: string }>>([]);
   const [loadingGrupos, setLoadingGrupos] = useState(false);
+  const [quickGrupoDialogOpen, setQuickGrupoDialogOpen] = useState(false);
   const [mockBanks, setMockBanks] = useState<any[]>([]);
   const [segmentosMercado, setSegmentosMercado] = useState<string[]>([]);
   const [situacoes, setSituacoes] = useState<Array<{ id: string; nome: string; descricao?: string }>>([]);
@@ -985,7 +987,8 @@ export function CustomerFormDadosCadastrais({
                   type="button"
                   variant="outline"
                   size="icon"
-                  onClick={() => toast.info('Funcionalidade de inclusão rápida em desenvolvimento')}
+                  onClick={() => setQuickGrupoDialogOpen(true)}
+                  title="Incluir grupo / rede"
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
@@ -994,6 +997,17 @@ export function CustomerFormDadosCadastrais({
           </div>
         </div>
       </div>
+
+      <QuickCreateGrupoRedeDialog
+        open={quickGrupoDialogOpen}
+        onOpenChange={setQuickGrupoDialogOpen}
+        onGrupoSelecionado={(grupo: GrupoRedeMinimo) => {
+          setGruposRedes((prev) =>
+            prev.some((g) => g.id === grupo.id) ? prev : [...prev, grupo]
+          );
+          updateFormData({ grupoRede: grupo.id });
+        }}
+      />
 
       <Separator />
 
