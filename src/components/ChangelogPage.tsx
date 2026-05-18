@@ -12,6 +12,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     items: [
       'Cadastro de cliente: inclusão rápida de Grupo / Rede pelo botão "+" ao lado do campo — antes de criar, o sistema mostra grupos parecidos para evitar duplicidade; você pode escolher um existente ou criar mesmo assim. Disponível também para vendedores.',
       'Clientes: vendedores passam a visualizar na própria lista os clientes que cadastraram e ainda estão aguardando aprovação do backoffice (antes esses clientes "sumiam" até serem aprovados).',
+      'Relatório de Comissões em PDF: o aviso de "Saldo Anterior não calculado" agora aparece legível (antes saía com caracteres embaralhados em PDFs).',
     ],
   },
   {
