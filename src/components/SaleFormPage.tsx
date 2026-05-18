@@ -2063,11 +2063,10 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
   const observacoesNF = useMemo(() => {
     const partes: string[] = [];
 
-    // OC do cliente
+    // OC do cliente — só inclui se preenchido. Valentim 11/05/2026: "OC: [Aguardando]"
+    // não pode aparecer nas Observações da NF quando o campo OC Cliente está vazio.
     if (formData.ordemCompraCliente && formData.ordemCompraCliente.trim()) {
       partes.push(`OC: ${formData.ordemCompraCliente}`);
-    } else {
-      partes.push('OC: [Aguardando]');
     }
 
     // Buscar requisitos logísticos do cliente

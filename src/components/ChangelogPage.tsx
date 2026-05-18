@@ -15,6 +15,14 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
+    version: 'V 1.31',
+    items: [
+      'Pedidos: envio ao Tiny não exige mais que o "Nome Fantasia" do vendedor bata com o cadastro do Tiny — passa a usar só o ID Tiny',
+      'Pedidos: "OC: [Aguardando]" não é mais inserido nas Observações da NF quando o campo OC Cliente está em branco',
+      'Clientes: busca ignora acentos, aceita CNPJ com ou sem máscara e procura também por Grupo/Rede',
+    ],
+  },
+  {
     version: 'V 1.30',
     items: [
       'Botão "Imprimir" na visualização de pedidos, com layout próprio em A4 (cabeçalho da empresa, dados do cliente, itens, totais, pagamento e observações)',

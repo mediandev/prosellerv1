@@ -24,6 +24,9 @@
 - [Tarefa 2 — Secrets Supabase (pós-migration)](#tarefa-2--secrets-supabase-pós-migration)
 - [Tarefa 3 — Ativar feature flag em staging](#tarefa-3--ativar-feature-flag-em-staging)
 - [Tarefa 4 — Ativar feature flag em produção](#tarefa-4--ativar-feature-flag-em-produção)
+- [Tarefa 5 — INC-013 · Vincular 32 clientes da Valéria Montoz](#tarefa-5--inc-013--vincular-32-clientes-da-valéria-montoz)
+- [Tarefa 6 — Migration 115 · busca clientes (unaccent + CNPJ digits + grupo)](#tarefa-6--migration-115--busca-clientes-unaccent--cnpj-digits--grupo)
+- [Tarefa 7 — Cadastro do vendedor "Empresa - Venda Direta ES"](#tarefa-7--cadastro-do-vendedor-empresa---venda-direta-es)
 
 ---
 
@@ -384,6 +387,347 @@ Rollback da flag é **imediato** e reversível. A migration 108 não precisa ser
 - [ ] Primeiros 30 minutos sem 5xx ou taxa anormal de falha ReceitaWS.
 - [ ] Validação manual pelo humano: 1 cadastro PJ + 1 envio Tiny com NF correta.
 - [ ] `TODO.md §1` atualizado marcando F-001 como concluída com SHA/PR.
+
+---
+
+## Tarefa 5 — INC-013 · Vincular 32 clientes da Valéria Montoz
+
+**Feature associada:** F-004 — Importação de clientes via planilha (correção pontual pós-import)
+**MCP:** Supabase MCP (projeto `xxoiqfraeolsqsmsheue`)
+**Data do incidente:** 2026-05-07
+**Origem:** Valentim reportou via WhatsApp 14:07 — clientes da Valéria Montoz não ficaram vinculados a ela após import V 1.27 (planilha `2026.05.01_PROSELLER_CLIENTES_VEND MONTOZ.xlsx`).
+
+### Causa raiz
+
+O `findVendedor` do `ImportCustomersData.tsx` casa por email/nome exato/`includes` mútuo. A planilha do Sergio (V 1.27) tinha vendedor formatado como `SERGIO GLEZER (5984)` e casou. A planilha do Montoz tem `MONTOZ REPRESENTAÇÃO COMERCIAL LTDA` (razão social), que **não** casa com o nome da vendedora cadastrada no banco (presumivelmente `Valéria Montoz` ou similar). Os 32 clientes foram criados com `cliente.vendedoresatribuidos = NULL` (aviso não-bloqueante na lista de erros, conforme F-004 §"Não cobre"). Débito de matcher para o backlog.
+
+### Objetivo
+
+Setar `cliente.vendedoresatribuidos = ARRAY[<user_id_valeria>]::uuid[]` nos 32 clientes da planilha, identificados por `codigo` (chave Tiny). Sem reimport (que duplicaria os clientes — `handleConfirmImport` só faz INSERT, sem upsert).
+
+### Pré-condições (rodar EM ORDEM, parar se qualquer falhar)
+
+1. **Backup recente** confirmado nas últimas 24h.
+2. **Pré-check 1 — vendedora Valéria existe e está ativa:**
+   ```sql
+   SELECT user_id, nome, email, tipo, ativo
+   FROM public."user"
+   WHERE (
+     unaccent(lower(nome)) LIKE '%valeria%'
+     OR unaccent(lower(nome)) LIKE '%montoz%'
+     OR lower(email) LIKE '%montoz%'
+     OR lower(email) LIKE '%valeria%'
+   )
+     AND deleted_at IS NULL
+   ORDER BY ativo DESC, nome;
+   ```
+   Esperado: **1 linha** com `tipo='vendedor'` e `ativo=true`. **Anotar o `user_id` — ele é o `<USER_ID_VALERIA>` do UPDATE.** Se 0 linhas, parar e perguntar ao Valentim qual é a Valéria. Se >1 linhas, reportar e desambiguar com o humano antes de prosseguir.
+3. **Pré-check 2 — confirmar os 32 clientes existem e auditar estado atual:**
+   ```sql
+   SELECT cliente_id, codigo, nome, vendedoresatribuidos, criado_por, created_at
+   FROM public.cliente
+   WHERE codigo IN (
+     '5674','4874','2422','5359','696','10312','7059','6837','364',
+     '2759','1338','7133','10454','10874','10388','5052','6938','5800',
+     '10847','10446','5442','5376','6913','7003','7113','4486','6998',
+     '7002','6084','5254','10034','10214'
+   )
+     AND deleted_at IS NULL
+   ORDER BY codigo;
+   ```
+   Esperado: **32 linhas**. Se < 32, identificar quais códigos faltam — pode haver cliente que não foi importado (planilha rejeitada por validação) ou foi soft-deleted depois.
+
+   **Auditoria crítica:** se algum cliente tiver `vendedoresatribuidos` **diferente de NULL/{}** já preenchido, pode ter sido reatribuído manualmente para outro vendedor depois do import — nesses casos, REMOVER o `codigo` da lista do UPDATE e reportar ao Valentim antes de prosseguir. Não sobrescrever vendedor legítimo.
+4. **Backup pré-UPDATE** (CSV ou snapshot da query):
+   ```sql
+   -- Salvar resultado em docs/plans/backup_inc013_montoz_2026-05-07.csv
+   SELECT cliente_id, codigo, nome, vendedoresatribuidos, atualizado_por, updated_at
+   FROM public.cliente
+   WHERE codigo IN (... mesma lista dos 32 ...)
+     AND deleted_at IS NULL;
+   ```
+5. **`<USER_ID_VALENTIM>`** — o ator da operação para `atualizado_por`. Pegar do banco:
+   ```sql
+   SELECT user_id FROM public."user"
+   WHERE email ILIKE '%valentim%' AND deleted_at IS NULL AND ativo = TRUE;
+   ```
+   Se não houver Valentim cadastrado como user (ele é cliente final, não user do sistema), usar o user_id de um backoffice ativo (perguntar ao Eduardo qual usar) ou deixar como `NULL` (a coluna aceita).
+
+### SQL final (operação)
+
+```sql
+BEGIN;
+
+-- Dry-run: confirmar quantas linhas serão afetadas
+SELECT COUNT(*) AS linhas_afetadas
+FROM public.cliente
+WHERE codigo IN (
+  '5674','4874','2422','5359','696','10312','7059','6837','364',
+  '2759','1338','7133','10454','10874','10388','5052','6938','5800',
+  '10847','10446','5442','5376','6913','7003','7113','4486','6998',
+  '7002','6084','5254','10034','10214'
+)
+  AND deleted_at IS NULL;
+-- Esperado: 32 (ou menor, se passo 3 da pré-condição removeu algum código).
+
+-- UPDATE efetivo
+UPDATE public.cliente
+SET vendedoresatribuidos = ARRAY['<USER_ID_VALERIA>']::uuid[],
+    atualizado_por = '<USER_ID_BACKOFFICE>'::uuid,  -- ou NULL se não houver
+    updated_at = NOW()
+WHERE codigo IN (
+  '5674','4874','2422','5359','696','10312','7059','6837','364',
+  '2759','1338','7133','10454','10874','10388','5052','6938','5800',
+  '10847','10446','5442','5376','6913','7003','7113','4486','6998',
+  '7002','6084','5254','10034','10214'
+)
+  AND deleted_at IS NULL;
+-- Esperado: UPDATE 32 (ou número confirmado no dry-run).
+
+-- Verificação inline antes do COMMIT
+SELECT codigo, nome, vendedoresatribuidos, updated_at
+FROM public.cliente
+WHERE codigo IN ('5674','4874','2422','5359','696')  -- amostra de 5
+  AND deleted_at IS NULL
+ORDER BY codigo;
+-- Esperado: vendedoresatribuidos = {<USER_ID_VALERIA>} em todas, updated_at ≈ now.
+
+COMMIT;
+```
+
+**Se a verificação inline mostrar algo errado, executar `ROLLBACK;` e investigar.**
+
+### Smoke test pós-COMMIT
+
+```sql
+-- 1. Confirmar que os 32 clientes têm Valéria como vendedora
+SELECT COUNT(*) AS clientes_com_valeria
+FROM public.cliente
+WHERE codigo IN (... mesma lista ...)
+  AND vendedoresatribuidos @> ARRAY['<USER_ID_VALERIA>']::uuid[]
+  AND deleted_at IS NULL;
+-- Esperado: 32 (ou número confirmado).
+
+-- 2. Confirmar que nenhum outro cliente teve vendedor alterado nos últimos 5 minutos
+-- (segurança contra UPDATE acidentalmente amplo)
+SELECT COUNT(*) AS clientes_recentes
+FROM public.cliente
+WHERE updated_at > NOW() - INTERVAL '5 minutes'
+  AND deleted_at IS NULL;
+-- Esperado: 32 (apenas os do UPDATE).
+```
+
+**Validação humana:** Valentim abre 2-3 dos clientes na UI (codigo 5674 SIDNEI SEIKI, 4874 BELFACE, 2422 BELFACE SAO CAETANO) e confirma que Valéria aparece como vendedora.
+
+### Rollback (OBRIGATÓRIO — Cenário C produção)
+
+**Quando usar:**
+- Smoke test mostrou clientes sem Valéria.
+- Valentim reportou que algum dos 32 clientes não deveria ter Valéria (era de outro vendedor).
+- UPDATE pegou clientes além dos 32 esperados.
+
+**Como reverter:** usar o CSV de backup do passo 4 das pré-condições.
+
+```sql
+-- Para cada linha do CSV de backup, gerar um UPDATE reverso:
+UPDATE public.cliente
+SET vendedoresatribuidos = <valor_original_do_csv>,
+    atualizado_por = <atualizado_por_original>,
+    updated_at = <updated_at_original>
+WHERE cliente_id = <cliente_id_do_csv>;
+```
+
+Para o caso onde `vendedoresatribuidos` original era `NULL`, usar `vendedoresatribuidos = NULL` no UPDATE de rollback (não `ARRAY[]::uuid[]`).
+
+**Janela de rollback:** 7 dias. Após isso, o cliente pode ter recebido novos pedidos atrelados ao vínculo da Valéria — reverter quebra histórico.
+
+### Critério de aceite da Tarefa 5
+
+- [ ] Pré-check 1 retornou exatamente 1 vendedora Valéria ativa.
+- [ ] Pré-check 2 retornou 32 clientes (ou lista ajustada após auditoria).
+- [ ] Backup CSV salvo em `docs/plans/backup_inc013_montoz_2026-05-07.csv`.
+- [ ] UPDATE rodou em transação, COMMIT após verificação inline.
+- [ ] Smoke test: 32 clientes com Valéria; nenhum cliente fora da lista alterado.
+- [ ] Validação humana: Valentim confirmou na UI em 2-3 clientes.
+- [ ] `TODO.md §5` recebeu entrada **INC-013** documentando causa raiz, resolução e link para esta seção.
+- [ ] Bullet adicionado ao tooltip do sidebar (V 1.30 ou bullet adicional na V 1.29 se ainda não foi promovida): "Vínculo dos 32 clientes da Valéria Montoz restaurado (INC-013)."
+- [ ] Débito técnico em `TODO.md §4`: "Matcher de vendedor no `ImportCustomersData` falha quando planilha usa razão social no lugar do nome do vendedor. Adicionar fallback (aceitar `email` ou `user_id` literal na coluna 'Vendedor (Email)') na próxima feature que tocar o componente."
+
+---
+
+## Tarefa 6 — Migration 115 · busca clientes (unaccent + CNPJ digits + grupo)
+
+**Feature associada:** ajuste pontual reportado por Valentim em 13/05/2026.
+**MCP:** Supabase MCP (projeto `xxoiqfraeolsqsmsheue`)
+**Arquivo:** `supabase/migrations/115_unaccent_cnpj_grupo_search_list_clientes_v2.sql`
+
+### Motivação
+
+Reportes do Valentim em 13/05 09:01–09:13:
+- Buscar `DROGARIA SAO` não retorna `DROGARIA SÃO …` (acento).
+- Buscar `48617921000124` (só dígitos) não encontra cliente cadastrado como `48.617.921/0001-24`.
+- Buscar `DPSP` (Grupo/Rede) não retorna os clientes do grupo.
+
+A RPC atual (`026_fix_list_clientes_v2_signature.sql`) faz `LOWER(c.nome) LIKE …` — sem unaccent, sem normalização digits-only, sem `grupo_rede`.
+
+### Pré-condições
+
+1. **Backup do estado atual da função** (executar via MCP `execute_sql` e salvar saída):
+   ```sql
+   SELECT pg_get_functiondef(oid)
+   FROM pg_proc
+   WHERE proname = 'list_clientes_v2'
+     AND pg_function_is_visible(oid);
+   ```
+   Salvar resultado em `docs/plans/backup_list_clientes_v2_pre_115.sql`.
+2. **Confirmar extensão `unaccent` disponível ou instalável:**
+   ```sql
+   SELECT 1 FROM pg_available_extensions WHERE name = 'unaccent';
+   ```
+   Se não estiver disponível, parar e reportar ao Eduardo. A migration faz `CREATE EXTENSION IF NOT EXISTS unaccent;`.
+3. **Verificar se já há outra versão de `unaccent` instalada em outro schema** (pode causar conflito):
+   ```sql
+   SELECT extname, extnamespace::regnamespace FROM pg_extension WHERE extname = 'unaccent';
+   ```
+   Se já existir em `public` ou `extensions`, nada a fazer — `IF NOT EXISTS` é idempotente.
+
+### Comando MCP
+
+```
+mcp__supabase__apply_migration({
+  name: '115_unaccent_cnpj_grupo_search_list_clientes_v2',
+  query: <conteúdo de supabase/migrations/115_unaccent_cnpj_grupo_search_list_clientes_v2.sql>
+})
+```
+
+### Smoke test pós-aplicação
+
+```sql
+-- 1) Acento-insensível
+SELECT codigo, nome FROM public.cliente
+WHERE deleted_at IS NULL
+  AND unaccent(LOWER(nome)) LIKE '%' || unaccent(LOWER('drogaria sao')) || '%'
+LIMIT 5;
+-- Esperado: retornar clientes com "DROGARIA SÃO ..." no nome.
+
+-- 2) CNPJ digits-only
+SELECT * FROM list_clientes_v2(
+  p_limit := 5, p_page := 1,
+  p_requesting_user_id := '<USER_ID_BACKOFFICE>'::uuid,
+  p_search := '48617921000124'
+);
+-- Esperado: clientes cujo cpf_cnpj puro contém '48617921000124'.
+
+-- 3) Grupo/Rede
+SELECT * FROM list_clientes_v2(
+  p_limit := 5, p_page := 1,
+  p_requesting_user_id := '<USER_ID_BACKOFFICE>'::uuid,
+  p_search := 'DPSP'
+);
+-- Esperado: clientes com grupo_rede ILIKE '%DPSP%'.
+```
+
+### Rollback (OBRIGATÓRIO)
+
+Reaplicar o conteúdo de `supabase/migrations/026_fix_list_clientes_v2_signature.sql` via:
+```
+mcp__supabase__apply_migration({
+  name: 'rollback_115_list_clientes_v2',
+  query: <conteúdo de 026_fix_list_clientes_v2_signature.sql>
+})
+```
+A extensão `unaccent` instalada **não precisa** ser removida no rollback (custo zero deixar instalada).
+
+### Critério de aceite da Tarefa 6
+
+- [ ] Backup `pg_get_functiondef` salvo.
+- [ ] `apply_migration` retornou OK.
+- [ ] Smoke 1 (acento): pelo menos 1 linha retornada.
+- [ ] Smoke 2 (CNPJ digits): cliente correto retornado.
+- [ ] Smoke 3 (grupo): pelo menos 1 linha retornada.
+- [ ] Vendedor logado (não backoffice) testado: continua vendo apenas os clientes dele (RLS lógica preservada).
+
+---
+
+## Tarefa 7 — Preencher idtiny dos vendedores CANTICO/ES (Empresa-VD-ES + Eric)
+
+**Origem:** Valentim 12/05/2026 17:34 + 20:46 + 21:44. Karen e Eric atendem clientes pela CANTICO/ES.
+
+### Descobertas da investigação (13/05/2026, sessão Claude Code)
+
+Os 2 vendedores que as planilhas referenciam **já existem** no banco — `findVendedor` em `ImportCustomersData.tsx` casa por **nome exato** (não precisa de email). O que está faltando é o `idtiny`:
+
+| `user_id` | nome | email | idtiny atual |
+|---|---|---|---|
+| `48163ed8-bde1-416e-ab7a-61ffaa65ab63` | `Empresa - Venda Direta ES` | `vendas1@median.com.br` | **NULL** |
+| `b2611a0a-49a1-4c22-8474-15985a8570b7` | `Eric Vidal Ferreira` | `ge.representacoesltda@gmail.com` | **NULL** |
+
+Sem `idtiny`, qualquer pedido vinculado a esses vendedores vai bater na validação `Vendedor sem idtiny para envio ao Tiny` (`tiny-enviar-pedido-venda-v1/index.ts:262`). **Cadastrar novo vendedor não é necessário** — basta o Valentim informar os 2 `idtiny` (um por linha) que vamos preencher pela UI (Configurações → Vendedores) ou via SQL pelo Cursor MCP.
+
+### Pré-condição (BLOQUEANTE)
+
+**Confirmar com Valentim por WhatsApp**:
+1. `idtiny` no Tiny CANTICO para o vendedor genérico `Empresa - Venda Direta ES`.
+2. `idtiny` no Tiny CANTICO para `Eric Vidal Ferreira`.
+3. Confirmar `nome_fantasia` correspondente em cada registro Tiny (texto livre, só auditoria — não vai mais para o payload depois do fix da Tarefa A).
+
+### Operação preferida (UI)
+
+1. Configurações → Vendedores → buscar `Empresa - Venda Direta ES` → preencher `idtiny`.
+2. Mesmo para `Eric Vidal Ferreira`.
+
+### Operação alternativa (Cursor MCP, se a UI bloquear)
+
+```sql
+BEGIN;
+UPDATE public.dados_vendedor
+SET idtiny = '<IDTINY_VD_ES>',
+    nome_fantasia = COALESCE(NULLIF('<NOME_FANTASIA_VD_ES>',''), nome_fantasia),
+    updated_at = NOW()
+WHERE user_id = '48163ed8-bde1-416e-ab7a-61ffaa65ab63'::uuid;
+
+UPDATE public.dados_vendedor
+SET idtiny = '<IDTINY_ERIC>',
+    nome_fantasia = COALESCE(NULLIF('<NOME_FANTASIA_ERIC>',''), nome_fantasia),
+    updated_at = NOW()
+WHERE user_id = 'b2611a0a-49a1-4c22-8474-15985a8570b7'::uuid;
+
+-- Verificação inline
+SELECT user_id, idtiny, nome_fantasia FROM public.dados_vendedor
+WHERE user_id IN ('48163ed8-bde1-416e-ab7a-61ffaa65ab63'::uuid,
+                  'b2611a0a-49a1-4c22-8474-15985a8570b7'::uuid);
+
+COMMIT;
+```
+
+### Observação sobre o import (13/05/2026)
+
+As planilhas Karen e Eric trazem a coluna **`Vendedor`** com o **nome** do vendedor (texto, não email). O `COLUMN_MAP` em `ImportCustomersData.tsx:82` já mapeia essa coluna para a chave canônica, e o `findVendedor` (`ImportCustomersData.tsx:364-377`) tem 3 níveis de match: email exato → nome exato → `includes` mútuo. Karen casa por **nome exato** com `Empresa - Venda Direta ES` (já cadastrado no banco) e Eric casa por nome exato com `Eric Vidal Ferreira`. **Nenhum ajuste de código é necessário para o import** — desde que os vendedores estejam ativos e o nome cadastrado no banco bata literalmente com a planilha.
+
+### Audit de conflitos das planilhas (rodado em 13/05/2026)
+
+Detectado via SQL (`cliente.codigo` ou `digits(cliente.cpf_cnpj)`):
+
+| Planilha | Total linhas | Conflito por código | Conflito só por CNPJ | Novos (sem conflito) |
+|---|---:|---:|---:|---:|
+| Karen | 49 | 3 | 42 | **4** |
+| Eric  | 59 | 2 | 34 | **23** |
+
+**Implicação operacional para o Valentim:** se ele rodar o import via Configurações → Importação de Dados sem nenhuma mudança, **81/108 linhas vão falhar silenciosamente na unique constraint** (déjà vu do INC-013 — registrado em `TODO.md §4`). O componente `ImportCustomersData.tsx` precisa do toggle "Atualizar existentes" antes de qualquer rodada significativa. Enquanto isso não estiver pronto, sugestão de operação:
+
+- Importar apenas as 4 (Karen) + 23 (Eric) linhas novas — copiar essas linhas para uma planilha derivada.
+- Para os clientes que já existem, atualizar manualmente vendedor + `lista_preco` + `empresa_faturamento` pelas telas individuais (ou aguardar a feature de upsert).
+
+### Rollback
+
+`UPDATE public.dados_vendedor SET idtiny = NULL, nome_fantasia = NULL WHERE user_id = ...;` — reverte para o estado pré-fix. Pedidos vinculados ao vendedor voltam a recusar envio com `Vendedor sem idtiny`, mas nenhum dado de cliente é perdido.
+
+### Critério de aceite da Tarefa 7
+
+- [ ] Valentim confirmou `idtiny` dos 2 vendedores.
+- [ ] `dados_vendedor.idtiny` preenchido em ambos.
+- [ ] Smoke: pedido teste com cada vendedor é aceito pelo Tiny.
+- [ ] Valentim ciente da limitação do import (não rodar antes do toggle de upsert).
 
 ---
 
