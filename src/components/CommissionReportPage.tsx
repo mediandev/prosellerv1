@@ -309,7 +309,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(133, 100, 4);
-      doc.text('⚠ Saldo Anterior não calculado', 18, yPos + 6);
+      doc.text('[!] Saldo Anterior nao calculado', 18, yPos + 6);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       const linha1 =
@@ -319,7 +319,7 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
         formatCurrency(periodoAnteriorPendente.saldoFinal) +
         '.';
       const linha2 =
-        'Para que o saldo seja transportado, feche o ciclo em Comissões → menu (⋮) do período anterior → "Fechar Período".';
+        'Para que o saldo seja transportado, feche o ciclo em Comissoes > menu (...) do periodo anterior > "Fechar Periodo".';
       doc.text(linha1, 18, yPos + 13);
       doc.text(linha2, 18, yPos + 19);
       doc.setTextColor(0, 0, 0);

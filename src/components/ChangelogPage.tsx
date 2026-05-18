@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.33',
+    items: [
+      'Relatório de Comissões em PDF: o aviso "Saldo Anterior não calculado" volta a aparecer legível (antes saía com caracteres embaralhados quando o período anterior estava em aberto).',
+    ],
+  },
+  {
     version: 'V 1.32',
     items: [
       'Cadastro de cliente: inclusão rápida de Grupo / Rede pelo botão "+" ao lado do campo — antes de criar, o sistema mostra grupos parecidos para evitar duplicidade; você pode escolher um existente ou criar mesmo assim. Disponível também para vendedores.',
