@@ -3,11 +3,33 @@
 > Estado vivo do projeto. Único arquivo de controle, junto com `git log`.
 > Atualizar ao final de cada sessão.
 
-**Última atualização:** 2026-05-19 (sessão — bootstrap Harness v3.2)
+**Última atualização:** 2026-05-20 (sessão — F-LOG-CRM planejamento + R-LOG-1 em execução)
 
 ---
 
 ## 1. Em andamento
+
+**F-LOG-CRM · Migração módulo Logis (LogCRM Bubble → ProSeller V1) — em planejamento + R-LOG-1 em execução**
+
+Branch: `feat/log-crm-R-LOG-1` · Classe: **B** (R-LOG-1) · CI alvo: **N1 + matriz**.
+
+Plano completo em 8 ondas: ver `docs/wiki/context/F-LOG-CRM.md` e `docs/plans/feature-contracts/F-LOG-{1..8}.md`.
+
+R-LOG-1 entrega (esta sessão):
+- 8 Feature Contracts (F-LOG-1 detalhado; F-LOG-2..8 esqueletos).
+- Migration 119 (`frete_logistica_base.sql`) — 7 tabelas + 4 ENUMs + RLS + indexes. **Não aplicada** — brief em `docs/plans/cursor-brief.md` Tarefa 8.
+- 4 schemas Zod novos (`transportador-logistica`, `regiao-origem`, `frete-logistica`, `fatura-transportadora`).
+- 4 Edge Functions atrás de `FEATURE_LOG_CRM` (CRUD direto via supabase-js — divergência consciente do padrão RPC).
+- UI Logística (5 componentes em `src/components/logistica/` + `logisticaService.ts`) + Page `'logistica'` em `App.tsx` `backofficeOnly` + flag.
+- Bump V 1.34.
+- Wiki: `log.md` INGEST, `modules/logistica.md` novo, `architecture.md` atualizado.
+
+Bloqueador para mover além de R-LOG-1:
+- [ ] Migration 119 aplicada em staging + smoke verde (via brief Tarefa 8 do `cursor-brief.md`).
+- [ ] ADR-006 (creds SSW), ADR-007 (parser PDF/EDI), ADR-008 (polling SSW), ADR-009 (fonte `valor_cotacao`) — discutir com Valentim antes de abrir R-LOG-4/7/8. **R-LOG-2 + R-LOG-3 não bloqueados por esses ADRs.**
+- [ ] Smoke E2E manual do fluxo "criar transportador → região → origem → frete manual" (documentado no Context Pack).
+
+---
 
 **F-HARNESS-V3.2 · Migração para Harness v3.2 + Project Wiki — Concluída em 2026-05-19**
 
@@ -54,6 +76,27 @@ Retomada rápida:
 ---
 
 ## 2. Backlog — Features priorizadas
+
+### 🚚 F-LOG-CRM · Migração módulo Logis (LogCRM Bubble) — 8 ondas
+
+R-LOG-1 (esta sessão, em execução). Demais ondas embriões em `docs/plans/feature-contracts/F-LOG-{2..8}.md`.
+
+| Onda | Nome | Classe | CI | Depende |
+|---|---|---|---|---|
+| R-LOG-2 | Torre Controle + Busca + Detalhe do frete | **B** | N1+matriz | R-LOG-1 |
+| R-LOG-3 | Hook em `tiny-enviar-pedido-venda-v1` cria frete automático | **C** | N2 | R-LOG-1 |
+| R-LOG-4 | Integração SSW Tracking (on-demand + catch-up) | **D** | N3 | R-LOG-1, R-LOG-2, ADR-006, ADR-008 |
+| R-LOG-5 | Indicadores financeiros do Dashboard | **B** | N1+matriz | R-LOG-2 |
+| R-LOG-6 | Faturas transportadora — CRUD manual | **B** | N1+matriz | R-LOG-1 |
+| R-LOG-7 | Parser PDF/EDI de faturas | **D** | N3 | R-LOG-6, ADR-007 |
+| R-LOG-8 | Auditoria Cotado × Cobrado | **C** | N2 | R-LOG-1, R-LOG-6 |
+
+Decisões pendentes (registradas em `docs/plans/DECISIONS_LOG.md`):
+- ADR-006 (creds SSW), ADR-007 (parser PDF/EDI), ADR-008 (polling SSW), ADR-009 (fonte `valor_cotacao`).
+
+Origem: discovery via Playwright em `https://logcrm.bubbleapps.io` (creds Valentim) — screenshots em `archive/screenshots/2026-05-20-logcrm/`.
+
+---
 
 ### 🔴 F-001 · Consulta Simples Nacional (Alta · EM EXECUÇÃO — branch feat/simples-nacional-lookup)
 
