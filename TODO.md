@@ -244,6 +244,42 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 
 ## 5. Bugs / incidentes
 
+✅ INC-015 · 2026-05-20 · Lista de preço criada/editada via Configurações
+não persistia produtos nem faixas de comissionamento.
+- Reprodução: Valentim 2026-05-19 09:42 BRT — "Não consigo atualizar
+  uma lista de preço manualmente aqui. As alterações não ficam salvas.
+  Tentei resolver criando uma nova... a lista foi criada. Ao abrir a
+  lista, não havia nenhum item vinculado." Print mostra `ES_ARAUJO
+  [ATUAL]` com 0 produtos vinculados em prod.
+- Causa raiz: `supabase/functions/listas-preco-v2/index.ts` POST
+  (linhas ~254-278) e PUT (linhas ~280-318) faziam INSERT/UPDATE
+  só na master `listas_preco`. Recebiam `body.produtos` e
+  `body.faixasDesconto` no payload e simplesmente ignoravam. As
+  tabelas filhas `produtos_listas_precos` e
+  `listas_preco_comissionamento` já existiam (DELETE da própria
+  função as limpava) e são lidas por `generate_vendedor_comissao`
+  (migration 082).
+- Resolução: PR #21 (`64929c2`, V 1.34) — POST insere filhos pós-INSERT
+  da master com rollback manual em caso de erro nos filhos; PUT
+  replica replace (DELETE filhas + INSERT do payload novo);
+  validação de `tipoComissao=conforme_desconto` exige
+  `faixasDesconto.length>0` e rejeita `max <= min`; descontoMax=null
+  ("acima de") vira `100` no banco. Sem migration. Sem mudança no
+  frontend.
+- Status: código mergeado em `main`, edge function deployada em
+  prod (`xxoiqfraeolsqsmsheue`), smoke E2E AC1+AC2 verde em
+  https://prosaller.netlify.app/ via Playwright (criar lista fixa
+  + lista conforme desconto, reabrir e ver tudo persistido,
+  deletar para limpeza). Sidebar atualizado para V 1.34 + entry
+  no CHANGELOG. Aguardando smoke real do Valentim para fechar
+  formalmente.
+- Lição: o padrão de Edge Function `-v2` que aceita payload com
+  arrays de filhos no body precisa persistir esses filhos
+  explicitamente — não confiar no nome do POST/PUT pra saber se
+  o handler já cobre o caso. Auditar outras `-v2` (`clientes-v2`,
+  `pedido-venda-v2` etc.) à medida que mexer nelas para não
+  repetir.
+
 🐛 INC-014 · 2026-05-13 · Envio de pedido ao Tiny falhava com
 "Vendedor não Configurado" quando o `nome_fantasia` cadastrado
 no ProSeller não batia exatamente com o nome do vendedor no Tiny.
