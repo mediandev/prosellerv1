@@ -1,3 +1,25 @@
+# CI — ProSeller V1 (Harness v3.2)
+#
+# Mapeamento dos níveis CI do Harness v3.2 §11 para os scripts deste repo:
+#
+#   N1 (A, B, Fast Fix)  =  typecheck + lint + unit + build
+#                            -> npm run typecheck (continue-on-error — débito herdado: imports versionados)
+#                            -> npm run lint (no-op hoje, ESLint não configurado)
+#                            -> npm test (Vitest, suíte ainda esparsa)
+#                            -> npm run build (Vite)
+#
+#   N2 (B relevante, C)  =  N1 + integration + contract + edge tests + build
+#                            -> npm run test:edge (deno test em tests/edge/)
+#                            -> contract tests: ainda manuais (R-4 pendente)
+#
+#   N3 (C crítica, D)    =  N2 + e2e + smoke + migration validation + preview deploy check
+#                            -> e2e/smoke ainda manuais; migration validation via Cursor MCP
+#
+# Quando a onda R-5 abrir (suíte de testes ampliada + ESLint configurado):
+#   - tornar typecheck obrigatório (remover continue-on-error)
+#   - habilitar `lint` (substituir o no-op por ESLint real)
+#   - adicionar jobs N2/N3 conforme escopo da feature.
+
 name: CI
 
 on:
@@ -12,7 +34,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build
+    name: Build (N1)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -31,33 +53,35 @@ jobs:
       - name: Build (Vite)
         run: npm run build
 
-  # Jobs abaixo entram conforme o débito técnico do TODO.md for resolvido.
-  # Até lá, ficam comentados para não gerar ruído de CI vermelho permanente.
-  #
-  # typecheck:
-  #   name: TypeScript
-  #   runs-on: ubuntu-latest
-  #   timeout-minutes: 10
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions/setup-node@v4
-  #       with: { node-version: '20', cache: 'npm' }
-  #     - run: npm ci
-  #     - run: npm run typecheck
-  #
+  typecheck:
+    name: TypeScript (N1 — continue-on-error)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # TODO: remover continue-on-error quando débito de imports versionados (TODO §4)
+    # for resolvido. Hoje typecheck pode estar vermelho por código herdado,
+    # não por feature nova — manter visibilidade sem quebrar a build.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm ci
+      - run: npm run typecheck
+
   # lint:
-  #   name: ESLint
+  #   name: ESLint (N1)
   #   runs-on: ubuntu-latest
   #   timeout-minutes: 10
+  #   # Habilitar quando ESLint estiver configurado (TODO §4 — onda dedicada de ~30 min).
   #   steps:
   #     - uses: actions/checkout@v4
   #     - uses: actions/setup-node@v4
   #       with: { node-version: '20', cache: 'npm' }
   #     - run: npm ci
   #     - run: npm run lint
-  #
+
   test:
-    name: Tests (Vitest)
+    name: Tests (N1 — Vitest)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -68,7 +92,7 @@ jobs:
       - run: npm test
 
   edge-tests:
-    name: Edge Function tests (Deno)
+    name: Edge Function tests (N2 — Deno)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
