@@ -1,10 +1,10 @@
 ﻿import { useState, useEffect } from "react";
-import { 
-  LayoutDashboard, 
-  Users, 
-  ShoppingCart, 
-  Target, 
-  BarChart3, 
+import {
+  LayoutDashboard,
+  Users,
+  ShoppingCart,
+  Target,
+  BarChart3,
   Settings,
   Package,
   Menu,
@@ -12,7 +12,8 @@ import {
   Wallet,
   DollarSign,
   LogOut,
-  Sparkles
+  Sparkles,
+  Truck
 } from "lucide-react";
 import { format } from "date-fns@4.1.0";
 import { ptBR } from "date-fns@4.1.0/locale";
@@ -54,6 +55,7 @@ import { RelatorioROICliente } from "./components/RelatorioROICliente";
 import { AnaliseCurvaABCPage } from "./components/AnaliseCurvaABCPage";
 import { SolicitadoFaturadoReportPage } from "./components/SolicitadoFaturadoReportPage";
 import { TinyERPPedidosPage } from "./components/TinyERPPedidosPage";
+import LogisticaPage from "./components/logistica/LogisticaPage";
 import { TinyERPModeIndicator } from "./components/TinyERPModeIndicator";
 import { ChangelogPage, CHANGELOG } from "./components/ChangelogPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -73,14 +75,16 @@ import { toast } from "sonner@2.0.3";
 import { api } from "./services/api";
 import { tinyERPSyncService } from "./services/tinyERPSync";
 
-type Page = "dashboard" | "vendas" | "equipe" | "clientes" | "comissoes" | "contacorrente" | "produtos" | "metas" | "relatorios" | "configuracoes" | "perfil" | "clientes-pendentes" | "tiny-erp" | "changelog";
+type Page = "dashboard" | "vendas" | "equipe" | "clientes" | "comissoes" | "contacorrente" | "produtos" | "metas" | "relatorios" | "configuracoes" | "perfil" | "clientes-pendentes" | "tiny-erp" | "changelog" | "logistica";
+
+const FEATURE_LOG_CRM_ENABLED = import.meta.env.VITE_FEATURE_LOG_CRM === 'true';
 type CustomerView = 'list' | 'create' | 'edit' | 'view';
 type PriceListView = 'settings' | 'create' | 'edit' | 'view';
 type SaleView = 'list' | 'create' | 'edit' | 'view';
 type ProductView = 'list' | 'create' | 'edit' | 'view';
 type ReportView = 'index' | 'vendas' | 'clientes-abc' | 'produtos-abc' | 'clientes-risco' | 'mix-cliente' | 'roi-clientes' | 'analise-abc-dez2025';
 
-const menuItems: Array<{ id: Page; icon: any; label: string; backofficeOnly?: boolean }> = [
+const menuItems: Array<{ id: Page; icon: any; label: string; backofficeOnly?: boolean; featureFlag?: boolean }> = [
   { id: "dashboard", icon: LayoutDashboard, label: "Dashboards" },
   { id: "vendas", icon: ShoppingCart, label: "Pedidos" },
   { id: "clientes", icon: UserCircle, label: "Clientes" },
@@ -90,6 +94,9 @@ const menuItems: Array<{ id: Page; icon: any; label: string; backofficeOnly?: bo
   { id: "comissoes", icon: Wallet, label: "Comissões" },
   { id: "contacorrente", icon: DollarSign, label: "Conta Corrente" },
   { id: "relatorios", icon: BarChart3, label: "Relatórios" },
+  ...(FEATURE_LOG_CRM_ENABLED
+    ? [{ id: "logistica" as Page, icon: Truck, label: "Logística", backofficeOnly: true, featureFlag: true }]
+    : []),
   { id: "configuracoes", icon: Settings, label: "Configurações", backofficeOnly: true },
 ];
 
@@ -149,7 +156,7 @@ function SidebarUserInfo({
   onOpenChangelog: () => void;
 }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.35";
+  const systemVersion = "V 1.36";
   const ultimaVersao = CHANGELOG[0];
   
   if (!usuario) return null;
@@ -270,6 +277,10 @@ const pageConfig: Record<Page, { title: string; description: string }> = {
   "tiny-erp": {
     title: "Pedidos no Tiny ERP",
     description: "Visualize e gerencie os pedidos enviados ao Tiny ERP."
+  },
+  logistica: {
+    title: "Logística",
+    description: "Cadastros de transportadores, regiões, origens e fretes (módulo em construção — F-LOG-CRM)."
   },
   configuracoes: {
     title: "Configurações",
@@ -509,6 +520,10 @@ function AppContent() {
 
     if (page === "clientes-pendentes") {
       return usuario.tipo === "backoffice";
+    }
+
+    if (page === "logistica") {
+      return FEATURE_LOG_CRM_ENABLED && usuario.tipo === "backoffice";
     }
 
     const menuItem = menuItems.find((item) => item.id === page);
@@ -1151,6 +1166,8 @@ function AppContent() {
         }
       case "tiny-erp":
         return <TinyERPPedidosPage />;
+      case "logistica":
+        return <LogisticaPage />;
       default:
         return (
           <div className="flex items-center justify-center h-full">
