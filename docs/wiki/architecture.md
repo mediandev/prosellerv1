@@ -54,7 +54,7 @@
 ## Banco
 
 - **Postgres no Supabase**, projeto ref `xxoiqfraeolsqsmsheue`.
-- **78 migrations** em `supabase/migrations/` numeradas. **Gaps históricos** (031–040, 046–066, 079–080, 092–094, 096–097, etc.) — não preencher; seguir próximo número livre. Última: `118_list_clientes_v2_vendedor_ve_pendentes.sql`.
+- **79 migrations** em `supabase/migrations/` numeradas. **Gaps históricos** (031–040, 046–066, 079–080, 092–094, 096–097, etc.) — não preencher; seguir próximo número livre. Última: `119_frete_logistica_base.sql` (F-LOG-CRM R-LOG-1, pendente de aplicação em staging/prod).
 - **RLS ativo na maioria das tabelas.** Tabelas principais: `cliente`, `pedido_venda`, `pedido_venda_produtos`, `vendedor`/`dados_vendedor`, `comissao_*`, `tiny_empresa_natureza_operacao`, `empresa`, `user` (`public."user"`, soft-delete via `ativo` + `deleted_at`).
 - **RPCs SECURITY DEFINER** para escrita (`create_cliente_v2`, `update_cliente_v2`, `delete_cliente_v2`, `create_user_v2`, `delete_user_v2`, `get_cliente_completo_v2`, etc.) — chamadas pelas Edge Functions.
 
@@ -62,6 +62,7 @@
 
 - **Tiny ERP** — todas as Edge Functions `tiny-*`. Payload HTTP montado no `tiny-enviar-pedido-venda-v1/index.ts`. Identificação de entidades por `id_tiny` (não por nome — INC-014).
 - **ReceitaWS** — `supabase/functions/_shared/receitaws-client.ts`. Consumido por `create-cliente-v2` e `tiny-enviar-pedido-venda-v1` quando `FEATURE_SIMPLES_NACIONAL_LOOKUP=true`. Sem token (API Pública) por default — plano pago entra como Bearer (ADR-002).
+- **SSW Tracking** (planejada — R-LOG-4) — `https://ssw.inf.br/api/trackingdanfe` para a versão pública, ou endpoint autenticado por transportadora. Estratégia (on-demand vs. cron) pendente em ADR-008. Credencial por transportadora (campo `transportador_logistica.ssw_dominio`) ou chave NFe pura, pendente em ADR-006. Não há código consumindo SSW ainda — estrutura em `frete_logistica_ocorrencia` (migration 119) recebe os payloads quando R-LOG-4 abrir.
 
 ## Contratos
 
@@ -83,6 +84,7 @@ Ver `docs/specs/SPEC.md §6`. Itens vivos hoje:
 ## Feature flags ativas
 
 - **`FEATURE_SIMPLES_NACIONAL_LOOKUP`** — env var no Supabase (secret das Edge Functions). Liga/desliga F-001. Hoje: `true` em produção. Off por default. Convenção de nomenclatura: `FEATURE_<SCREAMING_SNAKE_CASE>` (ADR-001).
+- **`FEATURE_LOG_CRM`** — env var Edge Function (+ `VITE_FEATURE_LOG_CRM` no frontend). Liga/desliga o módulo Logística (F-LOG-CRM). Hoje: **ausente** em todos os ambientes (default OFF). 4 Edge Functions (`transportador-logistica-v1`, `regiao-destino-v1`, `origem-frete-v1`, `frete-logistica-v1`) retornam 503 quando OFF; UI renderiza placeholder. Helper de gating em `_shared/log-crm-feature-flag.ts`.
 
 ## Decisões arquiteturais (ADRs)
 
