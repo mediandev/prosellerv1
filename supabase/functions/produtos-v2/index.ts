@@ -164,6 +164,9 @@ serve(async (req) => {
         console.log('[PRODUTOS-V2] Listing produtos...')
 
         // Buscar produtos
+        // LIMIT 2000 + ORDER BY descricao: a query original (SELECT * sem LIMIT + ORDER BY created_at DESC)
+        // estava estourando o statement_timeout de 60s do Postgres em produção quando a base cresceu.
+        // Sintoma: dropdown de produtos no PriceListFormPage caía em fallback mock silencioso.
         const { data: produtos, error: produtosError } = await supabase
           .from('produto')
           .select(`
@@ -189,7 +192,8 @@ serve(async (req) => {
             sigla_unidade
           `)
           .is('deleted_at', null)
-          .order('created_at', { ascending: false })
+          .order('descricao', { ascending: true, nullsFirst: false })
+          .limit(2000)
 
         if (produtosError) {
           console.error('[PRODUTOS-V2] Query Error:', produtosError)
