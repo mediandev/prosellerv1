@@ -1,0 +1,205 @@
+C:\Users\edusp\Projetos_App_Desktop\median\docs\specs\teste-simples-nacional-valentim.html <!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Simples Nacional — Roteiro de Teste</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    max-width: 760px;
+    margin: 24px auto;
+    padding: 0 20px;
+    color: #222;
+    line-height: 1.55;
+    background: #fafafa;
+  }
+  h1 { color: #1a56db; margin-bottom: 4px; }
+  h2 { color: #1a56db; margin-top: 32px; border-bottom: 2px solid #dbeafe; padding-bottom: 4px; }
+  h3 { color: #333; margin-top: 20px; }
+  .meta { color: #666; font-size: 14px; margin-bottom: 24px; }
+  .card {
+    background: #fff;
+    border: 1px solid #e3e6ea;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 12px 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .success { border-left: 4px solid #16a34a; background: #f0fdf4; }
+  .alert { border-left: 4px solid #f59e0b; background: #fffbeb; }
+  .danger { border-left: 4px solid #dc2626; background: #fef2f2; }
+  .info { border-left: 4px solid #2563eb; background: #eff6ff; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+  th, td { border: 1px solid #e3e6ea; padding: 8px 12px; text-align: left; }
+  th { background: #f3f4f6; font-weight: 600; }
+  code { background: #f1f3f5; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+  .tag {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .tag-simples { background: #dcfce7; color: #166534; }
+  .tag-padrao { background: #dbeafe; color: #1e40af; }
+  ol li { margin: 8px 0; }
+  ul li { margin: 4px 0; }
+  .checklist li { list-style: none; padding-left: 24px; position: relative; }
+  .checklist li::before { content: "☐"; position: absolute; left: 0; font-size: 18px; color: #1a56db; }
+  .quote {
+    border-left: 3px solid #ccc;
+    padding: 8px 16px;
+    color: #555;
+    font-style: italic;
+    background: #f9fafb;
+    margin: 12px 0;
+  }
+  hr { border: none; border-top: 1px solid #e3e6ea; margin: 32px 0; }
+</style>
+</head>
+<body>
+
+<h1>Simples Nacional — Ativado ✅</h1>
+<div class="meta">
+  Empresa: <strong>DAP DISTRIBUIDORA</strong> &middot; Ativação: <strong>24/04/2026</strong><br>
+  Enviado por: Eduardo &middot; Para: Valentim
+</div>
+
+<div class="card info">
+  <strong>TL;DR — resumo em 3 linhas</strong>
+  <ul>
+    <li>A feature nova que identifica se o cliente é do Simples e escolhe a natureza certa do Tiny tá <strong>ligada</strong>.</li>
+    <li>Funciona só pra DAP. Cântico continua igual.</li>
+    <li>Preciso que você faça <strong>1 ou 2 testes rápidos</strong> pra confirmar que tá indo pro Tiny certinho.</li>
+  </ul>
+</div>
+
+<h2>1. O que foi ligado</h2>
+
+<p>
+Antes, cada operação do ProSeller tinha <strong>1 código Tiny</strong>. Agora, pra DAP, a Venda de mercadorias e a Bonificação têm <strong>2 códigos</strong> — um para quando o cliente é do Simples, outro quando não é. O sistema escolhe sozinho baseado no CNPJ do cliente consultado na Receita Federal.
+</p>
+
+<p>Os códigos que você me mandou ontem já estão cadastrados:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Operação ProSeller</th>
+      <th>Código se <span class="tag tag-padrao">NÃO-Simples</span></th>
+      <th>Código se <span class="tag tag-simples">Simples</span></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Venda de mercadorias</td>
+      <td><code>781495108</code></td>
+      <td><code>781284632</code></td>
+    </tr>
+    <tr>
+      <td>Bonificação</td>
+      <td><code>781496980</code></td>
+      <td><code>657287750</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><em>Devolução, Remessa e demais operações continuam com 1 código só — não tem toggle.</em></p>
+
+<h2>2. Como o teste funciona</h2>
+
+<p>
+Você pega um cliente <strong>PJ da DAP</strong> e cria um pedido nele normalmente. O ProSeller consulta a Receita Federal, descobre se o CNPJ é Simples, envia o pedido pro Tiny com o código correto e pronto.
+</p>
+
+<p>
+<strong>O que eu preciso você confirmar:</strong> o pedido chegou no Tiny com a <strong>natureza de operação certa</strong>?
+</p>
+
+<h2>3. Roteiro (rápido)</h2>
+
+<div class="card">
+  <h3>Teste A — Cliente que você SABE que é do Simples</h3>
+  <ol>
+    <li>Abre o ProSeller normalmente.</li>
+    <li>Escolhe um cliente PJ da DAP que você sabe que é optante do Simples.</li>
+    <li>Cria um pedido simples (1 item, qualquer valor pequeno — depois pode cancelar).</li>
+    <li>Dispara o envio pro Tiny como você faria normalmente.</li>
+    <li>Abre o Tiny e localiza o pedido que acabou de chegar.</li>
+    <li><strong>Confere a "Natureza de Operação" do pedido:</strong>
+      <ul>
+        <li>Se for Venda → deve estar com código <code>781284632</code> <span class="tag tag-simples">Simples</span></li>
+        <li>Se for Bonificação → deve estar com <code>657287750</code> <span class="tag tag-simples">Simples</span></li>
+      </ul>
+    </li>
+  </ol>
+</div>
+
+<div class="card">
+  <h3>Teste B — Cliente que você SABE que NÃO é do Simples</h3>
+  <ol>
+    <li>Mesmos passos 1–5 acima, mas escolhendo um cliente da DAP que <strong>não</strong> é optante do Simples.</li>
+    <li><strong>Confere no Tiny:</strong>
+      <ul>
+        <li>Se for Venda → deve estar com <code>781495108</code> <span class="tag tag-padrao">não-Simples</span></li>
+        <li>Se for Bonificação → deve estar com <code>781496980</code> <span class="tag tag-padrao">não-Simples</span></li>
+      </ul>
+    </li>
+  </ol>
+</div>
+
+<h2>4. O que me mandar</h2>
+
+<p>Pode ser bem simples, um zap do tipo:</p>
+
+<div class="quote">
+<strong>"Testei Venda com cliente Simples — chegou no Tiny com 781284632. ✅"</strong><br>
+<br>
+<strong>"Testei Bonificação cliente não-Simples — chegou com 781496980. ✅"</strong>
+</div>
+
+<p>Se quiser mandar print do pedido no Tiny junto, ajuda — dá pra ver a natureza ali direto.</p>
+
+<h2>5. Se algo parecer errado</h2>
+
+<div class="card danger">
+  <strong>Qualquer coisa estranha, me avisa imediatamente</strong>. Exemplos:
+  <ul>
+    <li>Pedido chegou no Tiny com natureza de venda normal quando era pra ser Simples.</li>
+    <li>Pedido não chegou no Tiny.</li>
+    <li>Erro ao salvar o pedido no ProSeller.</li>
+    <li>Qualquer comportamento diferente do que você tá acostumado.</li>
+  </ul>
+  <p style="margin-bottom:0;">
+    A feature tem uma <strong>chave liga/desliga</strong> no servidor. Se der problema, eu desligo em segundos e o sistema volta exatamente ao comportamento de ontem. Você não perde nada.
+  </p>
+</div>
+
+<h2>6. Observação sobre consultas à Receita</h2>
+
+<p>
+A consulta é feita <strong>a cada pedido enviado</strong> pra DAP (pra garantir dado fresco, já que cliente pode sair do Simples fora das janelas anuais). Pra Cântico, como ela não tem o toggle ligado, o sistema <strong>pula a consulta</strong> — não desperdiça.
+</p>
+
+<p>
+A API que consultamos (ReceitaWS pública) tem limite de 3 consultas por minuto. Se bater limite num pico, o pedido vai com o código padrão <span class="tag tag-padrao">não-Simples</span> — mais conservador. Se isso virar frequente, a gente contrata o plano pago (é rápido).
+</p>
+
+<hr>
+
+<h2>7. Meu checklist do que te mando agora</h2>
+
+<ul class="checklist">
+  <li>Confirmação que você recebeu esse documento (só um "👍" serve)</li>
+  <li>Resultado do Teste A (cliente Simples) com o código que apareceu no Tiny</li>
+  <li>Resultado do Teste B (cliente não-Simples) com o código que apareceu no Tiny</li>
+  <li>Qualquer observação/dúvida que surja</li>
+</ul>
+
+<p style="margin-top:28px; color:#666; font-size:13px;">
+Obrigado, Valentim. Qualquer dúvida chama no zap.
+</p>
+
+</body>
+</html>

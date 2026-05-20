@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Decisões pendentes — SPEC (DP-001 a DP-003)</title>
+  <style>
+    :root {
+      --bg: #f7f6f3;
+      --surface: #ffffff;
+      --text: #37352f;
+      --text-muted: #787774;
+      --border: #e9e9e7;
+      --accent: #2383e2;
+      --accent-soft: #e8f3fc;
+      --warn: #d9730d;
+      --warn-soft: #faf3dd;
+      --ok: #0f7b6c;
+      --radius: 6px;
+      --shadow: 0 1px 3px rgba(15, 15, 15, 0.06);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.55;
+      color: var(--text);
+      background: var(--bg);
+      padding: 2.5rem 1.25rem 4rem;
+    }
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.35rem;
+      color: var(--text);
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 1.75rem;
+    }
+    .callout {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow);
+      border-left: 4px solid var(--accent);
+    }
+    .callout p { margin: 0 0 0.65rem; }
+    .callout p:last-child { margin-bottom: 0; }
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .pill {
+      display: inline-block;
+      font-size: 0.78rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+      background: var(--accent-soft);
+      color: #1a6fbb;
+    }
+    section.dp {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.35rem 1.4rem 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+    section.dp h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem;
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .dp-id {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    .one-liner {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      margin: 0 0 1rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin: 1rem 0 0.4rem;
+    }
+    h3:first-of-type { margin-top: 0; }
+    p { margin: 0 0 0.5rem; }
+    ul {
+      margin: 0.25rem 0 0.5rem;
+      padding-left: 1.25rem;
+    }
+    li { margin-bottom: 0.35rem; }
+    .default-box {
+      background: var(--warn-soft);
+      border: 1px solid #f5e6c8;
+      border-radius: var(--radius);
+      padding: 0.65rem 0.85rem;
+      font-size: 0.95rem;
+    }
+    .default-box strong { color: var(--warn); }
+    details {
+      margin-top: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    summary {
+      cursor: pointer;
+      padding: 0.6rem 0.85rem;
+      font-size: 0.88rem;
+      font-weight: 500;
+      background: #fafafa;
+      list-style: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::before {
+      content: "▸ ";
+      display: inline-block;
+      transition: transform 0.15s;
+    }
+    details[open] summary::before { transform: rotate(90deg); }
+    .details-body {
+      padding: 0.75rem 0.85rem 0.9rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+    }
+    .example {
+      font-size: 0.9rem;
+      background: #f3f3f1;
+      padding: 0.65rem 0.85rem;
+      border-radius: var(--radius);
+      margin-top: 0.35rem;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.85rem;
+      color: #454440;
+    }
+    .response {
+      margin-top: 1.1rem;
+      padding-top: 1rem;
+      border-top: 2px dashed var(--border);
+    }
+    .response label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--ok);
+      margin-bottom: 0.45rem;
+    }
+    .response textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font: inherit;
+      resize: vertical;
+      background: #fafafa;
+    }
+    .response textarea:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+      background: var(--surface);
+    }
+    .footer-note {
+      text-align: center;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 2rem;
+    }
+    @media print {
+      body { background: #fff; padding: 1rem; }
+      .response textarea { border-style: dashed; min-height: 80px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Decisões pendentes da SPEC</h1>
+    <p class="subtitle">Três pontos com <strong>default provisório</strong> — precisamos da sua escolha ou confirmação para congelar a especificação.</p>
+
+    <div class="callout">
+      <p><strong>O que é isso?</strong> O projeto não fica parado: já existe um valor assumido em cada item. Abaixo explicamos em linguagem simples, com exemplos, para você decidir (ou validar o default).</p>
+      <p><strong>Como responder:</strong> preencha a caixa verde em cada seção ou responda por e-mail/WhatsApp citando o código (DP-001, DP-002, DP-003).</p>
+      <div class="meta-row">
+        <span class="pill">Documento: SPEC — Seção 11</span>
+        <span class="pill">Itens: DP-001 · DP-002 · DP-003</span>
+      </div>
+    </div>
+
+    <!-- DP-001 -->
+    <section class="dp" id="dp-001">
+      <h2><span class="dp-id">DP-001</span> Janela de revalidação do Simples Nacional</h2>
+      <p class="one-liner">Definir de quanto em quanto tempo o sistema deve <strong>consultar de novo</strong> a ReceitaWS para saber se o cliente ainda é optante do Simples — ao enviar pedido ao Tiny.</p>
+
+      <h3>Pergunta</h3>
+      <p>Após <strong>quantos dias</strong> desde a última consulta à ReceitaWS o sistema deve fazer uma nova consulta ao enviar um pedido ao Tiny?</p>
+
+      <h3>Por que isso importa</h3>
+      <p>O regime (Simples ou não) pode mudar. Se consultarmos com pouca frequência, existe risco de emitir nota com regime desatualizado. Se consultarmos sempre, gastamos mais <em>quota</em> da API ReceitaWS e pode ficar mais lento em volume alto.</p>
+
+      <h3>Exemplo prático</h3>
+      <p>A última consulta ao CNPJ X foi há <strong>12 dias</strong>. Você escolheu janela de <strong>30 dias</strong>: o sistema <strong>não</strong> precisa consultar de novo agora — usa o dado em cache. Se a janela fosse <strong>7 dias</strong>, aí sim consultaria de novo antes de enviar o pedido.</p>
+
+      <h3>Default na SPEC (provisório)</h3>
+      <div class="default-box"><strong>30 dias</strong> — equilíbrio entre segurança fiscal e uso da API.</div>
+
+      <h3>Opções (escolha uma ou proponha outro número)</h3>
+      <ul>
+        <li><strong>7 dias</strong> — mais seguro tributariamente; mais chamadas à ReceitaWS.</li>
+        <li><strong>30 dias</strong> — equilíbrio; alinhado à dinâmica de opção/exclusão do Simples.</li>
+        <li><strong>60 ou 90 dias</strong> — mais econômico em API; maior risco de regime desatualizado na NF.</li>
+      </ul>
+
+      <details>
+        <summary>Impacto na documentação (para dev)</summary>
+        <div class="details-body">
+          Afeta <strong>RF-003</strong>, fluxo <strong>F-2</strong> passo 2 e <strong>CA-005</strong>. Ao fechar o número, atualizar esses trechos na SPEC e o critério de teste que fala de “dias atrás” (ex.: “40 dias” só continua válido se o corte final for ≤30 dias).
+        </div>
+      </details>
+
+      <h3>Quem costuma responder bem</h3>
+      <p>Quem conhece a <strong>cadência fiscal</strong> do negócio (cliente) ou quem já conversou sobre <strong>limite de uso</strong> da ReceitaWS (dev anterior).</p>
+
+      <div class="response">
+        <label for="r1">Sua resposta — DP-001</label>
+        <textarea id="r1" placeholder="Ex.: Confirmo 30 dias. / Prefiro 7 dias por segurança. / Motivo: ..."></textarea>
+      </div>
+    </section>
+
+    <!-- DP-002 -->
+    <section class="dp" id="dp-002">
+      <h2><span class="dp-id">DP-002</span> Timeout da chamada à ReceitaWS</h2>
+      <p class="one-liner">Quanto tempo o sistema <strong>espera</strong> uma resposta da ReceitaWS antes de desistir e usar o <strong>fallback</strong> (comportamento alternativo definido na SPEC)?</p>
+
+      <h3>Pergunta</h3>
+      <p>Qual é o tempo máximo aceitável para a consulta à ReceitaWS antes de cair no fallback — pensando na <strong>experiência do usuário</strong> (ex.: tela de cadastro de cliente) e no <strong>envio do pedido</strong> ao Tiny?</p>
+
+      <h3>Por que isso importa</h3>
+      <p>Timeout muito curto: mais falhas aparentes em horário de pico. Timeout longo: a tela parece “travada” e o usuário não sabe se pode sair ou clicar de novo.</p>
+
+      <h3>Exemplo prático</h3>
+      <p>Timeout de <strong>5 segundos</strong>: se a ReceitaWS não responder em 5s, o fluxo segue o plano B (fallback). Com <strong>3s</strong>, o usuário percebe resposta mais rápida quando dá certo, mas falha mais vezes quando a API está lenta. Com <strong>10s</strong>, aceita picos, mas quem está no formulário pode achar que travou.</p>
+      <div class="example">Analogia: é o tempo máximo que você fica olhando “carregando…” antes de decidir que não vale a pena esperar mais.</div>
+
+      <h3>Default na SPEC (provisório)</h3>
+      <div class="default-box"><strong>5 segundos</strong></div>
+
+      <h3>Opções</h3>
+      <ul>
+        <li><strong>3s</strong> — UX mais ágil quando ok; mais risco de timeout em pico.</li>
+        <li><strong>5s</strong> — compromisso usual (default atual).</li>
+        <li><strong>10s</strong> — tolera lentidão; cadastro pode parecer lento.</li>
+      </ul>
+
+      <details>
+        <summary>Nota técnica + duplo timeout</summary>
+        <div class="details-body">
+          Edge Functions (Supabase) têm limite total de ~60s — 5s para só a ReceitaWS ainda deixa folga.<br /><br />
+          Se quiser <strong>tempos diferentes</strong> para “cadastro na tela” (UX) e “envio Tiny no backend”, avise: na SPEC isso vira dois requisitos separados (ex.: RNF-001a e RNF-001b).
+        </div>
+      </details>
+
+      <details>
+        <summary>Impacto na documentação (para dev)</summary>
+        <div class="details-body">
+          Afeta <strong>RNF-001</strong>, <strong>RF-002</strong>, <strong>RF-003</strong> e <strong>CA-004</strong>. Substituir “5s” em todos esses pontos quando o valor final for decidido.
+        </div>
+      </details>
+
+      <h3>Quem costuma responder bem</h3>
+      <p>Cliente sobre <strong>tolerância do usuário final</strong> no formulário; dev anterior se já mediu tempo típico (ex.: p95) da ReceitaWS.</p>
+
+      <div class="response">
+        <label for="r2">Sua resposta — DP-002</label>
+        <textarea id="r2" placeholder="Ex.: Confirmo 5s para tudo. / Quero 3s no cadastro e 8s no envio Tiny — separar RNFs. / Motivo: ..."></textarea>
+      </div>
+    </section>
+
+    <!-- DP-003 -->
+    <section class="dp" id="dp-003">
+      <h2><span class="dp-id">DP-003</span> Mapeamento incompleto (<code>tiny_valor</code> vazio)</h2>
+      <p class="one-liner">Se alguém preencher só o campo do <strong>Simples</strong> no mapeamento e deixar o campo <strong>padrão</strong> vazio, o que o sistema faz ao enviar o pedido?</p>
+
+      <h3>Pergunta</h3>
+      <p>Com <code>tiny_valor_simples</code> preenchido e <code>tiny_valor</code> (campo genérico/padrão) <strong>vazio</strong>, devemos bloquear, copiar um no outro, ou impedir salvar na interface?</p>
+
+      <h3>Por que isso importa</h3>
+      <p>É uma configuração “meio certa”: parece que alguém configurou valor para Simples, mas esqueceu o valor padrão. A decisão define se o erro aparece <strong>na hora do envio</strong> (estrito) ou se o sistema tenta <strong>adivinhar</strong> (pode mascarar erro e gerar NF errada sem aviso claro).</p>
+
+      <h3>Exemplo prático</h3>
+      <p>No backoffice, o mapeamento tem natureza X → Tiny com <code>tiny_valor_simples = "A"</code> mas <code>tiny_valor</code> em branco. Ao enviar pedido para cliente no Simples, o sistema precisa saber qual regra de valor usar; sem o padrão, o comportamento precisa estar definido.</p>
+      <div class="example">Campos citados: <code>tiny_valor</code> (obrigatório na visão atual da SPEC) e <code>tiny_valor_simples</code> (quando regime Simples).</div>
+
+      <h3>Default na SPEC (provisório)</h3>
+      <div class="default-box"><strong>Bloquear envio</strong> com mensagem do tipo: <code>Mapeamento incompleto: tiny_valor obrigatório</code></div>
+
+      <h3>Opções</h3>
+      <ul>
+        <li><strong>Bloquear com erro</strong> (default) — obriga corrigir o cadastro; o problema não some sozinho.</li>
+        <li><strong>Usar <code>tiny_valor_simples</code> como fallback do genérico</strong> — mais tolerante; risco de NF com regime “trocado” sem o operador perceber o erro de configuração.</li>
+        <li><strong>Impedir na UI</strong> — não deixa salvar Simples sem o campo padrão; pode combinar com bloqueio no back-end (validação em dois lugares).</li>
+      </ul>
+
+      <details>
+        <summary>Impacto na documentação (para dev)</summary>
+        <div class="details-body">
+          Afeta <strong>CB-003</strong>, <strong>RF-004</strong>, <strong>RF-005</strong>. Se escolher validação forte na UI, pode entrar um RNF extra em <strong>RF-004</strong>.
+        </div>
+      </details>
+
+      <h3>Quem costuma responder bem</h3>
+      <p>Cliente sobre <strong>risco tributário</strong> aceitável; dev anterior se outras telas de Configuração já seguem um padrão parecido.</p>
+
+      <div class="response">
+        <label for="r3">Sua resposta — DP-003</label>
+        <textarea id="r3" placeholder="Ex.: Concordo em bloquear envio. / Quero fallback para não travar operação — ciente do risco. / Bloquear na UI + no back. Motivo: ..."></textarea>
+      </div>
+    </section>
+
+    <p class="footer-note">Pode enviar este arquivo HTML por e-mail ou abrir no navegador. As caixas de texto permitem anotar antes de imprimir (Ctrl+P) ou copiar as respostas.</p>
+  </div>
+</body>
+</html>
