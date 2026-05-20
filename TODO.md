@@ -3,11 +3,32 @@
 > Estado vivo do projeto. Único arquivo de controle, junto com `git log`.
 > Atualizar ao final de cada sessão.
 
-**Última atualização:** 2026-05-07 (sessão — INC-013)
+**Última atualização:** 2026-05-19 (sessão — bootstrap Harness v3.2)
 
 ---
 
 ## 1. Em andamento
+
+**F-HARNESS-V3.2 · Migração para Harness v3.2 + Project Wiki — Concluída em 2026-05-19**
+
+Branch: `chore/harness-v3.2-reorg` · Classe: **B** (puramente documental, sem toque em código de produção) · CI alvo: **N1**.
+
+Entregue:
+- `AGENTS.md` v2.0 (Harness v3.2) — princípios não-negociáveis 1-17, classificação A/B/C/D, DoR, Feature Contract, Matriz de Validação, CI N1/N2/N3, Project Wiki, Fast Fix, continuidade entre agentes, antipadrões. Regras específicas de produção preservadas.
+- `CLAUDE.md` v3.2 — `docs/wiki/index.md` como item 0 da leitura inicial; gates duros de fast-fix; quando atualizar a wiki; preservadas todas as lições (bump systemVersion, typecheck herdado, migrations com gaps, padrão `-v2`, mocks, App.tsx 45 KB, etc.).
+- `docs/wiki/` — `index.md`, `log.md` (com 1 linha `[INGEST]` de hoje), `overview.md`, `architecture.md`, 8 módulos (clientes, vendas-pedidos, erp-tiny, comissoes, conta-corrente, usuarios-auth, produtos-cadastros, dashboard), 6 runbooks (deploy-edge-function, deploy-netlify, aplicar-migration-supabase, rollback-feature-flag, bump-system-version, smoke-pos-deploy-prod), `features/` + `context/` vazios com `.gitkeep`.
+- `docs/plans/CURRENT_REALITY.md` — síntese honesta do estado real em 12 blocos.
+- `docs/plans/risk-classification.md` (A/B/C/D com exemplos deste projeto), `FEATURE-CONTRACT-template.md`, `VALIDATION-MATRIX-template.md`, `DECISIONS_LOG.md`, `feature-contracts/` (vazio com `.gitkeep`).
+- `archive/` — screenshots agrupados por mtime (2026-04-29, 2026-05-05, 2026-05-06), `imports/` (4 `.xlsx`), `specs-auxiliares/` (2 `.html`), `temp/` (1 `.json` renomeado).
+- `.github/workflows/ci.yml` com `typecheck` em `continue-on-error` + documentação N1/N2/N3 no cabeçalho.
+
+Não tocou: `src/`, `supabase/`, `packages/`, `package.json`, `tsconfig*`, `vite.config.ts`, `netlify.toml`, `index.html`. SPEC.md, CONTRACTS.md e ADRs existentes preservados integralmente.
+
+Não bumpou `systemVersion` (PR puramente documental, sem deploy Netlify previsto).
+
+Próximo passo do projeto: retomar features/bugs em `§1` e `§5` usando o fluxo v3.2 (Prompt 1 → 2 → 3 conforme classe da feature). Lembrar: F-001 aguarda validação E2E do Valentim; INC-014 deploy `tiny-enviar-pedido-venda-v1` + smoke pendentes; BUG-001/003 EM CORREÇÃO em `fix/timezone-e-vendedor-backoffice`; BUG-002 decisão de produto pendente.
+
+---
 
 **F-001 · Consulta Simples Nacional — ATIVA EM PRODUÇÃO desde 2026-04-24, aguardando validação end-to-end do Valentim.**
 
@@ -164,10 +185,12 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 
 ## 3. Próximas ondas (após as 2 features acima)
 
-### Onda R-1 — Inventário e reorganização de docs/
-- Listar os 120+ `.md` atualmente em `docs/front/` (agora versionados) em `docs/plans/inventario.md`.
-- Decidir para cada um: `docs/decisions/adr/`, `docs/specs/`, `docs/product/` ou `archive/`.
-- Um commit por lote temático (ex.: todos os `CORRECAO_*` viram ADRs retroativos em um PR).
+### 🟢 Onda R-1 — Inventário e reorganização de docs/ (Parcial — concluída em 2026-05-19 no bootstrap Harness v3.2)
+
+- [x] **Raiz limpa** — 19 PNGs, 4 `.xlsx`, 2 `.html` auxiliares e 1 `.json` temporário corrompido movidos para `archive/` (sub-pastas `screenshots/<data>/`, `imports/`, `specs-auxiliares/`, `temp/`).
+- [x] **`docs/wiki/` populada** (cenário C + bootstrap v3.2): index, log, overview, architecture, 8 módulos, 6 runbooks, features/context vazios.
+- [x] **Templates v3.2 plantados** em `docs/plans/`: CURRENT_REALITY, risk-classification, FEATURE-CONTRACT, VALIDATION-MATRIX, DECISIONS_LOG, feature-contracts/.
+- [ ] **Pendente:** inventariar `docs/front/` (120+ arquivos pré-Harness ainda intocados nesta sessão) em `docs/plans/inventario.md`. Decidir para cada um: `docs/decisions/adr/`, `docs/specs/`, `docs/product/`, `docs/wiki/runbooks/` ou `archive/legacy-docs/`. Um commit por lote temático.
 
 ### Onda R-2 — PRD retroativo (`/consultor-prd` modo retroativo)
 - Gera `docs/product/PRD.md` curto e honesto, reconhecendo o que já foi construído.
