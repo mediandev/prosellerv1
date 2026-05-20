@@ -244,8 +244,10 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 
 ## 5. Bugs / incidentes
 
-✅ INC-015 · 2026-05-20 · Lista de preço criada/editada via Configurações
-não persistia produtos nem faixas de comissionamento.
+⏳ INC-015 · 2026-05-20 · Lista de preço criada/editada via Configurações
+não persistia produtos nem faixas de comissionamento. **Deploy em prod
+PENDENTE** — código mergeado em main, edge function ainda na versão
+antiga em produção.
 - Reprodução: Valentim 2026-05-19 09:42 BRT — "Não consigo atualizar
   uma lista de preço manualmente aqui. As alterações não ficam salvas.
   Tentei resolver criando uma nova... a lista foi criada. Ao abrir a
@@ -266,13 +268,15 @@ não persistia produtos nem faixas de comissionamento.
   `faixasDesconto.length>0` e rejeita `max <= min`; descontoMax=null
   ("acima de") vira `100` no banco. Sem migration. Sem mudança no
   frontend.
-- Status: código mergeado em `main`, edge function deployada em
-  prod (`xxoiqfraeolsqsmsheue`), smoke E2E AC1+AC2 verde em
-  https://prosaller.netlify.app/ via Playwright (criar lista fixa
-  + lista conforme desconto, reabrir e ver tudo persistido,
-  deletar para limpeza). Sidebar atualizado para V 1.34 + entry
-  no CHANGELOG. Aguardando smoke real do Valentim para fechar
-  formalmente.
+- Status: código mergeado em `main` (PR #21, SHA `64929c2`),
+  Sidebar atualizado para V 1.34 + entry no CHANGELOG. **Edge
+  function ainda NÃO deployada em prod** — agente Claude Code
+  sem privilégio na CLI (403) e MCP `deploy_edge_function`
+  proibido pelo ADR-005/INC-001. Aguardando Eduardo rodar
+  `npx supabase functions deploy listas-preco-v2 --project-ref
+  xxoiqfraeolsqsmsheue` local com conta admin Median. Smoke E2E
+  Playwright + comunicação ao Valentim só depois disso. Brief
+  operacional em `docs/plans/cursor-brief.md` Tarefa 8.
 - Lição: o padrão de Edge Function `-v2` que aceita payload com
   arrays de filhos no body precisa persistir esses filhos
   explicitamente — não confiar no nome do POST/PUT pra saber se

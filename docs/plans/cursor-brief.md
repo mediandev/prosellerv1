@@ -27,6 +27,7 @@
 - [Tarefa 5 — INC-013 · Vincular 32 clientes da Valéria Montoz](#tarefa-5--inc-013--vincular-32-clientes-da-valéria-montoz)
 - [Tarefa 6 — Migration 115 · busca clientes (unaccent + CNPJ digits + grupo)](#tarefa-6--migration-115--busca-clientes-unaccent--cnpj-digits--grupo)
 - [Tarefa 7 — Cadastro do vendedor "Empresa - Venda Direta ES"](#tarefa-7--cadastro-do-vendedor-empresa---venda-direta-es)
+- [Tarefa 8 — Deploy `listas-preco-v2` em prod (INC-015)](#tarefa-8--deploy-listas-preco-v2-em-prod-inc-015)
 
 ---
 
@@ -728,6 +729,91 @@ Detectado via SQL (`cliente.codigo` ou `digits(cliente.cpf_cnpj)`):
 - [ ] `dados_vendedor.idtiny` preenchido em ambos.
 - [ ] Smoke: pedido teste com cada vendedor é aceito pelo Tiny.
 - [ ] Valentim ciente da limitação do import (não rodar antes do toggle de upsert).
+
+---
+
+## Tarefa 8 — Deploy `listas-preco-v2` em prod (INC-015)
+
+**Feature associada:** INC-015 — listas-preco POST/PUT persistência de produtos+faixas
+**Operação:** Deploy de Edge Function — **execução humana local, NÃO via MCP** (proibido pelo ADR-005 / INC-001).
+**SHA alvo em main:** `64929c2` (PR #21).
+
+### Pré-condições (rodar EM ORDEM, parar se qualquer falhar)
+
+1. **Branch local em main e sincronizado.**
+   ```bash
+   git checkout main
+   git pull origin main
+   git log --oneline -1
+   # esperado: 64929c2 (ou commit mais recente que inclua o fix)
+   ```
+2. **Conferir conteúdo do POST/PUT.** Abrir `supabase/functions/listas-preco-v2/index.ts` e confirmar que existe bloco `[LISTAS-PRECO-V2] POST: produtos inseridos` (linha ~330) e equivalente no PUT. Se não existir, **parar** — a branch errada está checada.
+3. **`supabase login` ativo na conta admin Median.** Conferir com:
+   ```bash
+   npx supabase projects list
+   ```
+   O projeto `xxoiqfraeolsqsmsheue` (ProSeller V1) deve aparecer. Se der 401/403, refazer `npx supabase login`.
+4. **Docker NÃO precisa estar rodando** — o flag default desde supabase CLI v1.180+ é `--use-api`. Se a CLI reclamar de Docker, atualizar via `npm i -g supabase`.
+
+### Comando (executar exatamente assim)
+
+```bash
+npx supabase functions deploy listas-preco-v2 --project-ref xxoiqfraeolsqsmsheue
+```
+
+Esperado: `Deployed Function listas-preco-v2 ...`. Sem `403`. Sem `unexpected deploy status`.
+
+### Smoke test pós-deploy (humano)
+
+1. **OPTIONS 200 (preflight CORS):**
+   ```bash
+   curl -i -X OPTIONS \
+     -H "Origin: https://prosaller.app.br" \
+     -H "Access-Control-Request-Method: POST" \
+     https://xxoiqfraeolsqsmsheue.supabase.co/functions/v1/listas-preco-v2
+   ```
+   Esperado: `HTTP/2 200`, headers `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods` presentes.
+
+2. **`supabase functions list` mostra `updated_at` recente:**
+   ```bash
+   npx supabase functions list --project-ref xxoiqfraeolsqsmsheue | grep listas-preco-v2
+   ```
+   `updated_at` deve ser dentro dos últimos minutos.
+
+3. **Confirmar a versão no painel Supabase** (Edge Functions → `listas-preco-v2` → "Last deploy"). O painel mostra o conteúdo do `index.ts` — conferir que existe a string `[LISTAS-PRECO-V2] POST: produtos inseridos`.
+
+Avisar Claude Code que o deploy está concluído (colar saída do `functions list` + OPTIONS) — Claude segue para o smoke E2E Playwright e comunicação Valentim.
+
+### Rollback (OBRIGATÓRIO — Cenário C produção)
+
+Se após o deploy o smoke E2E quebrar, ou aparecer erro 500 nos logs:
+
+```bash
+# 1) Voltar ao último commit antes do fix (pre-INC-015):
+git log --oneline main | grep -B1 "fix(listas-preco)" | head -2
+# pega o SHA do commit IMEDIATAMENTE ANTERIOR a 64929c2 — em main hoje: ad562c2
+
+# 2) Checkout do index.ts antigo:
+git checkout ad562c2 -- supabase/functions/listas-preco-v2/index.ts
+
+# 3) Redeploy:
+npx supabase functions deploy listas-preco-v2 --project-ref xxoiqfraeolsqsmsheue
+
+# 4) Restaurar working copy:
+git checkout main -- supabase/functions/listas-preco-v2/index.ts
+```
+
+O comportamento volta ao bug original — listas criadas vazias. Sem migration foi feita, então sem destrutivo no banco. Avisar Valentim que o fix foi revertido e está em análise.
+
+### Critério de aceite da Tarefa 8
+
+- [ ] `npx supabase functions deploy listas-preco-v2` retornou sem erro.
+- [ ] `supabase functions list` mostra `updated_at` < 5 min.
+- [ ] OPTIONS preflight retorna 200.
+- [ ] Painel Supabase mostra o `index.ts` novo (com bloco `[LISTAS-PRECO-V2] POST: produtos inseridos`).
+- [ ] Claude Code rodou smoke E2E Playwright (AC1+AC2+AC3) verde.
+- [ ] Valentim contactado.
+- [ ] `docs/wiki/log.md` linha `[BLOCKED]` substituída por `[VALIDATION]` com SHA + timestamp.
 
 ---
 
