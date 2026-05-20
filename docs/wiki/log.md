@@ -6,6 +6,7 @@
 
 ## 2026-05-20
 
+- 2026-05-20 · [BUGFIX] · `produtos-v2?action=list` ganhou `LIMIT 2000` + `ORDER BY descricao ASC` — antes estourava `statement_timeout` do Postgres conforme a base crescia, e o frontend caía em fallback silencioso para `mockProdutos.ts` (12 itens Dell/Logitech), inutilizando o dropdown de Listas de Preço. Também adiciona `<Input>` editável inline de preço em `PriceListFormPage` (antes só era texto estático + lixeira). Smoke E2E AC1+AC2 verde em prod · SHA `7285e22` / PR #24 / V 1.35.
 - 2026-05-20 · [BUGFIX] · `listas-preco-v2` POST/PUT agora persiste `produtos` e `faixasDesconto` nas tabelas filhas (`produtos_listas_precos`, `listas_preco_comissionamento`). Antes só salvava a master. Reportado por Valentim 2026-05-19. Edge function deployada + smoke E2E em prod (AC1+AC2) verde · SHA `64929c2` / PR #21 / V 1.34.
 
 ## 2026-05-19

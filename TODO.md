@@ -244,6 +244,53 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 
 ## 5. Bugs / incidentes
 
+✅ INC-016 · 2026-05-20 · Após o fix do INC-015 em prod (V 1.34), Valentim
+reportou 3 novos sintomas no fluxo de Listas de Preço: dropdown de
+produtos vazio ao criar nova lista, mesmo problema ao editar a
+ES_ARAUJO [ATUAL] que ele criou vazia, e impossibilidade de
+alterar o valor de itens já vinculados em listas existentes.
+- Reprodução: smoke E2E em prod com lucas.carmo@flowcode.cc (V 1.34)
+  via Playwright + console do navegador. Console mostrava
+  `produtos-v2?action=list` retornando 500 com `canceling statement
+  due to statement timeout` (limite de 60s do Postgres do Supabase).
+  Frontend caía em fallback silencioso para mockProdutos.ts (12
+  itens Dell/Logitech/Keychron — não os reais DAP do Median).
+- Causa raiz A (timeout): `supabase/functions/produtos-v2/index.ts`
+  case `'list'` (linhas ~163-192) fazia `SELECT (20 colunas) FROM
+  produto WHERE deleted_at IS NULL ORDER BY created_at DESC` sem
+  `LIMIT` nem paginação. Conforme a base do cliente crescia, a
+  query passou a estourar o `statement_timeout`. Sub-queries
+  posteriores em `marcas`, `ref_tipo_produto`, `ref_unidade_medida`
+  agravavam.
+- Causa raiz B (UX): `src/components/PriceListFormPage.tsx` linha
+  ~650 renderizava o preço como `formatCurrency(pp.preco)` em
+  texto estático, só com botão de Remover ao lado. O workaround
+  "remover + readicionar" também era bloqueado pelo filtro
+  `produtosDisponiveis` (linha ~593-595) que retira do dropdown
+  itens já vinculados.
+- Resolução: PR #24 (`7285e22`, V 1.35) — A) `.limit(2000)` +
+  `ORDER BY descricao ASC` no `produtos-v2 case 'list'`; B) novo
+  handler `handleUpdateProdutoPreco` em `PriceListFormPage`, prop
+  `onUpdatePreco` em `ProdutoPrecoForm`, troca da célula de preço
+  por `<Input type="number">` controlado quando `!disabled`. Sem
+  migration. Sem mudança no schema.
+- Status: código mergeado em `main`, edge function `produtos-v2`
+  deployada em prod, frontend V 1.35 publicado via Netlify, smoke
+  E2E AC1+AC2 verde em https://prosaller.netlify.app/ (dropdown
+  lista 28 produtos reais ordenados alfabeticamente; edição inline
+  10 → 22,50 persistiu corretamente via PUT). Aguardando smoke
+  real do Valentim para fechar formalmente.
+- Lição A: Edge Functions `*-v2?action=list` que retornam todos os
+  registros sem paginação sobrevivem em ambiente de teste/staging
+  mas estouram em produção quando a base passa de N mil registros.
+  Auditar `clientes-v2`, `pedido-venda-v2`, `produtos-v2` (e
+  outros) periodicamente — adicionar `LIMIT` como quick fix, mas
+  o ideal é paginação server-side com search.
+- Lição B: bugfix de persistência (INC-015) não revela
+  necessariamente todo o problema de UX da feature. Vale rodar
+  fluxo completo do cliente (criar + editar + alterar +
+  reabrir + excluir) antes de declarar resolvido.
+
 ✅ INC-015 · 2026-05-20 · Lista de preço criada/editada via Configurações
 não persistia produtos nem faixas de comissionamento.
 - Reprodução: Valentim 2026-05-19 09:42 BRT — "Não consigo atualizar
