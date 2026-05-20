@@ -259,6 +259,21 @@ serve(async (req) => {
       if (!body.nome || String(body.nome).trim().length < 2) {
         throw new Error('Nome da lista deve ter pelo menos 2 caracteres')
       }
+      const produtosInput: Array<Record<string, unknown>> = Array.isArray(body.produtos) ? body.produtos : []
+      const faixasInput: Array<Record<string, unknown>> = Array.isArray(body.faixasDesconto) ? body.faixasDesconto : []
+      if (body.tipoComissao === 'conforme_desconto') {
+        if (faixasInput.length === 0) {
+          throw new Error('validation: Faixas de desconto inválidas')
+        }
+        for (const f of faixasInput) {
+          const min = Number((f.descontoMin ?? f.desconto_minimo ?? 0) as number)
+          const maxRaw = (f.descontoMax ?? f.desconto_maximo)
+          const max = maxRaw == null ? null : Number(maxRaw)
+          if (max != null && max <= min) {
+            throw new Error('validation: Faixas de desconto inválidas')
+          }
+        }
+      }
       const insert: { nome: string; ativo?: boolean; desconto?: number } = {
         nome: String(body.nome).trim(),
         ativo: body.ativo !== false,
@@ -272,7 +287,73 @@ serve(async (req) => {
         .select('id, nome, data_criacao, desconto, ativo')
         .single()
       if (insertError) throw new Error(`Database operation failed: ${insertError.message}`)
-      const formatted = formatListaPreco(nova, [], [])
+
+      const novaId = nova.id as number
+      const produtosRows = produtosInput
+        .map((p) => ({
+          lista_preco_id: novaId,
+          produto_id: Number(p.produtoId ?? p.produto_id),
+          preco: Number(p.preco ?? 0),
+        }))
+        .filter((row) => {
+          if (!Number.isFinite(row.produto_id) || row.produto_id <= 0) {
+            console.warn('[LISTAS-PRECO-V2] POST: produto_id inválido descartado', row)
+            return false
+          }
+          return true
+        })
+
+      const faixasRows = body.tipoComissao === 'conforme_desconto'
+        ? faixasInput.map((f) => {
+            const max = (f.descontoMax ?? f.desconto_maximo)
+            return {
+              lista_preco_id: novaId,
+              desconto_minimo: Number((f.descontoMin ?? f.desconto_minimo ?? 0) as number),
+              desconto_maximo: max == null ? 100 : Number(max),
+              comissao: Number((f.percentualComissao ?? f.comissao ?? 0) as number),
+            }
+          })
+        : []
+
+      try {
+        if (produtosRows.length > 0) {
+          const { error: prodInsertError } = await supabase
+            .from('produtos_listas_precos')
+            .insert(produtosRows)
+          if (prodInsertError) throw new Error(`Database operation failed: produtos_listas_precos insert: ${prodInsertError.message}`)
+          console.log('[LISTAS-PRECO-V2] POST: produtos inseridos', { listaId: novaId, count: produtosRows.length })
+        }
+        if (faixasRows.length > 0) {
+          const { error: faixasInsertError } = await supabase
+            .from('listas_preco_comissionamento')
+            .insert(faixasRows)
+          if (faixasInsertError) throw new Error(`Database operation failed: listas_preco_comissionamento insert: ${faixasInsertError.message}`)
+          console.log('[LISTAS-PRECO-V2] POST: faixas inseridas', { listaId: novaId, count: faixasRows.length })
+        }
+      } catch (childErr) {
+        console.error('[LISTAS-PRECO-V2] POST: erro ao inserir filhos, fazendo rollback manual da master', { listaId: novaId, childErr })
+        await supabase.from('produtos_listas_precos').delete().eq('lista_preco_id', novaId)
+        await supabase.from('listas_preco_comissionamento').delete().eq('lista_preco_id', novaId)
+        await supabase.from('listas_preco').delete().eq('id', novaId)
+        throw childErr
+      }
+
+      const { data: produtosPersisted } = await supabase
+        .from('produtos_listas_precos')
+        .select('produto_id, preco')
+        .eq('lista_preco_id', novaId)
+      const { data: faixasPersisted } = await supabase
+        .from('listas_preco_comissionamento')
+        .select('id, desconto_minimo, desconto_maximo, comissao')
+        .eq('lista_preco_id', novaId)
+        .order('desconto_minimo', { ascending: true })
+      const tipoComissao = (faixasPersisted?.length ?? 0) > 0 ? 'conforme_desconto' as const : 'fixa' as const
+      const percentualFixo = nova.desconto != null ? Number(nova.desconto) : 10
+      const formatted = formatListaPreco(
+        { ...nova, tipo_comissao: tipoComissao, percentual_fixo: percentualFixo, total_produtos: produtosPersisted?.length ?? 0, total_faixas: faixasPersisted?.length ?? 0 },
+        produtosPersisted ?? [],
+        faixasPersisted ?? []
+      )
       const duration = Date.now() - startTime
       return createHttpSuccessResponse(formatted, 201, { userId: user.id, duration: `${duration}ms` })
     }
@@ -289,6 +370,21 @@ serve(async (req) => {
       if (!body?.nome || String(body.nome).trim().length < 2) {
         throw new Error('Nome da lista deve ter pelo menos 2 caracteres')
       }
+      const produtosInput: Array<Record<string, unknown>> = Array.isArray(body.produtos) ? body.produtos : []
+      const faixasInput: Array<Record<string, unknown>> = Array.isArray(body.faixasDesconto) ? body.faixasDesconto : []
+      if (body.tipoComissao === 'conforme_desconto') {
+        if (faixasInput.length === 0) {
+          throw new Error('validation: Faixas de desconto inválidas')
+        }
+        for (const f of faixasInput) {
+          const min = Number((f.descontoMin ?? f.desconto_minimo ?? 0) as number)
+          const maxRaw = (f.descontoMax ?? f.desconto_maximo)
+          const max = maxRaw == null ? null : Number(maxRaw)
+          if (max != null && max <= min) {
+            throw new Error('validation: Faixas de desconto inválidas')
+          }
+        }
+      }
       const update: { nome?: string; ativo?: boolean; desconto?: number } = {
         nome: String(body.nome).trim(),
         ativo: body.ativo !== false,
@@ -304,6 +400,59 @@ serve(async (req) => {
         .single()
       if (updateError) throw new Error(`Database operation failed: ${updateError.message}`)
       if (!atualizada) throw new Error('Lista de preço não encontrada')
+
+      const { error: prodDeleteError } = await supabase
+        .from('produtos_listas_precos')
+        .delete()
+        .eq('lista_preco_id', idNum)
+      if (prodDeleteError) throw new Error(`Database operation failed: produtos_listas_precos delete: ${prodDeleteError.message}`)
+      const { error: faixasDeleteError } = await supabase
+        .from('listas_preco_comissionamento')
+        .delete()
+        .eq('lista_preco_id', idNum)
+      if (faixasDeleteError) throw new Error(`Database operation failed: listas_preco_comissionamento delete: ${faixasDeleteError.message}`)
+
+      const produtosRows = produtosInput
+        .map((p) => ({
+          lista_preco_id: idNum,
+          produto_id: Number(p.produtoId ?? p.produto_id),
+          preco: Number(p.preco ?? 0),
+        }))
+        .filter((row) => {
+          if (!Number.isFinite(row.produto_id) || row.produto_id <= 0) {
+            console.warn('[LISTAS-PRECO-V2] PUT: produto_id inválido descartado', row)
+            return false
+          }
+          return true
+        })
+
+      const faixasRows = body.tipoComissao === 'conforme_desconto'
+        ? faixasInput.map((f) => {
+            const max = (f.descontoMax ?? f.desconto_maximo)
+            return {
+              lista_preco_id: idNum,
+              desconto_minimo: Number((f.descontoMin ?? f.desconto_minimo ?? 0) as number),
+              desconto_maximo: max == null ? 100 : Number(max),
+              comissao: Number((f.percentualComissao ?? f.comissao ?? 0) as number),
+            }
+          })
+        : []
+
+      if (produtosRows.length > 0) {
+        const { error: prodInsertError } = await supabase
+          .from('produtos_listas_precos')
+          .insert(produtosRows)
+        if (prodInsertError) throw new Error(`Database operation failed: produtos_listas_precos insert: ${prodInsertError.message}`)
+        console.log('[LISTAS-PRECO-V2] PUT: produtos inseridos', { listaId: idNum, count: produtosRows.length })
+      }
+      if (faixasRows.length > 0) {
+        const { error: faixasInsertError } = await supabase
+          .from('listas_preco_comissionamento')
+          .insert(faixasRows)
+        if (faixasInsertError) throw new Error(`Database operation failed: listas_preco_comissionamento insert: ${faixasInsertError.message}`)
+        console.log('[LISTAS-PRECO-V2] PUT: faixas inseridas', { listaId: idNum, count: faixasRows.length })
+      }
+
       const { data: produtos } = await supabase.from('produtos_listas_precos').select('produto_id, preco').eq('lista_preco_id', idNum)
       const { data: faixas } = await supabase.from('listas_preco_comissionamento').select('id, desconto_minimo, desconto_maximo, comissao').eq('lista_preco_id', idNum).order('desconto_minimo', { ascending: true })
       const tipoComissao = (faixas?.length ?? 0) > 0 ? 'conforme_desconto' as const : 'fixa' as const

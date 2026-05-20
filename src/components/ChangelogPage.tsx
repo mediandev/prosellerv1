@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.34',
+    items: [
+      'Configurações > Listas de Preço: salvar/editar uma lista agora persiste os produtos vinculados e as faixas de comissionamento (antes a lista era criada vazia mesmo com itens preenchidos).',
+    ],
+  },
+  {
     version: 'V 1.33',
     items: [
       'Relatório de Comissões em PDF: o aviso "Saldo Anterior não calculado" volta a aparecer legível (antes saía com caracteres embaralhados quando o período anterior estava em aberto).',
