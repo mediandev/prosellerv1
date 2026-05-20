@@ -3,7 +3,7 @@
 > Memória sintetizada para próximo agente que retomar esta feature. Descartável após conclusão.
 > Limite v3.2: 150 linhas.
 
-**Estado atual (2026-05-20):** Onda **R-LOG-1 em execução** (branch `feat/log-crm-R-LOG-1`). Schema base + 4 cadastros + Novo Frete manual, tudo atrás de `FEATURE_LOG_CRM` (default OFF). Não aplicada em produção; aguardando brief humano para staging.
+**Estado atual (2026-05-20):** Onda **R-LOG-1 MERGEADA em main** (PR #22, merge commit `ad817aa`, V 1.36). Schema base + 4 cadastros + Novo Frete manual, tudo atrás de `FEATURE_LOG_CRM` (default OFF). Migration 119 e Edge Functions **não aplicadas em produção** — aguardando brief Tarefa 8 do `cursor-brief.md` para staging. **Próxima onda recomendada:** R-LOG-2 (Torre de Controle, classe B, sem bloqueador) ou R-LOG-4 (SSW, agora destravada — ver abaixo).
 
 ---
 
@@ -31,8 +31,12 @@ Discovery rodada via Playwright em 2026-05-20. Screenshots em `archive/screensho
 
 ## Integrações externas
 
-- **SSW Tracking** — Bubble usa `/apiservice/doapicallfromserver` como proxy. API pública existe (`https://ssw.inf.br/api/trackingdanfe`). Cobre Ativa, Favorita, Tecmar; cliente menciona Brasspress, TNT no escopo.
-- **Parser PDF/EDI** das faturas — implementação fechada do Bubble. Custom por transportadora.
+- **SSW Tracking — CONFIRMADO PÚBLICO, SEM AUTH** (2026-05-20, doc oficial `ssw.inf.br/ajuda/trackingdanfe.html` + curl real). Endpoint `POST https://ssw.inf.br/api/trackingdanfe`. Body: `{"chave_nfe": "<44 dígitos>"}`. Content-Type `application/json` → resposta JSON; `application/x-www-form-urlencoded` → resposta XML. **Sem autenticação** (`Authentication: None or self-handled` no API connector do Bubble — confirmado por Valentim 2026-05-20 com print do API Connector). Rate limit oficial: **20 req/s** ("Todas as chamadas para APIs e Webservices tem um limite de 20 requisições por segundo"). Schema resposta: `{success: bool, message: string, ...}`. Erros mapeados: `"Chave da DANFE deve possuir 44 digitos."` / `"Chave da DANFE invalida."` / `"Nenhum documento localizado"` / `"Method not allowed"`. Falta apenas confirmar campos extras do `success=true` com chave NFe ativa (pendente Valentim, sem urgência).
+- **Webservices SSW para Embarcadores** (descobertas bônus 2026-05-20, podem substituir parcial ou totalmente o parser PDF/EDI em R-LOG-7):
+  - `webserviceXmlCteBase64.html` — SSW envia XML do CT-e ao Embarcador.
+  - `webservicesEnvioFatura.html` / `…Liquidadas.html` / `…Cancelada.html` — SSW envia eventos de fatura emitida/paga/cancelada estruturados.
+  - `notfis.html` — padrão EDI NF.
+- **Parser PDF/EDI** das faturas — implementação fechada do Bubble. **Pode não ser necessário** se os webservices acima cobrirem o caso. Reavaliar em ADR-007.
 
 ---
 
@@ -55,22 +59,22 @@ RLS tenant-scoped por `empresa_id` (replica padrão de `cliente`/`pedido_venda`)
 
 | Onda | Nome | Classe | CI | Status |
 |---|---|---|---|---|
-| **R-LOG-1** | Schema base + cadastros lookup + Novo Frete manual | **B** | N1+matriz | **em execução** |
-| R-LOG-2 | Torre Controle + Busca + Detalhe | B | N1+matriz | backlog |
-| R-LOG-3 | Hook em tiny-enviar-pedido-venda-v1 (auto-cria frete) | **C** | N2 | backlog — bloqueado por R-LOG-1 |
-| R-LOG-4 | Integração SSW Tracking | **D** | N3 | backlog — ADR-006 + ADR-008 antes |
+| **R-LOG-1** | Schema base + cadastros lookup + Novo Frete manual | **B** | N1+matriz | **MERGEADA em main (PR #22, V 1.36) — aguarda deploy staging via Tarefa 8 cursor-brief** |
+| R-LOG-2 | Torre Controle + Busca + Detalhe | B | N1+matriz | backlog — **próxima recomendada** (não bloqueada) |
+| R-LOG-3 | Hook em tiny-enviar-pedido-venda-v1 (auto-cria frete) | **C** | N2 | backlog — bloqueado por R-LOG-1 deploy em prod |
+| R-LOG-4 | Integração SSW Tracking | **D** | N3 | backlog — **destravada** (ADR-006 cancelada); só ADR-008 (polling) antes |
 | R-LOG-5 | Indicadores financeiros do Dashboard | B | N1+matriz | backlog |
 | R-LOG-6 | Faturas — CRUD manual | B | N1+matriz | backlog |
-| R-LOG-7 | Parser PDF/EDI | **D** | N3 | backlog — ADR-007 antes |
+| R-LOG-7 | Parser PDF/EDI | **D** | N3 | backlog — ADR-007 antes; pode simplificar com WS SSW |
 | R-LOG-8 | Auditoria Cotado × Cobrado | **C** | N2 | backlog |
 
 ---
 
 ## Decisões pendentes (registradas em DECISIONS_LOG)
 
-- **ADR-006** — Credenciais SSW: 1 conta por transportadora (gravada em `transportador_logistica.ssw_dominio` + secret no Supabase) vs. chave NFe pura via endpoint público. Pendente confirmação com Valentim sobre como o Bubble está configurado.
-- **ADR-007** — Parser PDF/EDI: próprio (`pdf-parse`) vs. serviço externo (Documind/Mindee). Decidir antes de R-LOG-7.
-- **ADR-008** — Polling SSW: cron Supabase vs. on-demand. Bubble parece on-demand (1 chamada/NFe ao listar).
+- ~~**ADR-006**~~ — **CANCELADA 2026-05-20.** Validação direta com SSW: integração pública por chave NFe, sem autenticação por transportadora. Doc oficial `ssw.inf.br/ajuda/trackingdanfe.html` + curl real comprovaram. Coluna `transportador_logistica.ssw_dominio` permanece como informativa (filtro de dashboard), sem uso técnico.
+- **ADR-007** — Parser PDF/EDI: próprio (`pdf-parse`) vs. serviço externo (Documind/Mindee) **vs. consumir webservices SSW para Embarcadores** (`webservicesEnvioFatura.html` etc — descoberta bônus). Aguardar 2-3 PDFs reais do Valentim para decidir.
+- **ADR-008** — Polling SSW: cron Supabase vs. on-demand. Bubble parece on-demand (1 chamada/NFe ao listar). Com rate limit 20 req/s confirmado, on-demand + cache 30-60 min em `frete_logistica_ocorrencia` é viável.
 - **ADR-009** — Fonte de `valor_cotacao`: manual (como Bubble) vs. integração tabela fretes Tiny. **MVP: manual.**
 
 ---
@@ -115,12 +119,13 @@ RLS tenant-scoped por `empresa_id` (replica padrão de `cliente`/`pedido_venda`)
 
 ## Próximos passos concretos
 
-- **Humano:** revisar branch + abrir PR. Aplicar migration 119 via Cursor MCP em staging (cursor-brief Tarefa 8). Smoke E2E staging.
-- **Próxima sessão:** se aprovado, abrir R-LOG-2 (Torre de Controle + Busca + Detalhe) — Feature Contract detalhado e branch nova.
+- **Humano:** aplicar migration 119 via Cursor MCP (`apply_migration`, não `execute_sql` — runbook v3.2) em staging (cursor-brief Tarefa 8) → smoke 5 queries → deploy 4 Edge Functions via `npx supabase functions deploy` local (ADR-005 proíbe MCP `deploy_edge_function`) → smoke OPTIONS → janela 24-48h → repetir em prod com flag `false`.
+- **Pendente Valentim (sem urgência):** 1 chave NFe ativa para confirmar campos extras do `success=true` da SSW (refinar schema Zod `OcorrenciaSSW`). 2-3 PDFs de fatura para ADR-007.
+- **Próxima sessão de feature:** R-LOG-2 (Torre de Controle + Busca + Detalhe) — Feature Contract detalhado e branch nova. R-LOG-4 também destravada caso o Valentim demore com chave NFe (podemos usar chave de exemplo da doc para mock + Zod parcial).
 
 ---
 
 ## Handoff
 
-- **Última ação:** smoke + report dos 15 CAs (T12).
-- **O que NÃO fiz e o próximo deveria evitar:** push, deploy de migration/Edge Function, ativação da flag. **Não tocar** ADR-006..009 — decisão humana com Valentim.
+- **Última ação (2026-05-20):** PR #22 mergeada em main com bump V 1.34 → V 1.36 (V 1.35 foi tomada por INC-016 enquanto a PR esperava). SSW endpoint validado público sem auth. Context Pack atualizado com achados.
+- **O que NÃO fiz e o próximo deveria evitar:** aplicar migration 119 em qualquer ambiente (aguarda Tarefa 8 cursor-brief), deploy de Edge Functions, ativação de `FEATURE_LOG_CRM=true` em prod. **Não tocar** ADR-007/008/009 sem confirmação humana.
