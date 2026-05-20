@@ -222,6 +222,12 @@ export function PriceListFormPage({ lista, modo, onVoltar, onSalvar }: PriceList
     setProdutosPreco(produtosPreco.filter((p) => p.produtoId !== produtoId));
   };
 
+  const handleUpdateProdutoPreco = (produtoId: string, preco: number) => {
+    setProdutosPreco(
+      produtosPreco.map((p) => (p.produtoId === produtoId ? { ...p, preco } : p))
+    );
+  };
+
   const handleAddFaixa = () => {
     const newId = (faixasDesconto.length + 1).toString();
     setFaixasDesconto([
@@ -367,6 +373,7 @@ export function PriceListFormPage({ lista, modo, onVoltar, onSalvar }: PriceList
             produtosPreco={produtosPreco}
             onAdd={handleAddProduto}
             onRemove={handleRemoveProduto}
+            onUpdatePreco={handleUpdateProdutoPreco}
             getProdutoNome={getProdutoNome}
             formatCurrency={formatCurrency}
             disabled={isReadOnly}
@@ -564,6 +571,7 @@ function ProdutoPrecoForm({
   produtosPreco,
   onAdd,
   onRemove,
+  onUpdatePreco,
   getProdutoNome,
   formatCurrency,
   disabled,
@@ -572,6 +580,7 @@ function ProdutoPrecoForm({
   produtosPreco: ProdutoPreco[];
   onAdd: (produtoId: string, preco: string) => void;
   onRemove: (produtoId: string) => void;
+  onUpdatePreco: (produtoId: string, preco: number) => void;
   getProdutoNome: (produtoId: string, produtoPreco?: ProdutoPreco) => string;
   formatCurrency: (value: number) => string;
   disabled?: boolean;
@@ -640,14 +649,31 @@ function ProdutoPrecoForm({
         <div className="border rounded-lg">
           <div className="bg-muted px-4 py-2 flex items-center gap-4">
             <div className="flex-1">Produto</div>
-            <div className="w-32 text-right">Preço</div>
+            <div className="w-36 text-right">Preço (R$)</div>
             <div className="w-20"></div>
           </div>
           <div className="divide-y">
             {produtosPreco.map((pp) => (
               <div key={pp.produtoId} className="px-4 py-3 flex items-center gap-4">
                 <div className="flex-1 text-sm">{getProdutoNome(pp.produtoId, pp)}</div>
-                <div className="w-32 text-right">{formatCurrency(pp.preco)}</div>
+                <div className="w-36">
+                  {disabled ? (
+                    <div className="text-right">{formatCurrency(pp.preco)}</div>
+                  ) : (
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={pp.preco}
+                      onChange={(e) => {
+                        const novo = parseFloat(e.target.value);
+                        onUpdatePreco(pp.produtoId, isNaN(novo) ? 0 : novo);
+                      }}
+                      className="text-right"
+                      aria-label={`Preço de ${getProdutoNome(pp.produtoId, pp)}`}
+                    />
+                  )}
+                </div>
                 <div className="w-20 flex justify-end">
                   {!disabled && (
                     <Button

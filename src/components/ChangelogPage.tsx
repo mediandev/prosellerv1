@@ -8,9 +8,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: 'V 1.34',
+    version: 'V 1.36',
     items: [
       'Iniciada migração do módulo Logística do LogCRM (transportadores, regiões, origens e cadastro manual de frete). Disponível apenas para usuários backoffice e oculto atrás de feature flag — peça acesso ao administrador para habilitar.',
+    ],
+  },
+  {
+    version: 'V 1.35',
+    items: [
+      'Configurações > Listas de Preço: o dropdown de produtos voltou a carregar a lista real (não mais a versão de exemplo). A consulta interna era estourada por tempo em bases com muitos itens.',
+      'Configurações > Listas de Preço: ao editar uma lista existente, agora o preço de cada produto já vinculado pode ser alterado diretamente no próprio campo (antes só era possível remover o item e adicionar de novo).',
+    ],
+  },
+  {
+    version: 'V 1.34',
+    items: [
+      'Configurações > Listas de Preço: salvar/editar uma lista agora persiste os produtos vinculados e as faixas de comissionamento (antes a lista era criada vazia mesmo com itens preenchidos).',
     ],
   },
   {
