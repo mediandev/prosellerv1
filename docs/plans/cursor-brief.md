@@ -27,6 +27,7 @@
 - [Tarefa 5 — INC-013 · Vincular 32 clientes da Valéria Montoz](#tarefa-5--inc-013--vincular-32-clientes-da-valéria-montoz)
 - [Tarefa 6 — Migration 115 · busca clientes (unaccent + CNPJ digits + grupo)](#tarefa-6--migration-115--busca-clientes-unaccent--cnpj-digits--grupo)
 - [Tarefa 7 — Cadastro do vendedor "Empresa - Venda Direta ES"](#tarefa-7--cadastro-do-vendedor-empresa---venda-direta-es)
+- [Tarefa 8 — Migration 119 · F-LOG-CRM R-LOG-1 (schema base Logística)](#tarefa-8--migration-119--f-log-crm-r-log-1-schema-base-logística)
 
 ---
 
@@ -728,6 +729,147 @@ Detectado via SQL (`cliente.codigo` ou `digits(cliente.cpf_cnpj)`):
 - [ ] `dados_vendedor.idtiny` preenchido em ambos.
 - [ ] Smoke: pedido teste com cada vendedor é aceito pelo Tiny.
 - [ ] Valentim ciente da limitação do import (não rodar antes do toggle de upsert).
+
+---
+
+## Tarefa 8 — Migration 119 · F-LOG-CRM R-LOG-1 (schema base Logística)
+
+**Feature associada:** F-LOG-CRM R-LOG-1 (`feat/log-crm-R-LOG-1`)
+**MCP:** Supabase MCP (projeto `xxoiqfraeolsqsmsheue`)
+**Tipos Zod espelhados:**
+- `packages/shared/types/transportador-logistica.ts`
+- `packages/shared/types/regiao-origem.ts`
+- `packages/shared/types/frete-logistica.ts`
+- `packages/shared/types/fatura-transportadora.ts`
+
+### Objetivo
+
+Aplicar a migration `119_frete_logistica_base.sql` (7 tabelas novas + 4 ENUMs + RLS + indexes) primeiro em **staging**, validar com smoke test, depois em **produção**. Como tudo é novo (zero consumidores), risco operacional é baixo, mas seguimos o rigor de Cenário C: 1 ambiente por vez + rollback explícito.
+
+### Pré-condições
+
+1. **Backup recente** confirmado nas últimas 24h no painel Supabase.
+2. **Feature flag `FEATURE_LOG_CRM` ausente** (não cadastrada) nos secrets das Edge Functions em ambos os ambientes — código novo nunca é chamado em produção até a flag entrar em sessão futura.
+3. **Branch mergeada (ou pelo menos commitada)**: arquivo `supabase/migrations/119_frete_logistica_base.sql` existe no git local.
+4. **Confirmar que ninguém populou as 7 tabelas manualmente** (deve ser impossível — tabelas nem existem ainda). Audit:
+   ```sql
+   SELECT table_name FROM information_schema.tables
+   WHERE table_schema='public'
+     AND table_name IN ('transportador_logistica','regiao_destino','origem_frete',
+                        'frete_logistica','frete_logistica_ocorrencia',
+                        'fatura_transportadora','fatura_transportadora_item');
+   -- Esperado: 0 linhas.
+   ```
+
+### Operação (cole no Cursor Agent)
+
+```
+Usando Supabase MCP (projeto xxoiqfraeolsqsmsheue), aplique a migration
+119_frete_logistica_base.sql no ambiente-alvo.
+
+Ambiente-alvo: [staging | production]  ← escolher explicitamente
+
+Etapas:
+1. Confirmar que as 7 tabelas-alvo NÃO existem (query acima retorna 0 linhas).
+2. mcp__supabase__apply_migration({
+     name: '119_frete_logistica_base',
+     query: <conteúdo de supabase/migrations/119_frete_logistica_base.sql>
+   })
+3. Rodar o smoke (SQL abaixo) — esperar 7 linhas em tabelas + 4 linhas em tipos.
+4. Confirmar que RLS está habilitada nas 7 tabelas com pelo menos 1 policy SELECT.
+5. Reportar: [aplicada | falhou com <erro>].
+
+NÃO cadastre FEATURE_LOG_CRM='true' nesta operação. Flag entra em sessão
+separada, depois do deploy das 4 Edge Functions via Supabase CLI.
+```
+
+### Smoke test pós-aplicação
+
+```sql
+-- 1) 7 tabelas criadas
+SELECT table_name FROM information_schema.tables
+WHERE table_schema='public'
+  AND table_name IN ('transportador_logistica','regiao_destino','origem_frete',
+                     'frete_logistica','frete_logistica_ocorrencia',
+                     'fatura_transportadora','fatura_transportadora_item')
+ORDER BY table_name;
+-- Esperado: 7 linhas.
+
+-- 2) 4 ENUMs criados
+SELECT typname FROM pg_type
+WHERE typname IN ('status_entrega_frete','tipo_ocorrencia_ssw',
+                  'grupo_transportador','status_fatura_transportadora')
+ORDER BY typname;
+-- Esperado: 4 linhas.
+
+-- 3) RLS habilitada em todas
+SELECT tablename, rowsecurity FROM pg_tables
+WHERE schemaname='public'
+  AND tablename IN ('transportador_logistica','regiao_destino','origem_frete',
+                    'frete_logistica','frete_logistica_ocorrencia',
+                    'fatura_transportadora','fatura_transportadora_item')
+ORDER BY tablename;
+-- Esperado: 7 linhas, rowsecurity=true.
+
+-- 4) Pelo menos 1 policy SELECT por tabela
+SELECT tablename, policyname, cmd FROM pg_policies
+WHERE schemaname='public'
+  AND tablename IN ('transportador_logistica','regiao_destino','origem_frete',
+                    'frete_logistica','frete_logistica_ocorrencia',
+                    'fatura_transportadora','fatura_transportadora_item')
+ORDER BY tablename;
+-- Esperado: 7+ linhas (1 policy SELECT por tabela).
+
+-- 4b) Índices únicos parciais para idempotência do hook R-LOG-3
+SELECT indexname, indexdef FROM pg_indexes
+WHERE schemaname='public' AND tablename='frete_logistica'
+  AND indexname IN ('uq_frete_logistica_empresa_nfe','uq_frete_logistica_chave_acesso');
+-- Esperado: 2 linhas, ambas com "UNIQUE" e "WHERE" no indexdef.
+
+-- 5) Tabelas vazias
+SELECT 'transportador_logistica' tab, COUNT(*) FROM public.transportador_logistica
+UNION ALL SELECT 'regiao_destino', COUNT(*) FROM public.regiao_destino
+UNION ALL SELECT 'origem_frete', COUNT(*) FROM public.origem_frete
+UNION ALL SELECT 'frete_logistica', COUNT(*) FROM public.frete_logistica
+UNION ALL SELECT 'frete_logistica_ocorrencia', COUNT(*) FROM public.frete_logistica_ocorrencia
+UNION ALL SELECT 'fatura_transportadora', COUNT(*) FROM public.fatura_transportadora
+UNION ALL SELECT 'fatura_transportadora_item', COUNT(*) FROM public.fatura_transportadora_item;
+-- Esperado: todos count=0.
+```
+
+### Rollback (OBRIGATÓRIO — Cenário C)
+
+**Quando usar:**
+- Smoke test falhou.
+- Decisão de descartar F-LOG-CRM antes de qualquer outra operação.
+- Conflito de naming com tabelas existentes (esperado: 0; mas se acontecer, parar).
+
+```sql
+-- Ordem inversa de criação para respeitar FKs
+DROP TABLE IF EXISTS public.fatura_transportadora_item CASCADE;
+DROP TABLE IF EXISTS public.fatura_transportadora CASCADE;
+DROP TABLE IF EXISTS public.frete_logistica_ocorrencia CASCADE;
+DROP TABLE IF EXISTS public.frete_logistica CASCADE;
+DROP TABLE IF EXISTS public.origem_frete CASCADE;
+DROP TABLE IF EXISTS public.regiao_destino CASCADE;
+DROP TABLE IF EXISTS public.transportador_logistica CASCADE;
+
+DROP TYPE IF EXISTS public.status_fatura_transportadora;
+DROP TYPE IF EXISTS public.grupo_transportador;
+DROP TYPE IF EXISTS public.tipo_ocorrencia_ssw;
+DROP TYPE IF EXISTS public.status_entrega_frete;
+```
+
+Pós-rollback: confirmar smoke acima retorna **0 linhas** nas queries de tabelas/tipos. Reverter o commit da migration no git (`git revert <SHA>`).
+
+### Critério de aceite da Tarefa 8
+
+- [ ] Migration aplicada em **staging** sem erro.
+- [ ] Smoke 1–5 verdes em staging.
+- [ ] Migration aplicada em **produção** sem erro.
+- [ ] Smoke 1–5 verdes em produção.
+- [ ] `FEATURE_LOG_CRM` continua **ausente** nos secrets de ambos os ambientes.
+- [ ] `TODO.md §1` atualizado marcando "Migration 119 aplicada" com SHA do commit.
 
 ---
 
