@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.34',
+    items: [
+      'Iniciada migração do módulo Logística do LogCRM (transportadores, regiões, origens e cadastro manual de frete). Disponível apenas para usuários backoffice e oculto atrás de feature flag — peça acesso ao administrador para habilitar.',
+    ],
+  },
+  {
     version: 'V 1.33',
     items: [
       'Relatório de Comissões em PDF: o aviso "Saldo Anterior não calculado" volta a aparecer legível (antes saía com caracteres embaralhados quando o período anterior estava em aberto).',
