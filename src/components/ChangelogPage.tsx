@@ -8,6 +8,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.38',
+    items: [
+      'Logística > Torre de Controle: 5 cards de status (Em Trânsito, Reentrega, Agendados, Devoluções em Trânsito e Recusadas) com clique direto para o detalhe do frete.',
+      'Logística > Busca de Fretes: lista paginada com filtros por cliente, transportador, status, período de emissão e número da nota.',
+      'Logística > Detalhe do Frete: identificação, status, datas, valores, anexo de DACTE e comprovante (foto pela câmera ou arquivo) e área "Atualizações no Transportador" (timeline ainda vazia — integração SSW chega na próxima entrega).',
+      'Pedidos > Visualizar Pedido: bloco "Entrega" no detalhe do pedido mostrando o status atual do frete vinculado à NF, com link para o detalhe completo na Logística.',
+      'Logística > simplificação: abas "Regiões destino" e "Origens" foram removidas (estavam em branco por solicitação do Valentim em 21/05 — a origem vem da empresa de faturamento do pedido).',
+    ],
+  },
+  {
     version: 'V 1.37',
     items: [
       'Cadastro de cliente: "Tipo Pessoa" volta a ser salvo corretamente (antes ficava em branco ao reabrir o cliente, mesmo selecionado). Aplique a correção reabrindo cada cliente que apresenta o campo vazio e salvando novamente.',

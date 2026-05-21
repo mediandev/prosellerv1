@@ -156,7 +156,7 @@ function SidebarUserInfo({
   onOpenChangelog: () => void;
 }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.37";
+  const systemVersion = "V 1.38";
   const ultimaVersao = CHANGELOG[0];
   
   if (!usuario) return null;
@@ -978,6 +978,7 @@ function AppContent() {
               onVisualizarVenda={handleVisualizarVenda}
               onEditarVenda={handleEditarVenda}
               onIntegracaoERP={() => handlePageChange('tiny-erp')}
+              onAbrirLogistica={FEATURE_LOG_CRM_ENABLED ? () => handlePageChange('logistica') : undefined}
               period={salesPeriod}
               onPeriodChange={setSalesPeriod}
               customDateRange={salesCustomDateRange}
