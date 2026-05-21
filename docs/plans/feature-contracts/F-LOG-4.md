@@ -1,8 +1,10 @@
 # F-LOG-4 · Integração SSW Tracking — Edge Function + ocorrências
 
-**Risco:** **D** · **Branch:** `feat/log-crm-R-LOG-4` (futura) · **CI alvo:** N3 · **Depende de:** F-LOG-1 + F-LOG-2.
+**Risco:** **D** · **Branch:** `feat/log-crm-R-LOG-4` (futura) · **CI alvo:** N3 · **Depende de:** F-LOG-1 + F-LOG-2 (ambas em produção a partir de V 1.38).
 
-> **Esqueleto v2 (2026-05-20).** Classe D mantida porque toca produção + integração externa, mas significativamente simplificada após validação direta com SSW: API é pública, sem auth, rate limit 20 req/s.
+> **Esqueleto v3 (2026-05-21).** Classe D mantida porque toca produção + integração externa, mas:
+>  - API SSW pública (sem auth, sem ADR-006), rate limit 20 req/s.
+>  - **R-LOG-2 (V 1.38) já entregou a UI da timeline** (`FreteOcorrenciaTimeline`) com placeholder quando `frete_logistica_ocorrencia` está vazia. Esta onda precisa apenas popular a tabela — não há mais trabalho de frontend.
 
 ## Objetivo
 

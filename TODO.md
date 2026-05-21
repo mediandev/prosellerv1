@@ -3,15 +3,29 @@
 > Estado vivo do projeto. Único arquivo de controle, junto com `git log`.
 > Atualizar ao final de cada sessão.
 
-**Última atualização:** 2026-05-21 (sessão — F-LOG-CRM R-LOG-1 deployada em produção com flag ligada + smoke E2E verde)
+**Última atualização:** 2026-05-21 (sessão — F-LOG-CRM R-LOG-2 implementada na branch `feat/log-crm-R-LOG-2`, V 1.38, aguardando push/deploy)
 
 ---
 
 ## 1. Em andamento
 
-**F-LOG-CRM · Migração módulo Logis (LogCRM Bubble → ProSeller V1) — R-LOG-1 EM PRODUÇÃO desde 2026-05-21, aguardando feedback do Valentim**
+**F-LOG-CRM · Migração módulo Logis (LogCRM Bubble → ProSeller V1) — R-LOG-2 IMPLEMENTADA (branch `feat/log-crm-R-LOG-2`, V 1.38), aguardando push/deploy. R-LOG-1 EM PRODUÇÃO desde 2026-05-21.**
 
 Branch R-LOG-1 mergeada em main. Plano completo em 8 ondas: ver `docs/wiki/context/F-LOG-CRM.md` e `docs/plans/feature-contracts/F-LOG-{1..8}.md`.
+
+R-LOG-2 entregue nesta sessão (2026-05-21):
+- ✅ Feature Contract detalhado em `docs/plans/feature-contracts/F-LOG-2.md` (12 CAs).
+- ✅ Edge Function `frete-logistica-v1` estendida com 2 actions (`list_by_status`, `get_with_ocorrencias`) + 7 filtros + paginação (hard cap 100 — lição INC-016). Helpers puros em `supabase/functions/_shared/frete-logistica-helpers.ts`.
+- ✅ 3 wrappers HTTP novos em `src/services/logisticaService.ts` (`listFretes`, `listFretesByStatus`, `getFreteWithOcorrencias`).
+- ✅ 6 componentes React novos: `LogisticaDashboardPage`, `LogisticaBuscaPage`, `FreteDetalhePage`, `FreteOcorrenciaTimeline`, `FreteStatusBadge`, `FreteResumoCard`.
+- ✅ Singleton `src/services/supabase.ts` para Storage upload (sem refatorar fetchers existentes).
+- ✅ `LogisticaPage` atualizada: abas finais Dashboard (default) / Busca / Transportadores / Novo Frete. Abas "Regiões destino" e "Origens" removidas (decisão Valentim 2026-05-21 — tabelas permanecem no banco).
+- ✅ `SalesPage` recebe bloco "Entrega" (`FreteResumoCard`) no Diálogo "Detalhes da Venda" quando NFe foi emitida.
+- ✅ Bump V 1.37 → V 1.38 + 5 bullets no `ChangelogPage`.
+- ✅ Testes: 2 unit (`logistica-dashboard.smoke.test.tsx`, `frete-detalhe-timeline.smoke.test.tsx`) + 1 edge (`frete-logistica-v1-list-filters.test.ts` cobrindo cap 100 + buckets + diasEmTransito).
+- ✅ Wiki atualizada (`log.md`, `modules/logistica.md`, `context/F-LOG-CRM.md`).
+- ⏳ **Pendente humano:** abrir PR + deploy de `frete-logistica-v1` redeployada via `npx supabase functions deploy frete-logistica-v1 --project-ref xxoiqfraeolsqsmsheue` (local).
+- ⏳ **Pendente humano:** criar bucket Supabase Storage `logistica-comprovantes` via Cursor MCP — brief em `cursor-brief.md` Tarefa 9. UI já degrada graciosamente sem ele.
 
 R-LOG-1 entregue e deployado:
 - ✅ Migration 119 aplicada em prod via Cursor MCP `apply_migration` (2026-05-21, V 1.36).
@@ -299,6 +313,32 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 ---
 
 ## 5. Bugs / incidentes
+
+🔴 INC-018 · 2026-05-21 · Permissões de usuário não persistem edições.
+Reportado por Valentim na call de 2026-05-21 (15:15 BRT, 26 min): "Eu criei
+[um usuário] já com algumas permissões a menos. E aí depois eu vi que ele
+veio com tudo. Não consegui tirar suas permissões aqui."
+- Sintoma: ao editar um usuário existente e remover algumas permissões,
+  ao salvar e reabrir o cadastro, todas as permissões voltam (ou estavam
+  desde a criação). Sem evidência ainda de payload — Valentim só viu via UI.
+- Hipóteses: (a) `update-user-v2` ignora subset do array `permissoes` no
+  PATCH/PUT (família INC-015 — Edge Function só salvando master); (b)
+  tabela de junção (ex.: `user_permissoes` ou `ref_user_role`) não sofre
+  DELETE+INSERT consistente; (c) frontend não envia o array de permissões
+  no payload de edição.
+- Prioridade: **pré-1ºJun.** Cântico vai 100% no ProSeller em 1ºJun e
+  permissões finas são bloqueador operacional.
+- Próximos passos para a sessão que pegar:
+  1. Reproduzir em prod com `lucas.carmo@flowcode.cc` editando um usuário
+     teste — capturar payload PUT no DevTools.
+  2. Conferir `supabase/functions/update-user-v2/index.ts` se existe (ou
+     o equivalente `users-v2` PUT) e como mexe em `user_permissoes`.
+  3. Auditar tabela de papéis/permissões (`ref_user_role`,
+     `user_permissoes`) para entender o modelo.
+  4. Aplicar fix + smoke E2E + bump systemVersion + entry no log.md.
+- NÃO mexer nesta onda R-LOG-2 (escopo isolado, classe diferente).
+
+---
 
 ✅ INC-017 · 2026-05-21 · Valentim reportou bug recorrente em prod (V 1.36):
 "Alguns dados do cadastro do cliente não ficam salvos. Tipo de pessoa

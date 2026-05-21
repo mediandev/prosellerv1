@@ -1,7 +1,7 @@
 # Módulo — Logística (F-LOG-CRM)
 
-> Estado: **R-LOG-1 em execução** (branch `feat/log-crm-R-LOG-1`). Escondido atrás de `FEATURE_LOG_CRM` (default OFF).
-> Última atualização: 2026-05-20.
+> Estado: **R-LOG-1 em produção desde 2026-05-21 com flag LIGADA** (V 1.36). **R-LOG-2 implementada** (branch `feat/log-crm-R-LOG-2`, V 1.38, aguardando push). `FEATURE_LOG_CRM=true` em Supabase + `VITE_FEATURE_LOG_CRM=true` em Netlify.
+> Última atualização: 2026-05-21.
 
 ## Propósito
 
@@ -38,13 +38,22 @@ RLS habilitada em todas as 7 tabelas (defesa em profundidade). Policy SELECT par
 Indexes em: `frete_logistica.nfe_numero`, `nfe_chave_acesso`, `empresa_id`, `status_entrega`, `pedido_venda_id`; `frete_logistica_ocorrencia.frete_id`; `fatura_transportadora_item.frete_id`; `transportador_logistica.cnpj`, `grupo`; `origem_frete.empresa_id`.
 
 ### Frontend
-- `src/components/logistica/LogisticaPage.tsx` — container; verifica flag; abas internas.
+- `src/components/logistica/LogisticaPage.tsx` — container; verifica flag; abas internas. **R-LOG-2: 4 abas finais** (Dashboard, Busca, Transportadores, Novo Frete; abas "Regiões destino" e "Origens" removidas por decisão Valentim 2026-05-21 — tabelas no banco permanecem).
 - `src/components/logistica/CadastroTransportadorPage.tsx`.
-- `src/components/logistica/CadastroRegiaoDestinoPage.tsx`.
-- `src/components/logistica/CadastroOrigemFretePage.tsx`.
+- `src/components/logistica/CadastroRegiaoDestinoPage.tsx` (componente continua, mas sem entry point na UI).
+- `src/components/logistica/CadastroOrigemFretePage.tsx` (idem).
 - `src/components/logistica/NovoFretePage.tsx` — form manual de frete.
-- `src/services/logisticaService.ts` — wrappers HTTP para as 4 Edge Functions.
-- `src/App.tsx` — Page `'logistica'` adicionada ao tipo Page + item de menu gated `backofficeOnly + FEATURE_LOG_CRM_ENABLED`. Não usa React Router (segue o padrão do projeto).
+- **R-LOG-2 componentes novos:**
+  - `LogisticaDashboardPage.tsx` — Torre de Controle (5 cards de status, sem indicadores financeiros — adiados para R-LOG-5).
+  - `LogisticaBuscaPage.tsx` — lista paginada com 7 filtros + paginação client-side.
+  - `FreteDetalhePage.tsx` — 7 seções + timeline + upload câmera/arquivo (DACTE + comprovante).
+  - `FreteOcorrenciaTimeline.tsx` — placeholder quando vazio; integração SSW chega em R-LOG-4.
+  - `FreteStatusBadge.tsx` — chip colorido reutilizável.
+  - `FreteResumoCard.tsx` — bloco "Entrega" inserido no Diálogo "Detalhes da Venda" (`SalesPage`).
+- `src/services/logisticaService.ts` — wrappers HTTP. **R-LOG-2: 3 funções novas** (`listFretes`, `listFretesByStatus`, `getFreteWithOcorrencias`).
+- `src/services/supabase.ts` — **R-LOG-2 novo singleton** do supabase-js (usado só para Storage upload em `logistica-comprovantes`).
+- `src/App.tsx` — Page `'logistica'` adicionada ao tipo Page + item de menu gated `backofficeOnly + FEATURE_LOG_CRM_ENABLED`. **R-LOG-2: passa `onAbrirLogistica` para `SalesPage`** quando flag está ligada.
+- `src/components/SalesPage.tsx` — **R-LOG-2: amplia `Sale.integracaoERP` com `notaFiscalNumero`** e renderiza `FreteResumoCard` dentro do Diálogo de visualização da venda quando a NFe foi emitida.
 
 ### Contratos
 Zod em `packages/shared/types/`:
@@ -55,10 +64,10 @@ Zod em `packages/shared/types/`:
 
 ## Features cobertas / planejadas
 
-- **R-LOG-1** (esta sessão) — Schema + cadastros + Novo Frete manual.
-- **R-LOG-2** (backlog) — Torre de Controle + Busca + Detalhe.
+- **R-LOG-1** (em produção, V 1.36) — Schema + cadastros + Novo Frete manual.
+- **R-LOG-2** (implementada, V 1.38, aguardando push/deploy) — Torre de Controle + Busca + Detalhe + bloco "Entrega" no detalhe do pedido + upload comprovante via câmera.
 - **R-LOG-3** (backlog, classe C) — Hook em `tiny-enviar-pedido-venda-v1` cria frete automático.
-- **R-LOG-4** (backlog, classe D) — Integração SSW Tracking.
+- **R-LOG-4** (backlog, classe D) — Integração SSW Tracking. *Timeline já está pronta na UI; precisa apenas popular `frete_logistica_ocorrencia`.*
 - **R-LOG-5** (backlog) — Indicadores financeiros do Dashboard.
 - **R-LOG-6** (backlog) — Faturas — CRUD manual.
 - **R-LOG-7** (backlog, classe D) — Parser PDF/EDI.
@@ -66,13 +75,13 @@ Zod em `packages/shared/types/`:
 
 ## Débitos conhecidos
 
-- **Migration 119 ainda não aplicada** em staging nem produção — brief em `cursor-brief.md` Tarefa 8.
-- **Edge Functions ainda não deployadas** — `npx supabase functions deploy <nome> --project-ref xxoiqfraeolsqsmsheue` para cada uma das 4.
-- **Sem integração SSW** — só estrutura (`frete_logistica_ocorrencia`). R-LOG-4.
+- **Bucket Supabase Storage `logistica-comprovantes`** ainda não criado — brief em `cursor-brief.md` Tarefa 9. UI degrada graciosamente (mensagem "Upload em breve").
+- **Edge Function `frete-logistica-v1` precisa de redeploy** pós-R-LOG-2 — `npx supabase functions deploy frete-logistica-v1 --project-ref xxoiqfraeolsqsmsheue` (local, ADR-005 proíbe via MCP).
+- **Sem integração SSW** — só estrutura (`frete_logistica_ocorrencia`). R-LOG-4. Timeline da UI já consome `OcorrenciaSSW` quando houver.
 - **Sem parser PDF/EDI** de faturas — só estrutura. R-LOG-7.
-- **Sem hook automático em pedidos** — frete manual apenas. R-LOG-3.
-- **RLS minimalista** — defense-in-depth com SELECT para authenticated, escritas via service_role. Granularidade fina (vendedor vê só sua empresa) fica para R-LOG-2/3.
-- **Sem testes E2E HTTP** das Edge Functions — smoke real só em staging (cursor-brief Tarefa 8). Unit/contract coberto via Vitest + Deno.
+- **Sem hook automático em pedidos** — frete manual apenas. R-LOG-3. Bloqueado pelo provisionamento de Supabase free de staging.
+- **RLS minimalista** — defense-in-depth com SELECT para authenticated, escritas via service_role. Granularidade fina (vendedor vê só sua empresa) fica para R-LOG-3+.
+- **Sem testes E2E HTTP** das Edge Functions — smoke real só em prod via Playwright. Unit/contract coberto via Vitest + Deno (10+ casos novos em R-LOG-2 para helpers de paginação e timeline).
 
 ## Decisões pendentes (vão virar ADRs)
 
