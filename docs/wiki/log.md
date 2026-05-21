@@ -4,6 +4,10 @@
 > Formato: `YYYY-MM-DD · [TAG] · descrição curta · SHA/PR/feature`.
 > Tags: `INGEST`, `RELEASE`, `BUGFIX`, `MIGRATION`, `ADR`, `RUNBOOK`, `VALIDATION`, `BLOCKED`, `MVP`.
 
+## 2026-05-21
+
+- 2026-05-21 · [RELEASE] · F-LOG-CRM R-LOG-1 deployada em PRODUÇÃO com flag LIGADA. Migration 119 aplicada via Cursor MCP `apply_migration` + 4 Edge Functions (transportador-logistica-v1, regiao-destino-v1, origem-frete-v1, frete-logistica-v1) deployadas via Supabase CLI local + `FEATURE_LOG_CRM=true` em Supabase Secrets + `VITE_FEATURE_LOG_CRM=true` em Netlify env (Production deploy `main@90dd9b6` 2026-05-21 14:51 BRT). Skip de `pg_dump` documentado em DECISIONS_LOG (DDL aditivo puro). Smoke E2E via Playwright em `proseller.app.br` autenticado como `lucas.carmo@flowcode.cc`: menu Logística visível para backoffice, criou 1 transportador (ATIVA TESTE), 1 região (MG-MATA), 1 origem (MG-JDF, empresa 8) e 1 frete (id=1, NFe 99999, R$100, status "Em Separação", JOINs verdes). Validação banco confirmou contagens 1/1/1/1 e payload completo. Próximas ondas R-LOG-2..8 entram conforme priorização com Valentim.
+
 ## 2026-05-20
 
 - 2026-05-20 · [INGEST] · F-LOG-CRM planejamento (8 ondas) + R-LOG-1 mergeada em main: schema base do módulo Logística (migration 119), 4 cadastros (transportador, região, origem, frete manual), 4 Edge Functions atrás de `FEATURE_LOG_CRM` (default OFF), V 1.36. PR #22. Context Pack em `wiki/context/F-LOG-CRM.md`; ADR-006..009 pendentes em `DECISIONS_LOG`. ADR-006 cancelada por validação direta com SSW (integração pública por chave NFe, sem auth — confirmado via `ssw.inf.br/ajuda/trackingdanfe.html` + curl real).

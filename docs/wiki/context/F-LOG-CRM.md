@@ -3,7 +3,7 @@
 > Memória sintetizada para próximo agente que retomar esta feature. Descartável após conclusão.
 > Limite v3.2: 150 linhas.
 
-**Estado atual (2026-05-20):** Onda **R-LOG-1 MERGEADA em main** (PR #22, merge commit `ad817aa`, V 1.36). Schema base + 4 cadastros + Novo Frete manual, tudo atrás de `FEATURE_LOG_CRM` (default OFF). Migration 119 e Edge Functions **não aplicadas em produção** — aguardando brief Tarefa 8 do `cursor-brief.md` para staging. **Próxima onda recomendada:** R-LOG-2 (Torre de Controle, classe B, sem bloqueador) ou R-LOG-4 (SSW, agora destravada — ver abaixo).
+**Estado atual (2026-05-21):** Onda **R-LOG-1 EM PRODUÇÃO COM FLAG LIGADA** desde 2026-05-21 (V 1.36). Migration 119 aplicada via Cursor MCP + 4 Edge Functions deployadas via Supabase CLI + flags `FEATURE_LOG_CRM=true` / `VITE_FEATURE_LOG_CRM=true`. Smoke E2E completo via Playwright em `proseller.app.br`: 1 transportador + 1 região + 1 origem + 1 frete criados como evidência (id=1 em cada). **Próxima onda recomendada:** R-LOG-2 (Torre de Controle + Busca + Detalhe, classe B, sem bloqueador — prompt pronto). R-LOG-3 espera projeto Supabase de staging antes de tocar `tiny-enviar-pedido-venda-v1`.
 
 ---
 

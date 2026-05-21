@@ -3,31 +3,44 @@
 > Estado vivo do projeto. Único arquivo de controle, junto com `git log`.
 > Atualizar ao final de cada sessão.
 
-**Última atualização:** 2026-05-20 (sessão — F-LOG-CRM planejamento + R-LOG-1 em execução)
+**Última atualização:** 2026-05-21 (sessão — F-LOG-CRM R-LOG-1 deployada em produção com flag ligada + smoke E2E verde)
 
 ---
 
 ## 1. Em andamento
 
-**F-LOG-CRM · Migração módulo Logis (LogCRM Bubble → ProSeller V1) — em planejamento + R-LOG-1 em execução**
+**F-LOG-CRM · Migração módulo Logis (LogCRM Bubble → ProSeller V1) — R-LOG-1 EM PRODUÇÃO desde 2026-05-21, aguardando feedback do Valentim**
 
-Branch: `feat/log-crm-R-LOG-1` · Classe: **B** (R-LOG-1) · CI alvo: **N1 + matriz**.
+Branch R-LOG-1 mergeada em main. Plano completo em 8 ondas: ver `docs/wiki/context/F-LOG-CRM.md` e `docs/plans/feature-contracts/F-LOG-{1..8}.md`.
 
-Plano completo em 8 ondas: ver `docs/wiki/context/F-LOG-CRM.md` e `docs/plans/feature-contracts/F-LOG-{1..8}.md`.
+R-LOG-1 entregue e deployado:
+- ✅ Migration 119 aplicada em prod via Cursor MCP `apply_migration` (2026-05-21, V 1.36).
+- ✅ 4 Edge Functions (transportador-logistica-v1, regiao-destino-v1, origem-frete-v1, frete-logistica-v1) deployadas via `npx supabase functions deploy --project-ref xxoiqfraeolsqsmsheue`.
+- ✅ Flags `FEATURE_LOG_CRM=true` (Supabase Secret) e `VITE_FEATURE_LOG_CRM=true` (Netlify env) ligadas em prod 2026-05-21.
+- ✅ Smoke E2E via Playwright autenticado `lucas.carmo@flowcode.cc` em `proseller.app.br`: criou 1 transportador (ATIVA TESTE), 1 região (MG-MATA), 1 origem (MG-JDF, empresa 8), 1 frete (id=1, NFe 99999, R$100, status "Em Separação"). JOINs verdes via MCP.
+- Resumo formal em `docs/wiki/features/F-LOG-CRM-R-LOG-1.md`.
 
-R-LOG-1 entrega (esta sessão):
-- 8 Feature Contracts (F-LOG-1 detalhado; F-LOG-2..8 esqueletos).
-- Migration 119 (`frete_logistica_base.sql`) — 7 tabelas + 4 ENUMs + RLS + indexes. **Não aplicada** — brief em `docs/plans/cursor-brief.md` Tarefa 8.
-- 4 schemas Zod novos (`transportador-logistica`, `regiao-origem`, `frete-logistica`, `fatura-transportadora`).
-- 4 Edge Functions atrás de `FEATURE_LOG_CRM` (CRUD direto via supabase-js — divergência consciente do padrão RPC).
-- UI Logística (5 componentes em `src/components/logistica/` + `logisticaService.ts`) + Page `'logistica'` em `App.tsx` `backofficeOnly` + flag.
-- Bump V 1.34.
-- Wiki: `log.md` INGEST, `modules/logistica.md` novo, `architecture.md` atualizado.
+Bloqueador para R-LOG-2 (Torre de Controle + Busca + Detalhe):
+- [ ] Feedback do Valentim sobre os cadastros (campos faltantes? nomenclatura?). R-LOG-2 pode rodar em paralelo — não bloqueia.
+- [ ] Prompt R-LOG-2 pronto na conversa de discovery; abrir sessão CLI nova quando for executar.
 
-Bloqueador para mover além de R-LOG-1:
-- [ ] Migration 119 aplicada em staging + smoke verde (via brief Tarefa 8 do `cursor-brief.md`).
-- [ ] ADR-006 (creds SSW), ADR-007 (parser PDF/EDI), ADR-008 (polling SSW), ADR-009 (fonte `valor_cotacao`) — discutir com Valentim antes de abrir R-LOG-4/7/8. **R-LOG-2 + R-LOG-3 não bloqueados por esses ADRs.**
-- [ ] Smoke E2E manual do fluxo "criar transportador → região → origem → frete manual" (documentado no Context Pack).
+Bloqueador para R-LOG-3 (hook auto-create frete pós Tiny):
+- [ ] R-LOG-2 mergeada (precisa Torre de Controle para usuário ver os fretes auto-criados).
+- [ ] Próxima migration C/D (R-LOG-3 toca `tiny-enviar-pedido-venda-v1` em prod) **exigirá staging Supabase** — compromisso documentado em DECISIONS_LOG 2026-05-20. Provisionar projeto Supabase free de staging antes de iniciar R-LOG-3.
+
+Bloqueadores R-LOG-4/7 (com Valentim):
+- [x] ~~ADR-006~~ (creds SSW) — CANCELADA. Integração pública por chave NFe.
+- [ ] **ADR-008** (polling SSW: on-demand vs cron) — pendente. Bloqueia R-LOG-4.
+- [ ] **ADR-007** (parser PDF/EDI próprio vs SaaS vs WS SSW para Embarcadores) — pendente. Bloqueia R-LOG-7.
+- [ ] **ADR-009** — mantida manual no MVP (resolvida).
+- [ ] **1 chave NFe ativa** (44 dígitos) pedida ao Valentim para finalizar schema Zod `OcorrenciaSSW`. Sem urgência.
+- [ ] **2-3 PDFs de fatura ATIVA/BRASSPRESS** pedidos ao Valentim. Sem urgência.
+
+Smoke registros teste em prod (não apagar, deixar como evidência do deploy de 2026-05-21):
+- transportador `id=1` ATIVA DISTR E LOGISTICA LTDA (TESTE)
+- regiao_destino `id=1` MG-MATA (TESTE)
+- origem_frete `id=1` MG-JDF (TESTE, empresa 8)
+- frete_logistica `id=1` NFe 99999, R$100, status "Em Separação"
 
 ---
 
