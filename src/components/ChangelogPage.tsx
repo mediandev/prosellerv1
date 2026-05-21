@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.37',
+    items: [
+      'Cadastro de cliente: "Tipo Pessoa" volta a ser salvo corretamente (antes ficava em branco ao reabrir o cliente, mesmo selecionado). Aplique a correção reabrindo cada cliente que apresenta o campo vazio e salvando novamente.',
+      'Cadastro de cliente: Desconto Padrão, Desconto Financeiro e Pedido Mínimo deixam de ser zerados automaticamente quando você não toca no campo durante a edição (antes o salvar substituía o valor existente por zero).',
+    ],
+  },
+  {
     version: 'V 1.36',
     items: [
       'Iniciada migração do módulo Logística do LogCRM (transportadores, regiões, origens e cadastro manual de frete). Disponível apenas para usuários backoffice e oculto atrás de feature flag — peça acesso ao administrador para habilitar.',

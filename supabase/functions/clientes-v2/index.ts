@@ -117,6 +117,40 @@ function extractCondicaoPagamentoId(cond: any): string | null {
   return id && id !== 'undefined' ? id : null
 }
 
+// INC-017: o frontend envia ate 3 campos apontando para tipo de pessoa
+// (refTipoPessoaId / ref_tipo_pessoa_id / tipoPessoa). Antes prioritavamos
+// `tipoPessoa`, que vem como string humana ("Pessoa Juridica") e quebrava em
+// Number(...) = NaN -> persistia null no banco. Agora: ID canonico primeiro;
+// `tipoPessoa` string SOMENTE se for numerica ou objeto com id.
+function extractRefTipoPessoaId(body: Record<string, any>): number | null {
+  const candidates: unknown[] = [
+    body.refTipoPessoaId,
+    body.tipoPessoaId,
+    body.ref_tipo_pessoa_id_FK,
+    body.ref_tipo_pessoa_id,
+  ]
+  for (const c of candidates) {
+    if (c == null || c === '') continue
+    const n = Number(c)
+    if (!Number.isNaN(n) && n > 0) return n
+  }
+
+  const tp = body.tipoPessoa
+  if (tp == null || tp === '') return null
+  if (typeof tp === 'number' && tp > 0) return tp
+  if (typeof tp === 'object') {
+    const fromObj = Number((tp as any).ref_tipo_pessoa_id ?? (tp as any).id ?? (tp as any).tipoPessoaId ?? NaN)
+    return !Number.isNaN(fromObj) && fromObj > 0 ? fromObj : null
+  }
+  if (typeof tp === 'string') {
+    const trimmed = tp.trim()
+    if (trimmed === '') return null
+    const n = Number(trimmed)
+    return !Number.isNaN(n) && n > 0 ? n : null
+  }
+  return null
+}
+
 function hasOwn(obj: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key)
 }
@@ -344,21 +378,8 @@ serve(async (req) => {
         }
       }
 
-      // Processar tipoPessoa - pode vir como objeto com ref_tipo_pessoa_id, ID inteiro ou string
-      let refTipoPessoaId: number | null = null
-      if (body.tipoPessoa) {
-        if (typeof body.tipoPessoa === 'object') {
-          // Objeto com ref_tipo_pessoa_id ou id
-          refTipoPessoaId = Number(body.tipoPessoa.ref_tipo_pessoa_id ?? body.tipoPessoa.id ?? body.tipoPessoa.tipoPessoaId ?? null)
-        } else if (typeof body.tipoPessoa === 'string' && body.tipoPessoa.trim() !== '') {
-          // Se for string nao vazia, converter para numero
-          refTipoPessoaId = Number(body.tipoPessoa)
-        } else if (typeof body.tipoPessoa === 'number') {
-          refTipoPessoaId = body.tipoPessoa
-        }
-      } else if (body.tipoPessoaId || body.ref_tipo_pessoa_id_FK || body.ref_tipo_pessoa_id) {
-        refTipoPessoaId = Number(body.tipoPessoaId ?? body.ref_tipo_pessoa_id_FK ?? body.ref_tipo_pessoa_id)
-      }
+      // INC-017: prioriza ID canonico; string humana ("Pessoa Juridica") nao gera NaN.
+      const refTipoPessoaId = extractRefTipoPessoaId(body)
 
       const cpfCnpj = body.cpfCnpj ?? body.cpf_cnpj ?? null
 
@@ -533,21 +554,8 @@ serve(async (req) => {
         empresaFaturamentoId = Number(body.empresaFaturamentoId)
       }
 
-      // Processar tipoPessoa - pode vir como objeto com ref_tipo_pessoa_id, ID inteiro ou string
-      let refTipoPessoaId: number | null = null
-      if (body.tipoPessoa) {
-        if (typeof body.tipoPessoa === 'object') {
-          // Objeto com ref_tipo_pessoa_id ou id
-          refTipoPessoaId = Number(body.tipoPessoa.ref_tipo_pessoa_id ?? body.tipoPessoa.id ?? body.tipoPessoa.tipoPessoaId ?? null)
-        } else if (typeof body.tipoPessoa === 'string' && body.tipoPessoa.trim() !== '') {
-          // Se for string nao vazia, converter para numero
-          refTipoPessoaId = Number(body.tipoPessoa)
-        } else if (typeof body.tipoPessoa === 'number') {
-          refTipoPessoaId = body.tipoPessoa
-        }
-      } else if (body.tipoPessoaId || body.ref_tipo_pessoa_id_FK || body.ref_tipo_pessoa_id) {
-        refTipoPessoaId = Number(body.tipoPessoaId ?? body.ref_tipo_pessoa_id_FK ?? body.ref_tipo_pessoa_id)
-      }
+      // INC-017: prioriza ID canonico; string humana ("Pessoa Juridica") nao gera NaN.
+      const refTipoPessoaId = extractRefTipoPessoaId(body)
 
       // Log para debug
       console.log('[CLIENTES-V2] Processando campos:', {

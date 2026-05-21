@@ -52,15 +52,18 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
   const [mostrarDialogRejeitar, setMostrarDialogRejeitar] = useState(false);
   const [motivoRejeicao, setMotivoRejeicao] = useState('');
   const [formData, setFormData] = useState<Partial<Cliente>>({
+    // INC-017: defaults numericos eram enviados ao backend como 0 e zeravam
+    // valores existentes quando o usuario nao tocava no campo. undefined
+    // significa "nao mexer" (RPC faz COALESCE com valor atual).
     tipoPessoa: 'Pessoa Jurídica',
     situacao: 'ATIVO',
     enderecoEntregaDiferente: false,
     pessoasContato: [],
     vendedorAtribuido: undefined,
-    descontoPadrao: 0,
-    descontoFinanceiro: 0,
+    descontoPadrao: undefined,
+    descontoFinanceiro: undefined,
     condicoesPagamentoAssociadas: [],
-    pedidoMinimo: 0,
+    pedidoMinimo: undefined,
     empresaFaturamento: 0,
     requisitosLogisticos: {
       entregaAgendada: false,

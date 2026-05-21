@@ -300,6 +300,56 @@ Artefatos produzidos: `docs/specs/SPEC.md`, `docs/contracts/CONTRACTS.md`, `pack
 
 ## 5. Bugs / incidentes
 
+✅ INC-017 · 2026-05-21 · Valentim reportou bug recorrente em prod (V 1.36):
+"Alguns dados do cadastro do cliente não ficam salvos. Tipo de pessoa
+(pessoa jurídica) e desconto padrão." Screenshot mostrava cliente
+`E.R DA SILVA COSMETICOS` (cliente_id 7364, CNPJ 28.745.999/0001-17)
+com campo "Tipo Pessoa" vazio em prod, apesar de PJ óbvio.
+- Reprodução: smoke E2E em prod via Playwright como
+  `lucas.carmo@flowcode.cc`. Banco confirmou `ref_tipo_pessoa_id_FK=null`
+  para cliente_id 7364 + carteira pesada (cliente real, ativo).
+  Payload PUT capturado mandava 3 campos canônicos apontando para PJ:
+  `tipoPessoa: "Pessoa Jurídica"`, `refTipoPessoaId: 2`,
+  `ref_tipo_pessoa_id: 2`. Mesmo assim banco persistia null.
+- Causa raiz: `supabase/functions/clientes-v2/index.ts` PUT (linhas
+  ~537-550) e POST (~347-361) liam `body.tipoPessoa` PRIMEIRO. Como
+  o frontend manda `tipoPessoa: "Pessoa Jurídica"` (string humana),
+  `Number("Pessoa Jurídica") = NaN`, que serializa como `null` no
+  JSON do RPC. Branch `else if` que olhava `refTipoPessoaId` /
+  `ref_tipo_pessoa_id` nunca rodava (porque `body.tipoPessoa` é
+  truthy). RPC `update_cliente_v2` faz `CASE WHEN p_ref_tipo_pessoa_id_fk
+  IS NOT NULL THEN ... ELSE c."ref_tipo_pessoa_id_FK" END` — recebia
+  null, mantinha valor anterior (que também era null). Mesma família
+  de INC-008 (vendedoresAtribuidos não normalizado) e INC-009
+  (`p_desconto` não chegava ao RPC).
+- Causa raiz secundária: `src/components/CustomerFormPage.tsx` linha
+  ~60 inicializava `descontoPadrao: 0`, `descontoFinanceiro: 0`,
+  `pedidoMinimo: 0`. Quando o usuário não tocava nesses campos, o
+  PUT enviava `0` e a RPC fazia `COALESCE(0, c.desconto) = 0`,
+  sobrescrevendo o valor existente. INC-009 (V 1.28) só corrigiu
+  o problema de `p_desconto` chegar ao RPC; este residual aparecia
+  quando o user editava outro campo e salvava.
+- Resolução: novo helper `extractRefTipoPessoaId(body)` em
+  `clientes-v2/index.ts` que prioriza IDs canônicos
+  (`refTipoPessoaId`, `tipoPessoaId`, `ref_tipo_pessoa_id_FK`,
+  `ref_tipo_pessoa_id`) e só aceita `tipoPessoa` string se for
+  numérica. Aplicado em POST e PUT. Frontend: defaults numéricos
+  trocados para `undefined` (RPC mantém valor anterior via
+  `COALESCE`). V 1.37.
+- Status: edge function `clientes-v2` deployada em prod (`npx
+  supabase functions deploy clientes-v2 --project-ref
+  xxoiqfraeolsqsmsheue`). Smoke E2E pós-fix verde: PUT no cliente
+  7364 com mesmo payload (string + ID) agora persiste
+  `ref_tipo_pessoa_id_FK=2` no banco. `updated_at` 19:34:04 (V 1.37
+  ativo). Cliente 7364 restaurado (era o quebrado). Frontend V 1.37
+  ainda pendente deploy Netlify (Eduardo).
+- Lição: padrão "edge function lê string humana primeiro" tem
+  precedente (INC-008, INC-009). Auditar todos os `*-v2` PUT/POST
+  que aceitam `tipoXyz` como string + `tipoXyzId` como número —
+  procurar `if (body.tipoXxx)` que entra primeiro. Considerar
+  contrato Zod no `packages/shared/types/` para clientes-v2
+  (próxima onda de débito C-1).
+
 ✅ INC-016 · 2026-05-20 · Após o fix do INC-015 em prod (V 1.34), Valentim
 reportou 3 novos sintomas no fluxo de Listas de Preço: dropdown de
 produtos vazio ao criar nova lista, mesmo problema ao editar a
