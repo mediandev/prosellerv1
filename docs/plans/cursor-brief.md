@@ -28,6 +28,7 @@
 - [Tarefa 6 — Migration 115 · busca clientes (unaccent + CNPJ digits + grupo)](#tarefa-6--migration-115--busca-clientes-unaccent--cnpj-digits--grupo)
 - [Tarefa 7 — Cadastro do vendedor "Empresa - Venda Direta ES"](#tarefa-7--cadastro-do-vendedor-empresa---venda-direta-es)
 - [Tarefa 8 — F-LOG-CRM R-LOG-1 (migration 119 + 4 Edge Functions, **PROD ONLY** com rede reforçada)](#tarefa-8--f-log-crm-r-log-1-migration-119--4-edge-functions-prod-only-com-rede-reforçada)
+- [Tarefa 9 — F-LOG-CRM R-LOG-2 · Bucket Storage `logistica-comprovantes`](#tarefa-9--f-log-crm-r-log-2--bucket-storage-logistica-comprovantes)
 
 ---
 
@@ -1001,6 +1002,84 @@ DROP TYPE IF EXISTS public.status_entrega_frete;
 - [ ] Janela de observação 7 dias com flag OFF agendada em `TODO.md §1` (data alvo registrada).
 - [ ] `TODO.md §1` atualizado: migration 119 aplicada + 4 funções deployadas, com SHA + timestamp.
 - [ ] Wiki atualizada: `docs/wiki/log.md` recebeu entrada `YYYY-MM-DD · [RELEASE] · F-LOG-CRM R-LOG-1 prod (migration 119 + 4 EF, flag OFF) · <SHA>`.
+
+---
+
+## Tarefa 9 — F-LOG-CRM R-LOG-2 · Bucket Storage `logistica-comprovantes`
+
+**Feature associada:** F-LOG-CRM R-LOG-2 (Torre de Controle + Detalhe do frete).
+**MCP:** Supabase MCP (projeto `xxoiqfraeolsqsmsheue`) — operação leve em Storage (sem DDL, sem deploy).
+**Cenário:** A/B (operação reversível: bucket vazio = `DELETE` simples; sem dados de produção dependentes ainda).
+
+### Operação
+
+Criar bucket Storage **privado** chamado `logistica-comprovantes` e abrir policies para usuários autenticados (`role = authenticated`) lerem e escreverem em qualquer caminho. O frontend (`FreteDetalhePage`) faz upload em `frete-<freteId>/<campo>-<timestamp>.<ext>` e gera signed URL de 1 ano para preview.
+
+### Pré-condições
+
+- [ ] R-LOG-2 mergeada em `main` (esta sessão).
+- [ ] Confirmar via MCP que o bucket ainda não existe: `select * from storage.buckets where id = 'logistica-comprovantes';` → 0 linhas.
+
+### Comandos no Cursor (MCP Supabase)
+
+```sql
+-- 1) Criar bucket privado.
+insert into storage.buckets (id, name, public)
+values ('logistica-comprovantes', 'logistica-comprovantes', false)
+on conflict (id) do nothing;
+
+-- 2) Policy de upload (INSERT) para autenticados.
+create policy "logistica_comprovantes_authenticated_insert"
+  on storage.objects for insert
+  to authenticated
+  with check (bucket_id = 'logistica-comprovantes');
+
+-- 3) Policy de leitura (SELECT) para autenticados.
+create policy "logistica_comprovantes_authenticated_select"
+  on storage.objects for select
+  to authenticated
+  using (bucket_id = 'logistica-comprovantes');
+
+-- 4) Policy de atualização (UPDATE) — opcional, para reupload do mesmo path.
+create policy "logistica_comprovantes_authenticated_update"
+  on storage.objects for update
+  to authenticated
+  using (bucket_id = 'logistica-comprovantes')
+  with check (bucket_id = 'logistica-comprovantes');
+
+-- 5) Policy de deleção (DELETE) — opcional, para limpeza eventual.
+create policy "logistica_comprovantes_authenticated_delete"
+  on storage.objects for delete
+  to authenticated
+  using (bucket_id = 'logistica-comprovantes');
+```
+
+> Operações 2–5 podem ser feitas por `execute_sql` (não são DDL de schema, são DML + policy em `storage`). `apply_migration` também aceita. Não há tabela nova.
+
+### Smoke pós-criação
+
+- [ ] `select id, name, public from storage.buckets where id = 'logistica-comprovantes';` → 1 linha, `public = false`.
+- [ ] `select policyname, cmd from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname like 'logistica_comprovantes_%';` → 4 linhas (insert/select/update/delete).
+- [ ] Em `proseller.app.br` (usuário backoffice): abrir Logística > Detalhe de um frete > Editar > Tirar foto / Anexar; confirmar que aparece "Frete atualizado com sucesso" + link de "Ver comprovante" funcional.
+
+### Rollback (Cenário A — reversível por DELETE simples)
+
+```sql
+-- Apaga policies.
+drop policy if exists "logistica_comprovantes_authenticated_insert" on storage.objects;
+drop policy if exists "logistica_comprovantes_authenticated_select" on storage.objects;
+drop policy if exists "logistica_comprovantes_authenticated_update" on storage.objects;
+drop policy if exists "logistica_comprovantes_authenticated_delete" on storage.objects;
+
+-- Apaga bucket (DEVE estar vazio; se houver arquivos, deletar antes via Storage UI).
+delete from storage.buckets where id = 'logistica-comprovantes';
+```
+
+### Notas
+
+- A UI degrada graciosamente se o bucket não existir: mensagem "Bucket `logistica-comprovantes` ainda não foi criado neste projeto. Upload em breve." aparece no `FreteDetalhePage`.
+- Se policies forem mais restritivas no futuro (ex.: cada vendedor só vê fotos da própria empresa), criar nova migration; a estratégia atual é "todos autenticados" para acelerar Cântico em 1º/junho.
+- Status de execução: registrar no `TODO.md §1` quando concluído (`bucket criado em <SHA>`).
 
 ---
 
