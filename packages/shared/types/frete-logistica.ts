@@ -119,3 +119,47 @@ export type FreteLogisticaCreate = z.infer<typeof FreteLogisticaCreate>;
 
 export const FreteLogisticaUpdate = FreteLogisticaCreate.partial();
 export type FreteLogisticaUpdate = z.infer<typeof FreteLogisticaUpdate>;
+
+// ---------- R-LOG-2: filtros da Busca + retorno enriquecido ----------
+
+/**
+ * Filtros aceitos por `frete-logistica-v1?action=list`.
+ * Todos os campos são opcionais; `limit` é hard-capado em 100 no backend (lição INC-016).
+ */
+export interface ListFretesFilters {
+  empresaId?: number;
+  clienteId?: number;
+  transportadorId?: number;
+  /** CSV de status na chamada HTTP; aqui aceita array. */
+  statusEntrega?: string[];
+  /** Data de emissão >= dataInicio (YYYY-MM-DD). */
+  dataInicio?: string;
+  /** Data de emissão <= dataFim (YYYY-MM-DD). */
+  dataFim?: string;
+  /** Substring LIKE no número da NFe (cast para texto). */
+  nfeNumero?: string;
+  /** 1..100 (default 20). */
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Frete enriquecido com joins leves usados em Dashboard, Busca e Detalhe.
+ * O backend já calcula `diasEmTransito` (data_saida → hoje quando data_entrega é NULL).
+ */
+export type FreteLogisticaEnriched = FreteLogistica & {
+  clienteNome: string | null;
+  transportadorRazaoSocial: string | null;
+  empresaNome: string | null;
+  diasEmTransito: number | null;
+};
+
+/** Buckets da Torre de Controle (`action=list_by_status`). */
+export type DashboardBucketLabel =
+  | "Em Trânsito"
+  | "Reentrega"
+  | "Agendados"
+  | "Devoluções em Trânsito"
+  | "Recusadas";
+
+export type DashboardBuckets = Record<DashboardBucketLabel, FreteLogisticaEnriched[]>;
