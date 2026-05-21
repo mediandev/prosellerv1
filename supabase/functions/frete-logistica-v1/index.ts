@@ -1,11 +1,20 @@
 // Edge Function: frete-logistica-v1
-// F-LOG-CRM R-LOG-1 · CRUD do cabeçalho do frete (sem ocorrências, sem hook Tiny).
+// F-LOG-CRM R-LOG-1 · CRUD do cabeçalho do frete.
+// F-LOG-CRM R-LOG-2 · Estende GET com 7 filtros, paginação (hard cap 100),
+// action=list_by_status (5 buckets) e action=get_with_ocorrencias.
 // Gated por FEATURE_LOG_CRM. Backoffice + vendedor podem criar (vendedor restrito
 // à própria empresa); deleção é backoffice-only. Soft-delete via deleted_at.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isLogCrmEnabledFromEnv } from '../_shared/log-crm-feature-flag.ts'
+import {
+  csvParam,
+  clampLimit,
+  clampOffset,
+  DASHBOARD_BUCKETS,
+  diasEmTransito,
+} from '../_shared/frete-logistica-helpers.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -72,6 +81,38 @@ function formatFrete(row: Record<string, unknown>) {
   }
 }
 
+// Enriquece o frete com joins leves (cliente.nome, transportador.razao_social, dias_em_transito).
+// Usado em list, list_by_status e get_with_ocorrencias.
+type EnrichedFrete = ReturnType<typeof formatFrete> & {
+  clienteNome: string | null
+  transportadorRazaoSocial: string | null
+  empresaNome: string | null
+  diasEmTransito: number | null
+}
+
+function enrichFrete(row: Record<string, unknown>): EnrichedFrete {
+  const base = formatFrete(row)
+  const cliente = row.cliente as Record<string, unknown> | null | undefined
+  const transportador = row.transportador as Record<string, unknown> | null | undefined
+  const empresa = row.empresa as Record<string, unknown> | null | undefined
+  const empresaNome = empresa
+    ? (typeof empresa.nome_fantasia === 'string' && empresa.nome_fantasia)
+      ? empresa.nome_fantasia
+      : (typeof empresa.razao_social === 'string' ? empresa.razao_social : null)
+    : null
+  return {
+    ...base,
+    clienteNome: cliente && typeof cliente.nome === 'string' ? cliente.nome : null,
+    transportadorRazaoSocial: transportador && typeof transportador.razao_social === 'string' ? transportador.razao_social : null,
+    empresaNome,
+    diasEmTransito: diasEmTransito(base.dataSaida, base.dataEntrega),
+  }
+}
+
+// FK joins via Postgrest. `cliente_id` referencia `cliente(cliente_id)`, `transportador_id`
+// referencia `transportador_logistica(id)`, `empresa_id` referencia `ref_empresas_subsidiarias(id)`.
+const SELECT_WITH_JOINS = '*, cliente:cliente_id(cliente_id, nome), transportador:transportador_id(id, razao_social), empresa:empresa_id(id, razao_social, nome_fantasia)'
+
 function bodyToInsert(body: Record<string, unknown>, userId: string) {
   return {
     pedido_venda_id: body.pedidoVendaId ?? null,
@@ -103,6 +144,59 @@ function bodyToInsert(body: Record<string, unknown>, userId: string) {
   }
 }
 
+function formatOcorrencia(row: Record<string, unknown>) {
+  return {
+    id: String(row.id),
+    freteId: String(row.frete_id),
+    codigoSsw: row.codigo_ssw ?? null,
+    descricaoOcorrencia: row.descricao_ocorrencia ?? null,
+    tipo: row.tipo ?? null,
+    dataHora: row.data_hora ? new Date(row.data_hora as string).toISOString() : null,
+    dominio: row.dominio ?? null,
+    filial: row.filial ?? null,
+    cidade: row.cidade ?? null,
+    uf: row.uf ?? null,
+    rawPayload: row.raw_payload ?? null,
+  }
+}
+
+async function handleListByStatus(supabase: ReturnType<typeof createClient>) {
+  const buckets: Record<string, EnrichedFrete[]> = {}
+  for (const [label, statuses] of Object.entries(DASHBOARD_BUCKETS)) {
+    const { data, error } = await supabase
+      .from('frete_logistica')
+      .select(SELECT_WITH_JOINS)
+      .in('status_entrega', statuses)
+      .is('deleted_at', null)
+      .order('data_emissao', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: false })
+      .limit(20)
+    if (error) throw new Error(error.message)
+    buckets[label] = (data || []).map((row) => enrichFrete(row as Record<string, unknown>))
+  }
+  return buckets
+}
+
+async function handleGetWithOcorrencias(supabase: ReturnType<typeof createClient>, id: string) {
+  const { data: freteRow, error: freteErr } = await supabase
+    .from('frete_logistica')
+    .select(SELECT_WITH_JOINS)
+    .eq('id', id)
+    .is('deleted_at', null)
+    .single()
+  if (freteErr || !freteRow) return { frete: null as EnrichedFrete | null, ocorrencias: [] }
+  const { data: ocorrRows, error: ocorrErr } = await supabase
+    .from('frete_logistica_ocorrencia')
+    .select('*')
+    .eq('frete_id', id)
+    .order('data_hora', { ascending: false })
+  if (ocorrErr) throw new Error(ocorrErr.message)
+  return {
+    frete: enrichFrete(freteRow as Record<string, unknown>),
+    ocorrencias: (ocorrRows || []).map((row) => formatOcorrencia(row as Record<string, unknown>)),
+  }
+}
+
 serve(async (req) => {
   console.log(`[${FUNC_NAME}]`, { method: req.method, url: req.url })
 
@@ -126,24 +220,73 @@ serve(async (req) => {
     const funcIdx = pathParts.indexOf('frete-logistica-v1')
     const idFromPath = funcIdx >= 0 && funcIdx < pathParts.length - 1 ? pathParts[funcIdx + 1] : null
     const id = idFromPath || url.searchParams.get('id')
+    const action = url.searchParams.get('action') || ''
 
     if (req.method === 'GET') {
-      if (id) {
+      // R-LOG-2: Torre de Controle — 5 buckets de status.
+      if (action === 'list_by_status') {
+        const buckets = await handleListByStatus(supabase)
+        return jsonResponse(200, { success: true, data: buckets })
+      }
+
+      // R-LOG-2: Detalhe + timeline.
+      if (action === 'get_with_ocorrencias') {
+        if (!id) return jsonResponse(400, { success: false, error: 'ID obrigatório' })
+        const result = await handleGetWithOcorrencias(supabase, id)
+        if (!result.frete) return jsonResponse(404, { success: false, error: 'Frete não encontrado' })
+        return jsonResponse(200, { success: true, data: result })
+      }
+
+      // GET por id (mantém compat com R-LOG-1).
+      if (id && !action) {
         const { data, error } = await supabase
           .from('frete_logistica').select('*').eq('id', id).is('deleted_at', null).single()
         if (error || !data) return jsonResponse(404, { success: false, error: 'Frete não encontrado' })
         return jsonResponse(200, { success: true, data: formatFrete(data) })
       }
+
+      // GET list com filtros e paginação. action=list é explícito; ausência também é tratada como list.
       const empresaIdFilter = url.searchParams.get('empresa_id')
-      const statusFilter = url.searchParams.get('status_entrega')
-      const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100)
-      let query = supabase.from('frete_logistica').select('*', { count: 'exact' })
-        .is('deleted_at', null).order('created_at', { ascending: false }).limit(limit)
+      const clienteIdFilter = url.searchParams.get('cliente_id')
+      const transportadorIdFilter = url.searchParams.get('transportador_id')
+      const statusFilters = csvParam(url.searchParams.get('status_entrega'))
+      const dataInicio = url.searchParams.get('data_inicio')
+      const dataFim = url.searchParams.get('data_fim')
+      const nfeNumero = url.searchParams.get('nfe_numero')
+      const limit = clampLimit(url.searchParams.get('limit'))
+      const offset = clampOffset(url.searchParams.get('offset'))
+
+      let query = supabase
+        .from('frete_logistica')
+        .select(SELECT_WITH_JOINS, { count: 'exact' })
+        .is('deleted_at', null)
+        .order('data_emissao', { ascending: false, nullsFirst: false })
+        .order('id', { ascending: false })
+        .range(offset, offset + limit - 1)
+
       if (empresaIdFilter) query = query.eq('empresa_id', empresaIdFilter)
-      if (statusFilter) query = query.eq('status_entrega', statusFilter)
+      if (clienteIdFilter) query = query.eq('cliente_id', clienteIdFilter)
+      if (transportadorIdFilter) query = query.eq('transportador_id', transportadorIdFilter)
+      if (statusFilters.length > 0) query = query.in('status_entrega', statusFilters)
+      if (dataInicio) query = query.gte('data_emissao', dataInicio)
+      if (dataFim) query = query.lte('data_emissao', dataFim)
+      if (nfeNumero) {
+        // Cast numero NFE para texto e aplica ILIKE (números são bigint na tabela).
+        // Postgrest: filter avançado via .filter() com operador casting.
+        query = query.filter('nfe_numero::text', 'ilike', `%${nfeNumero}%`)
+      }
+
       const { data, error, count } = await query
       if (error) throw new Error(error.message)
-      return jsonResponse(200, { success: true, data: { fretes: (data || []).map(formatFrete), total: count ?? 0 } })
+      return jsonResponse(200, {
+        success: true,
+        data: {
+          fretes: (data || []).map((row) => enrichFrete(row as Record<string, unknown>)),
+          total: count ?? 0,
+          limit,
+          offset,
+        },
+      })
     }
 
     // POST + PUT: backoffice ou vendedor (com tenant scoping no payload).

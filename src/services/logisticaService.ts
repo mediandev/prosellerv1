@@ -115,3 +115,58 @@ export const freteService = {
     call('frete-logistica-v1', 'PUT', { id, body }),
   remove: (id: string) => call('frete-logistica-v1', 'DELETE', { id }),
 };
+
+// ---------- R-LOG-2: Busca, Torre de Controle, Detalhe ----------
+
+import type {
+  ListFretesFilters,
+  FreteLogisticaEnriched,
+  DashboardBuckets,
+  OcorrenciaSSW,
+} from '@shared/types/frete-logistica';
+
+/** Busca paginada com filtros (R-LOG-2). Aceita 7 filtros + limit/offset. */
+export async function listFretes(
+  filters: ListFretesFilters = {},
+): Promise<{ fretes: FreteLogisticaEnriched[]; total: number; limit: number; offset: number }> {
+  const data = (await call('frete-logistica-v1', 'GET', {
+    query: {
+      action: 'list',
+      empresa_id: filters.empresaId,
+      cliente_id: filters.clienteId,
+      transportador_id: filters.transportadorId,
+      status_entrega: filters.statusEntrega && filters.statusEntrega.length > 0
+        ? filters.statusEntrega.join(',')
+        : undefined,
+      data_inicio: filters.dataInicio,
+      data_fim: filters.dataFim,
+      nfe_numero: filters.nfeNumero,
+      limit: filters.limit,
+      offset: filters.offset,
+    },
+  })) as {
+    fretes: FreteLogisticaEnriched[];
+    total: number;
+    limit: number;
+    offset: number;
+  };
+  return data;
+}
+
+/** Torre de Controle: 5 buckets de status (R-LOG-2). */
+export async function listFretesByStatus(): Promise<DashboardBuckets> {
+  const data = (await call('frete-logistica-v1', 'GET', {
+    query: { action: 'list_by_status' },
+  })) as DashboardBuckets;
+  return data;
+}
+
+/** Detalhe + timeline de ocorrências (R-LOG-2). Timeline pode estar vazia (R-LOG-4). */
+export async function getFreteWithOcorrencias(
+  id: string | number,
+): Promise<{ frete: FreteLogisticaEnriched; ocorrencias: OcorrenciaSSW[] }> {
+  const data = (await call('frete-logistica-v1', 'GET', {
+    query: { action: 'get_with_ocorrencias', id: String(id) },
+  })) as { frete: FreteLogisticaEnriched; ocorrencias: OcorrenciaSSW[] };
+  return data;
+}

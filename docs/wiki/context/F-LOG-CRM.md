@@ -59,11 +59,11 @@ RLS tenant-scoped por `empresa_id` (replica padrão de `cliente`/`pedido_venda`)
 
 | Onda | Nome | Classe | CI | Status |
 |---|---|---|---|---|
-| **R-LOG-1** | Schema base + cadastros lookup + Novo Frete manual | **B** | N1+matriz | **MERGEADA em main (PR #22, V 1.36) — aguarda deploy staging via Tarefa 8 cursor-brief** |
-| R-LOG-2 | Torre Controle + Busca + Detalhe | B | N1+matriz | backlog — **próxima recomendada** (não bloqueada) |
-| R-LOG-3 | Hook em tiny-enviar-pedido-venda-v1 (auto-cria frete) | **C** | N2 | backlog — bloqueado por R-LOG-1 deploy em prod |
-| R-LOG-4 | Integração SSW Tracking | **D** | N3 | backlog — **destravada** (ADR-006 cancelada); só ADR-008 (polling) antes |
-| R-LOG-5 | Indicadores financeiros do Dashboard | B | N1+matriz | backlog |
+| **R-LOG-1** | Schema base + cadastros lookup + Novo Frete manual | **B** | N1+matriz | **EM PRODUÇÃO desde 2026-05-21 com flag LIGADA (V 1.36).** |
+| **R-LOG-2** | Torre Controle + Busca + Detalhe + bloco Entrega no Pedido | **B** | N1+matriz | **IMPLEMENTADA (V 1.38, branch `feat/log-crm-R-LOG-2`)** — aguardando push/deploy autorizado pelo humano. |
+| R-LOG-3 | Hook em tiny-enviar-pedido-venda-v1 (auto-cria frete) | **C** | N2 | backlog — **bloqueado** pelo provisionamento de Supabase free de staging |
+| R-LOG-4 | Integração SSW Tracking | **D** | N3 | backlog — **destravada** (ADR-006 cancelada); só ADR-008 (polling) antes. *Timeline já está pronta na UI; só precisa popular `frete_logistica_ocorrencia`.* |
+| R-LOG-5 | Indicadores financeiros do Dashboard | B | N1+matriz | backlog — adiado por decisão Valentim 2026-05-21 (urgência é trazer o que tem para desligar Bubble em 1ºJun) |
 | R-LOG-6 | Faturas — CRUD manual | B | N1+matriz | backlog |
 | R-LOG-7 | Parser PDF/EDI | **D** | N3 | backlog — ADR-007 antes; pode simplificar com WS SSW |
 | R-LOG-8 | Auditoria Cotado × Cobrado | **C** | N2 | backlog |

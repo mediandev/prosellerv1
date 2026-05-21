@@ -104,6 +104,9 @@ import { toast } from "sonner@2.0.3";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { api } from '../services/api';
 import { tinyERPSyncService } from '../services/tinyERPSync';
+import FreteResumoCard from './logistica/FreteResumoCard';
+
+const FEATURE_LOG_CRM_ENABLED = import.meta.env.VITE_FEATURE_LOG_CRM === 'true';
 import { useAuth } from '../contexts/AuthContext';
 import { toSafeNumber } from '../utils/number';
 
@@ -133,6 +136,8 @@ interface Sale {
   integracaoERP?: {
     erpPedidoId?: string;
     erpNumeroPedido?: string;
+    // R-LOG-2 (F-LOG-CRM): usado pelo FreteResumoCard para localizar o frete vinculado.
+    notaFiscalNumero?: string;
   };
 }
 
@@ -246,6 +251,8 @@ interface SalesPageProps {
   onVisualizarVenda?: (vendaId: string) => void;
   onEditarVenda?: (vendaId: string) => void;
   onIntegracaoERP?: () => void;
+  // R-LOG-2: navega para Logística > Detalhe do frete vinculado à NF deste pedido.
+  onAbrirLogistica?: () => void;
   period?: string;
   onPeriodChange?: (period: string) => void;
   customDateRange?: { from: Date | undefined; to: Date | undefined };
@@ -341,10 +348,11 @@ function getErpErrorDetalhado(errorMsg: string): { erro: string; instrucao: stri
 }
 
 export function SalesPage({
-  onNovaVenda, 
-  onVisualizarVenda, 
+  onNovaVenda,
+  onVisualizarVenda,
   onEditarVenda,
   onIntegracaoERP,
+  onAbrirLogistica,
   period = "all",
   onPeriodChange,
   customDateRange = { from: undefined, to: undefined },
@@ -2011,6 +2019,13 @@ export function SalesPage({
                     <Label className="text-muted-foreground">Observações</Label>
                     <p className="mt-1 text-sm">{selectedSale.observacoes}</p>
                   </div>
+                )}
+
+                {FEATURE_LOG_CRM_ENABLED && selectedSale.integracaoERP?.notaFiscalNumero && (
+                  <FreteResumoCard
+                    nfeNumero={selectedSale.integracaoERP.notaFiscalNumero}
+                    onOpenLogistica={onAbrirLogistica ? () => onAbrirLogistica() : undefined}
+                  />
                 )}
               </div>
             </>
