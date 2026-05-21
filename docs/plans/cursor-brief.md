@@ -12,8 +12,8 @@
 
 1. Localize a seção da tarefa no índice abaixo.
 2. Confirme que o MCP Supabase está ativo no Cursor (`.cursor/MCP.json`, projeto `xxoiqfraeolsqsmsheue`).
-3. **Primeiro aplique em staging.** Valide com o smoke test da seção.
-4. Só então repita em produção — com a feature flag `FEATURE_SIMPLES_NACIONAL_LOOKUP` **desligada** no momento da aplicação.
+3. **Padrão:** primeiro aplique em staging, valide com o smoke da seção, depois repita em produção com a feature flag relevante **desligada**.
+4. **Exceção operacional (Free plan, sem Branching):** quando a tarefa marcar explicitamente "PROD ONLY com rede reforçada" (ex.: Tarefa 8 da F-LOG-CRM R-LOG-1), staging dedicado não existe — usa-se `pg_dump --schema-only` como backup, janela fora do expediente, smoke ampliado e janela de observação de 7 dias com flag OFF antes de cogitar ligar. Trade-off documentado em `DECISIONS_LOG.md`.
 5. Volte ao Claude Code e marque no `TODO.md §1` a migration como aplicada, com SHA do commit.
 
 ---
@@ -27,7 +27,7 @@
 - [Tarefa 5 — INC-013 · Vincular 32 clientes da Valéria Montoz](#tarefa-5--inc-013--vincular-32-clientes-da-valéria-montoz)
 - [Tarefa 6 — Migration 115 · busca clientes (unaccent + CNPJ digits + grupo)](#tarefa-6--migration-115--busca-clientes-unaccent--cnpj-digits--grupo)
 - [Tarefa 7 — Cadastro do vendedor "Empresa - Venda Direta ES"](#tarefa-7--cadastro-do-vendedor-empresa---venda-direta-es)
-- [Tarefa 8 — Migration 119 · F-LOG-CRM R-LOG-1 (schema base Logística)](#tarefa-8--migration-119--f-log-crm-r-log-1-schema-base-logística)
+- [Tarefa 8 — F-LOG-CRM R-LOG-1 (migration 119 + 4 Edge Functions, **PROD ONLY** com rede reforçada)](#tarefa-8--f-log-crm-r-log-1-migration-119--4-edge-functions-prod-only-com-rede-reforçada)
 
 ---
 
@@ -732,9 +732,9 @@ Detectado via SQL (`cliente.codigo` ou `digits(cliente.cpf_cnpj)`):
 
 ---
 
-## Tarefa 8 — Migration 119 · F-LOG-CRM R-LOG-1 (schema base Logística)
+## Tarefa 8 — F-LOG-CRM R-LOG-1 (migration 119 + 4 Edge Functions, **PROD ONLY** com rede reforçada)
 
-**Feature associada:** F-LOG-CRM R-LOG-1 (`feat/log-crm-R-LOG-1`)
+**Feature associada:** F-LOG-CRM R-LOG-1 (`feat/log-crm-R-LOG-1`, mergeada em `main` via PR #22, merge commit `ad817aa`)
 **MCP:** Supabase MCP (projeto `xxoiqfraeolsqsmsheue`)
 **Tipos Zod espelhados:**
 - `packages/shared/types/transportador-logistica.ts`
@@ -742,48 +742,80 @@ Detectado via SQL (`cliente.codigo` ou `digits(cliente.cpf_cnpj)`):
 - `packages/shared/types/frete-logistica.ts`
 - `packages/shared/types/fatura-transportadora.ts`
 
+> **⚠️ Desvio do padrão "staging primeiro":** Org Median está no plano Free do Supabase, sem Branching/staging dedicado disponível. Esta tarefa é **PROD ONLY**, com rede de proteção reforçada (pg_dump, janela fora do expediente, smoke ampliado, 7 dias de observação com flag OFF). Decisão e justificativa em `docs/plans/DECISIONS_LOG.md` 2026-05-20. Histórico: migrations 001..115 já foram aplicadas direto em prod com brief + rollback + smoke. R-LOG-3+ vai exigir staging — abrir plano de upgrade Supabase quando essa onda chegar.
+
 ### Objetivo
 
-Aplicar a migration `119_frete_logistica_base.sql` (7 tabelas novas + 4 ENUMs + RLS + indexes) primeiro em **staging**, validar com smoke test, depois em **produção**. Como tudo é novo (zero consumidores), risco operacional é baixo, mas seguimos o rigor de Cenário C: 1 ambiente por vez + rollback explícito.
+Aplicar a migration `119_frete_logistica_base.sql` (7 tabelas novas + 4 ENUMs + RLS + indexes) **direto em produção** e deployar as 4 Edge Functions (`transportador-logistica-v1`, `regiao-destino-v1`, `origem-frete-v1`, `frete-logistica-v1`) via Supabase CLI local. Risco operacional baixo porque:
 
-### Pré-condições
+1. Migration 119 é DDL puramente **aditivo** — apenas `CREATE TABLE`/`CREATE TYPE`/`CREATE INDEX`/`CREATE POLICY`. Zero `ALTER` em tabela existente, zero `DROP`.
+2. As 7 tabelas novas são **isoladas** — nenhum código de produção (frontend, Edge Functions existentes, RPCs) consulta elas. Vetor de quebra em `cliente`/`pedido_venda`/`comissao` é **zero**.
+3. Feature flags `FEATURE_LOG_CRM` (Supabase) e `VITE_FEATURE_LOG_CRM` (Netlify) nascem **`false`/ausentes**. Edge Functions retornam 503 e frontend não exibe menu até alguém ligar.
+4. Rollback trivial: 7 `DROP TABLE` em ordem inversa + 4 `DROP TYPE` + 4 `supabase functions delete`.
 
-1. **Backup recente** confirmado nas últimas 24h no painel Supabase.
-2. **Feature flag `FEATURE_LOG_CRM` ausente** (não cadastrada) nos secrets das Edge Functions em ambos os ambientes — código novo nunca é chamado em produção até a flag entrar em sessão futura.
-3. **Branch mergeada (ou pelo menos commitada)**: arquivo `supabase/migrations/119_frete_logistica_base.sql` existe no git local.
-4. **Confirmar que ninguém populou as 7 tabelas manualmente** (deve ser impossível — tabelas nem existem ainda). Audit:
+### Pré-condições (rodar EM ORDEM, parar se qualquer falhar)
+
+1. **Backup pré-migration via `pg_dump --schema-only`** do projeto `xxoiqfraeolsqsmsheue` — salvar como `docs/plans/backup_prod_pre_119_<YYYY-MM-DD>.sql`. Adicionar `backup_prod_*.sql` ao `.gitignore` se ainda não estiver (arquivos grandes, sem segredos de payload mas com schema completo — não publicar). Comando referência (rodar local com credenciais do humano):
+   ```powershell
+   pg_dump --schema-only --no-owner --no-acl `
+     "postgresql://postgres.xxoiqfraeolsqsmsheue:<DB_PASSWORD>@aws-0-us-east-2.pooler.supabase.com:5432/postgres" `
+     > docs/plans/backup_prod_pre_119_$(Get-Date -Format yyyy-MM-dd).sql
+   ```
+   Esperado: arquivo > 200 KB com `CREATE TABLE public.cliente` etc. Se vazio ou erro, **parar** e investigar antes de prosseguir.
+2. **Janela operacional fora do expediente do cliente.** Aplicar antes das 8h ou após 19h BRT (Cântico opera durante o comercial). DDL aditivo tem lock metadata-only, mas a janela é margem de segurança.
+3. **Confirmar `FEATURE_LOG_CRM` ausente/`'false'` no Supabase Dashboard**: Project Settings › Edge Functions › Secrets. Visualmente, antes de aplicar. Print/screenshot opcional, mas se ligado, **abortar**.
+4. **Confirmar `VITE_FEATURE_LOG_CRM` ausente/`'false'` no Netlify Dashboard**: Site `proseller.app.br` › Site settings › Environment variables. Visualmente. Se ligado, **abortar**.
+5. **Confirmar branch `main` atualizada** com migration `119_frete_logistica_base.sql` (já está — PR #22 mergeada como `ad817aa`):
+   ```bash
+   git log --oneline main -1 -- supabase/migrations/119_frete_logistica_base.sql
+   ```
+   Esperado: SHA de um commit da branch `feat/log-crm-R-LOG-1` (parte da PR #22). Se vazio, parar.
+6. **Audit "0 linhas"** — as 7 tabelas-alvo ainda não existem em prod:
    ```sql
    SELECT table_name FROM information_schema.tables
    WHERE table_schema='public'
      AND table_name IN ('transportador_logistica','regiao_destino','origem_frete',
                         'frete_logistica','frete_logistica_ocorrencia',
                         'fatura_transportadora','fatura_transportadora_item');
+   -- Esperado: 0 linhas. Se >0, parar e investigar (alguém aplicou manual?).
+   ```
+7. **Audit "0 ENUMs"** — os 4 ENUMs também não existem:
+   ```sql
+   SELECT typname FROM pg_type
+   WHERE typname IN ('status_entrega_frete','tipo_ocorrencia_ssw',
+                     'grupo_transportador','status_fatura_transportadora');
    -- Esperado: 0 linhas.
    ```
 
-### Operação (cole no Cursor Agent)
+### Operação — Etapa A · Migration via Cursor MCP (NUNCA `execute_sql` para DDL)
 
 ```
-Usando Supabase MCP (projeto xxoiqfraeolsqsmsheue), aplique a migration
-119_frete_logistica_base.sql no ambiente-alvo.
+Usando Supabase MCP (projeto xxoiqfraeolsqsmsheue, ambiente PRODUCTION),
+aplique a migration 119_frete_logistica_base.sql.
 
-Ambiente-alvo: [staging | production]  ← escolher explicitamente
+Pré-checks executados (confirme antes de prosseguir):
+- pg_dump backup salvo em docs/plans/backup_prod_pre_119_<data>.sql
+- Janela operacional fora do expediente confirmada (antes 8h ou após 19h BRT)
+- FEATURE_LOG_CRM ausente/'false' no Supabase Dashboard (visualmente)
+- VITE_FEATURE_LOG_CRM ausente/'false' no Netlify Dashboard (visualmente)
+- Audits 6 e 7 (0 linhas em tables + 0 linhas em pg_type) verdes
 
 Etapas:
-1. Confirmar que as 7 tabelas-alvo NÃO existem (query acima retorna 0 linhas).
-2. mcp__supabase__apply_migration({
+1. mcp__supabase__apply_migration({
      name: '119_frete_logistica_base',
      query: <conteúdo de supabase/migrations/119_frete_logistica_base.sql>
    })
-3. Rodar o smoke (SQL abaixo) — esperar 7 linhas em tabelas + 4 linhas em tipos.
-4. Confirmar que RLS está habilitada nas 7 tabelas com pelo menos 1 policy SELECT.
-5. Reportar: [aplicada | falhou com <erro>].
+   IMPORTANTE: use apply_migration, NUNCA execute_sql para DDL — runbook v3.2.
+2. Rodar o smoke (5 SELECTs abaixo) — esperar 7 linhas em tabelas, 4 em tipos,
+   7 com rowsecurity=true, 7+ policies, 2 índices únicos parciais.
+3. Reportar: [aplicada | falhou com <erro>].
+4. Se falhar, executar Rollback imediato (seção "Rollback" abaixo).
 
 NÃO cadastre FEATURE_LOG_CRM='true' nesta operação. Flag entra em sessão
-separada, depois do deploy das 4 Edge Functions via Supabase CLI.
+separada, após 7 dias de observação com flag OFF + Edge Functions vivas.
 ```
 
-### Smoke test pós-aplicação
+### Smoke test pós-apply (5 SELECTs)
 
 ```sql
 -- 1) 7 tabelas criadas
@@ -809,7 +841,7 @@ WHERE schemaname='public'
                     'frete_logistica','frete_logistica_ocorrencia',
                     'fatura_transportadora','fatura_transportadora_item')
 ORDER BY tablename;
--- Esperado: 7 linhas, rowsecurity=true.
+-- Esperado: 7 linhas, todas rowsecurity=true.
 
 -- 4) Pelo menos 1 policy SELECT por tabela
 SELECT tablename, policyname, cmd FROM pg_policies
@@ -826,6 +858,15 @@ WHERE schemaname='public' AND tablename='frete_logistica'
   AND indexname IN ('uq_frete_logistica_empresa_nfe','uq_frete_logistica_chave_acesso');
 -- Esperado: 2 linhas, ambas com "UNIQUE" e "WHERE" no indexdef.
 
+-- 4c) FK frete_logistica.vendedor_id → public."user".user_id existe
+SELECT conname, conrelid::regclass AS tabela_origem,
+       confrelid::regclass AS tabela_alvo
+FROM pg_constraint
+WHERE contype='f'
+  AND conrelid='public.frete_logistica'::regclass
+  AND confrelid='public."user"'::regclass;
+-- Esperado: 1 linha (FK do vendedor_id).
+
 -- 5) Tabelas vazias
 SELECT 'transportador_logistica' tab, COUNT(*) FROM public.transportador_logistica
 UNION ALL SELECT 'regiao_destino', COUNT(*) FROM public.regiao_destino
@@ -837,15 +878,93 @@ UNION ALL SELECT 'fatura_transportadora_item', COUNT(*) FROM public.fatura_trans
 -- Esperado: todos count=0.
 ```
 
-### Rollback (OBRIGATÓRIO — Cenário C)
+**Algum smoke falhou?** Rodar **Rollback** imediato e reportar.
+
+### Operação — Etapa B · Deploy das 4 Edge Functions via Supabase CLI **local** (ADR-005, MCP PROIBIDO)
+
+ADR-005 proíbe `deploy_edge_function` via Cursor MCP (INC-001 publicou stub `// test` em produção em 24/abr). Deploy **só** via CLI local.
+
+```powershell
+# rodar a partir da raiz do repo, branch main atualizada
+git checkout main
+git pull
+git rev-parse --short HEAD  # anotar o SHA — vai pra TODO.md
+
+npx supabase functions deploy transportador-logistica-v1 --project-ref xxoiqfraeolsqsmsheue
+npx supabase functions deploy regiao-destino-v1          --project-ref xxoiqfraeolsqsmsheue
+npx supabase functions deploy origem-frete-v1            --project-ref xxoiqfraeolsqsmsheue
+npx supabase functions deploy frete-logistica-v1         --project-ref xxoiqfraeolsqsmsheue
+```
+
+Cada comando deve imprimir `Deployed Function <nome> on project xxoiqfraeolsqsmsheue` e retornar exit 0. Se algum falhar, **abortar deploys subsequentes** e rodar Rollback (seção abaixo) para as funções já deployadas + para a migration (decisão de produto: voltar ou ficar com parcial — registrar).
+
+### Smoke test pós-deploy (4 curls OPTIONS)
+
+Rodar do terminal local após os 4 deploys:
+
+```powershell
+$base = "https://xxoiqfraeolsqsmsheue.supabase.co/functions/v1"
+foreach ($fn in @('transportador-logistica-v1','regiao-destino-v1','origem-frete-v1','frete-logistica-v1')) {
+  $r = curl.exe -s -o $null -w "%{http_code}" -X OPTIONS "$base/$fn"
+  Write-Host "$fn → $r"
+}
+```
+
+**Esperado para todas as 4:** HTTP `200` (CORS preflight retornado pelo `if (req.method === 'OPTIONS')` no início de cada Edge Function). HTTP `503` aqui significaria que a função verificou a flag — não deveria, OPTIONS não passa pelo gate. HTTP `404` significa que o deploy falhou.
+
+**Smoke do gate de flag (esperado 503):** sem flag ligada, GET autenticado deve retornar 503.
+
+```powershell
+# precisa de token de backoffice válido — substituir <TOKEN>
+$tok = "<TOKEN>"
+$base = "https://xxoiqfraeolsqsmsheue.supabase.co/functions/v1"
+foreach ($fn in @('transportador-logistica-v1','regiao-destino-v1','origem-frete-v1','frete-logistica-v1')) {
+  $r = curl.exe -s -o $null -w "%{http_code}" -H "Authorization: Bearer $tok" "$base/$fn"
+  Write-Host "$fn (GET sem flag) → $r"
+}
+```
+
+**Esperado para todas as 4:** HTTP `503` com body contendo `"Logística feature flag desligada"` — confirma que o gate de `FEATURE_LOG_CRM` funciona. Se retornar 200, há algo errado com o secret — investigar.
+
+### Janela de observação de 7 dias com flag OFF
+
+Após Etapa B verde:
+
+- **Não ligar `FEATURE_LOG_CRM='true'` nem `VITE_FEATURE_LOG_CRM='true'` por 7 dias.**
+- Durante a janela, R-LOG-2 (próxima onda — telas Torre/Busca/Detalhe) pode ser desenvolvida e mergeada em paralelo (frontend mock-friendly, gate OFF).
+- Após 7 dias sem alertas, abrir Tarefa 9 (futura, ainda não escrita): "Ativar FEATURE_LOG_CRM em prod com smoke E2E do Valentim". Pré-requisitos da Tarefa 9: R-LOG-2 mergeada, smoke local com `VITE_FEATURE_LOG_CRM=true` no `.env.local`, plano de cadastro inicial (transportadores Cântico).
+
+### Rollback (OBRIGATÓRIO — Cenário C produção)
 
 **Quando usar:**
-- Smoke test falhou.
-- Decisão de descartar F-LOG-CRM antes de qualquer outra operação.
-- Conflito de naming com tabelas existentes (esperado: 0; mas se acontecer, parar).
+- Smoke da Etapa A falhou (qualquer das 6 queries).
+- Smoke OPTIONS pós-deploy retornou 404 ou 5xx persistente.
+- Decisão de descartar F-LOG-CRM antes de ligar a flag.
+- Anomalia inesperada (FK, conflict de naming, alerta Supabase).
 
+**Pré-rollback:** confirmar que nenhuma linha foi inserida nas 7 tabelas (esperado: zero, porque flags estão OFF):
 ```sql
--- Ordem inversa de criação para respeitar FKs
+SELECT 'transportador_logistica', COUNT(*) FROM public.transportador_logistica
+UNION ALL SELECT 'regiao_destino', COUNT(*) FROM public.regiao_destino
+UNION ALL SELECT 'origem_frete', COUNT(*) FROM public.origem_frete
+UNION ALL SELECT 'frete_logistica', COUNT(*) FROM public.frete_logistica
+UNION ALL SELECT 'frete_logistica_ocorrencia', COUNT(*) FROM public.frete_logistica_ocorrencia
+UNION ALL SELECT 'fatura_transportadora', COUNT(*) FROM public.fatura_transportadora
+UNION ALL SELECT 'fatura_transportadora_item', COUNT(*) FROM public.fatura_transportadora_item;
+-- Esperado: todos 0.
+```
+Se >0 em qualquer linha, **parar e exportar o conteúdo antes de dropar** (`COPY ... TO STDOUT` via MCP) — registra perda de dado no DECISIONS_LOG.
+
+**Rollback Etapa B — deletar as 4 Edge Functions:**
+```powershell
+npx supabase functions delete transportador-logistica-v1 --project-ref xxoiqfraeolsqsmsheue
+npx supabase functions delete regiao-destino-v1          --project-ref xxoiqfraeolsqsmsheue
+npx supabase functions delete origem-frete-v1            --project-ref xxoiqfraeolsqsmsheue
+npx supabase functions delete frete-logistica-v1         --project-ref xxoiqfraeolsqsmsheue
+```
+
+**Rollback Etapa A — dropar tabelas + ENUMs em ordem inversa de criação (respeita FKs):**
+```sql
 DROP TABLE IF EXISTS public.fatura_transportadora_item CASCADE;
 DROP TABLE IF EXISTS public.fatura_transportadora CASCADE;
 DROP TABLE IF EXISTS public.frete_logistica_ocorrencia CASCADE;
@@ -860,22 +979,35 @@ DROP TYPE IF EXISTS public.tipo_ocorrencia_ssw;
 DROP TYPE IF EXISTS public.status_entrega_frete;
 ```
 
-Pós-rollback: confirmar smoke acima retorna **0 linhas** nas queries de tabelas/tipos. Reverter o commit da migration no git (`git revert <SHA>`).
+**Pós-rollback:**
+1. Smoke ré-rodado: 0 linhas em tabelas + 0 linhas em pg_type.
+2. Restore opcional do schema antigo via `psql < docs/plans/backup_prod_pre_119_<data>.sql` — **só se** o smoke confirmar que alguma tabela existente foi afetada (não deveria — DDL aditivo isolado).
+3. Reverter o commit da migration no git: `git log --grep='migration 119' -1 --format=%H` → `git revert <SHA>`. Como a migration veio da PR #22 mergeada (commit `ad817aa`), o revert mexe em arquivos de várias features — preferível **criar nova migration 120 com `DROP TABLE ... CASCADE; DROP TYPE ...`** se quisermos persistir o rollback no histórico do schema (não bloqueante; o repo só precisa que o estado de prod fique limpo).
+4. Atualizar `TODO.md §1` reinserindo "Migration 119 + 4 Edge Functions" como pendente.
+5. Registrar incidente em `TODO.md §5` (se anomalia técnica) ou `DECISIONS_LOG.md` (se decisão estratégica).
 
 ### Critério de aceite da Tarefa 8
 
-- [ ] Migration aplicada em **staging** sem erro.
-- [ ] Smoke 1–5 verdes em staging.
-- [ ] Migration aplicada em **produção** sem erro.
-- [ ] Smoke 1–5 verdes em produção.
-- [ ] `FEATURE_LOG_CRM` continua **ausente** nos secrets de ambos os ambientes.
-- [ ] `TODO.md §1` atualizado marcando "Migration 119 aplicada" com SHA do commit.
+- [ ] Backup `pg_dump --schema-only` salvo em `docs/plans/backup_prod_pre_119_<data>.sql`.
+- [ ] Janela operacional fora do expediente (antes 8h ou após 19h BRT) confirmada.
+- [ ] `FEATURE_LOG_CRM` ausente/`'false'` no **Supabase Dashboard** (validado visualmente).
+- [ ] `VITE_FEATURE_LOG_CRM` ausente/`'false'` no **Netlify Dashboard** (validado visualmente).
+- [ ] Audit pré-apply: 0 tabelas + 0 ENUMs com nomes-alvo.
+- [ ] `apply_migration` retornou OK (NÃO via `execute_sql`).
+- [ ] Smoke 1–4c + 5 verdes em prod.
+- [ ] 4 Edge Functions deployadas via `npx supabase functions deploy` (NÃO via MCP).
+- [ ] 4 curls OPTIONS retornaram HTTP 200.
+- [ ] 4 GETs autenticados (com token backoffice) retornaram HTTP 503 (gate da flag funcionando).
+- [ ] Janela de observação 7 dias com flag OFF agendada em `TODO.md §1` (data alvo registrada).
+- [ ] `TODO.md §1` atualizado: migration 119 aplicada + 4 funções deployadas, com SHA + timestamp.
+- [ ] Wiki atualizada: `docs/wiki/log.md` recebeu entrada `YYYY-MM-DD · [RELEASE] · F-LOG-CRM R-LOG-1 prod (migration 119 + 4 EF, flag OFF) · <SHA>`.
 
 ---
 
 ## Regras deste arquivo
 
-- **Uma seção = uma operação atômica.** Nunca combinar "migration + deploy + env" em uma seção.
+- **Uma seção = uma operação atômica.** Combinar "migration + deploy" em uma seção só é permitido quando a janela operacional é a mesma e o rollback é igualmente unificado (Etapas A + B); a Tarefa 8 é exceção justificada porque migration sem deploy das funções não traz valor algum (tabelas viram peso morto até o deploy) e o cliente paga o custo da janela uma vez.
 - **Rollback sempre explícito.** Cenário C (produção) exige — sem rollback, a tarefa não é auditável.
 - **Tipos Zod são fonte de verdade.** Toda migration cita o arquivo `packages/shared/types/` correspondente.
 - **Sem segredos em texto claro.** Usar placeholders `<valor>`; Cursor Agent lê do `.env.local` do Cursor.
+- **DDL sempre via `apply_migration`, NUNCA `execute_sql`** (runbook v3.2). Deploy de Edge Function sempre via CLI local (`npx supabase functions deploy`), NUNCA via MCP (ADR-005, INC-001).
