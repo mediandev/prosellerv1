@@ -155,7 +155,7 @@ serve(async (req) => {
       const search = url.searchParams.get('search') || null
       const apenasAtivos = url.searchParams.get('apenas_ativos') === 'true'
       const page = parseInt(url.searchParams.get('page') || '1')
-      const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 100)
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '500'), 500)
 
       const { data: rpcData, error: rpcError } = await supabase
         .rpc('list_grupos_redes_v2', {

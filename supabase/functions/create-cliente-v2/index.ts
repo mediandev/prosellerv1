@@ -256,6 +256,8 @@ serve(async (req) => {
       codigo_tiny_id_externo: body.codigo_tiny_id_externo ? sanitizeInput(body.codigo_tiny_id_externo).trim() : null,
       codigo_tiny_integration_ref: body.codigo_tiny_integration_ref ? sanitizeInput(body.codigo_tiny_integration_ref).trim() : null,
       codigo_gerado_em: body.codigo_gerado_em || null,
+      segmento_id: body.segmentoId ?? body.segmento_id ?? null,
+      grupo_id: body.grupo_id ?? body.grupoId ?? null,
     }
 
     console.log('[CREATE-CLIENTE-V2] Step 4: Calling RPC function...', { p_criado_por: user.id })
@@ -271,6 +273,8 @@ serve(async (req) => {
       p_inscricao_estadual: sanitizedData.inscricao_estadual,
       p_codigo: sanitizedData.codigo,
       p_grupo_rede: sanitizedData.grupo_rede,
+      p_grupo_id: sanitizedData.grupo_id,
+      p_segmento_id: sanitizedData.segmento_id != null ? parseInt(sanitizedData.segmento_id) : null,
       p_lista_de_preco: sanitizedData.lista_de_preco,
       p_desconto_financeiro: sanitizedData.desconto_financeiro,
       p_pedido_minimo: sanitizedData.pedido_minimo,

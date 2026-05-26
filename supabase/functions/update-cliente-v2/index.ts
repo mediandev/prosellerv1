@@ -161,6 +161,13 @@ serve(async (req) => {
     if (body.codigo_tiny_id_externo !== undefined) sanitizedData.codigo_tiny_id_externo = body.codigo_tiny_id_externo ? sanitizeInput(body.codigo_tiny_id_externo).trim() : null
     if (body.codigo_tiny_integration_ref !== undefined) sanitizedData.codigo_tiny_integration_ref = body.codigo_tiny_integration_ref ? sanitizeInput(body.codigo_tiny_integration_ref).trim() : null
     if (body.codigo_gerado_em !== undefined) sanitizedData.codigo_gerado_em = body.codigo_gerado_em || null
+    if (body.segmentoId !== undefined || body.segmento_id !== undefined) sanitizedData.segmento_id = body.segmentoId ?? body.segmento_id ?? null
+    if (body.grupo_id !== undefined || body.grupoId !== undefined) sanitizedData.grupo_id = body.grupo_id ?? body.grupoId ?? null
+    if (body.ref_tipo_pessoa_id_FK !== undefined) sanitizedData.ref_tipo_pessoa_id_FK = body.ref_tipo_pessoa_id_FK
+    if (body.ref_situacao_id !== undefined) sanitizedData.ref_situacao_id = body.ref_situacao_id
+    if (body.empresa_faturamento_id !== undefined || body.empresaFaturamentoId !== undefined) sanitizedData.empresa_faturamento_id = body.empresa_faturamento_id ?? body.empresaFaturamentoId ?? null
+    if (body.condicoes_pagamento_ids !== undefined) sanitizedData.condicoes_pagamento_ids = body.condicoes_pagamento_ids
+    if (body.status_aprovacao !== undefined) sanitizedData.status_aprovacao = body.status_aprovacao
 
     console.log('[UPDATE-CLIENTE-V2] Step 5: Calling RPC function...', { p_cliente_id: clienteIdNum, p_atualizado_por: user.id })
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
@@ -172,15 +179,22 @@ serve(async (req) => {
       p_nome: sanitizedData.nome,
       p_nome_fantasia: sanitizedData.nome_fantasia,
       p_cpf_cnpj: sanitizedData.cpf_cnpj,
+      p_ref_tipo_pessoa_id_fk: sanitizedData.ref_tipo_pessoa_id_FK,
       p_inscricao_estadual: sanitizedData.inscricao_estadual,
       p_codigo: sanitizedData.codigo,
       p_grupo_rede: sanitizedData.grupo_rede,
+      p_grupo_id: sanitizedData.grupo_id,
       p_lista_de_preco: sanitizedData.lista_de_preco,
       p_desconto_financeiro: sanitizedData.desconto_financeiro,
       p_pedido_minimo: sanitizedData.pedido_minimo,
       p_vendedoresatribuidos: sanitizedData.vendedoresatribuidos,
       p_observacao_interna: sanitizedData.observacao_interna,
+      p_segmento_id: sanitizedData.segmento_id != null ? parseInt(sanitizedData.segmento_id) : undefined,
+      p_ref_situacao_id: sanitizedData.ref_situacao_id,
+      p_empresa_faturamento_id: sanitizedData.empresa_faturamento_id,
+      p_condicoes_pagamento_ids: sanitizedData.condicoes_pagamento_ids,
       p_atualizado_por: user.id,
+      p_status_aprovacao: sanitizedData.status_aprovacao,
     })
 
     if (rpcError) {

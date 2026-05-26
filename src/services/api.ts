@@ -4088,61 +4088,39 @@ export const api = {
         setCachedOptions(cacheKey, naturezas);
         return naturezas;
       } catch (error) {
-        console.error('[API] Erro ao listar naturezas, usando mock:', error);
-        // Fallback para mock em caso de erro
-        return getStoredData('mockNaturezasOperacao', mockNaturezasOperacao);
+        console.error('[API] Erro ao listar naturezas:', error);
+        throw error;
       }
     },
 
     create: async (data: any) => {
-      try {
-        console.log('[API] Criando natureza via Edge Function natureza-operacao-v2...');
-        const response = await callEdgeFunction('natureza-operacao-v2', 'POST', {
-          action: 'create',
-          nome: data.nome,
-          codigo: data.codigo,
-          descricao: data.descricao,
-          geraComissao: data.geraComissao,
-          geraReceita: data.geraReceita,
-          tiny_id: data.tiny_id,
-        });
+      console.log('[API] Criando natureza via Edge Function natureza-operacao-v2...');
+      const response = await callEdgeFunction('natureza-operacao-v2', 'POST', {
+        action: 'create',
+        nome: data.nome,
+        codigo: data.codigo,
+        descricao: data.descricao,
+        geraComissao: data.geraComissao,
+        geraReceita: data.geraReceita,
+        tiny_id: data.tiny_id,
+      });
 
-        // A resposta vem no formato { success: true, data: {...} }
-        return response.data || response;
-      } catch (error) {
-        console.error('[API] Erro ao criar natureza, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const naturezas = getStoredData('mockNaturezasOperacao', mockNaturezasOperacao);
-        const nova = {
-          ...data,
-          id: `natureza-${Date.now()}`,
-        };
-        naturezas.push(nova);
-        saveStoredData('mockNaturezasOperacao', naturezas);
-        return nova;
-      }
+      return response.data || response;
     },
 
     update: async (id: string, data: any) => {
-      try {
-        console.log('[API] Atualizando natureza via Edge Function natureza-operacao-v2...');
-        const response = await callEdgeFunction('natureza-operacao-v2', 'PUT', {
-          nome: data.nome,
-          codigo: data.codigo,
-          descricao: data.descricao,
-          geraComissao: data.geraComissao,
-          geraReceita: data.geraReceita,
-          ativo: data.ativo,
-          tiny_id: data.tiny_id,
-        }, id);
+      console.log('[API] Atualizando natureza via Edge Function natureza-operacao-v2...');
+      const response = await callEdgeFunction('natureza-operacao-v2', 'PUT', {
+        nome: data.nome,
+        codigo: data.codigo,
+        descricao: data.descricao,
+        geraComissao: data.geraComissao,
+        geraReceita: data.geraReceita,
+        ativo: data.ativo,
+        tiny_id: data.tiny_id,
+      }, id);
 
-        // A resposta vem no formato { success: true, data: {...} }
-        return response.data || response;
-      } catch (error) {
-        console.error('[API] Erro ao atualizar natureza, usando mock:', error);
-        // Fallback para mock em caso de erro
-        return api.update('naturezas-operacao', id, data);
-      }
+      return response.data || response;
     },
 
     delete: async (id: string) => {
