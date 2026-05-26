@@ -98,14 +98,14 @@ class CustomerCodeService {
     const base = Math.max(config.proximoCodigo || 1, this.encontrarMaiorCodigo(clientesExistentes) + 1);
 
     let atual = base;
-    while (this.codigoEmUso(String(atual).padStart(6, '0'), clienteId, clientesExistentes)) {
+    while (this.codigoEmUso(String(atual), clienteId, clientesExistentes)) {
       atual += 1;
     }
 
     config.proximoCodigo = atual + 1;
     this.salvarConfiguracao(config);
 
-    return String(atual).padStart(6, '0');
+    return String(atual);
   }
 
   gerarProximoCodigo(): string | null {
@@ -116,7 +116,7 @@ class CustomerCodeService {
     config.proximoCodigo = proximoCodigo + 1;
     this.salvarConfiguracao(config);
 
-    return String(proximoCodigo).padStart(6, '0');
+    return String(proximoCodigo);
   }
 
   resolverCodigoComPrioridade(
