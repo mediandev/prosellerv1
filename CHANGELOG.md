@@ -1,5 +1,22 @@
 # Changelog
 
+## V 1.17 — 2026-05-26
+
+### Ajustes de dados (produção)
+
+- **Vendedores corrigidos** — 186 clientes reatribuídos ao vendedor correto conforme auditoria. 17 cadastros indevidos removidos (soft-delete).
+- **Razão social limpa** — Removido código antigo entre parênteses do nome de ~480 clientes.
+- **Códigos de cliente resetados** — Todos os códigos antigos (Tiny) zerados. Novos códigos sequenciais gerados (1, 2, 3...) por ordem alfabética. Tabela de conciliação `cliente_codigo_depara` criada para referência.
+- **Geração automática sem zeros** — Novos clientes cadastrados recebem código sequencial sem zero à esquerda.
+
+### Migrations
+
+- `111_apply_vendedor_adjustments.sql` — Ajuste de vendedores + soft-delete de 17 cadastros.
+- `112_clean_razao_social_codes.sql` — Limpeza de nomes (remove códigos entre parênteses).
+- `113_reset_sequential_client_codes.sql` — Reset de códigos + geração sequencial + tabela de-para.
+
+---
+
 ## V 1.16 — 2026-05-26
 
 ### Bug Fixes
