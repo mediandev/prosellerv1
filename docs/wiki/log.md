@@ -4,6 +4,10 @@
 > Formato: `YYYY-MM-DD · [TAG] · descrição curta · SHA/PR/feature`.
 > Tags: `INGEST`, `RELEASE`, `BUGFIX`, `MIGRATION`, `ADR`, `RUNBOOK`, `VALIDATION`, `BLOCKED`, `MVP`.
 
+## 2026-05-26
+
+- 2026-05-26 · [INGEST] · F-LOG-CRM R-LOG-4 implementada (SSW Tracking on-demand com cache 30 min). Migration 120 (ALTER TYPE `Entrega` + 3 ADD COLUMN). Nova Edge Function `ssw-tracking-v1` + `frete-logistica-v1` estendida com polling SSW. Mapper SSW → status_entrega automático. ADR-008 documentado. Feature flag `FEATURE_LOG_CRM_SSW` separada (nasce OFF). V 1.39. Branch `feat/log-crm-R-LOG-4`.
+
 ## 2026-05-21
 
 - 2026-05-21 · [RELEASE] · F-LOG-CRM R-LOG-2 deployada em PRODUÇÃO (V 1.38). PR #28 mergeada em main (`5b6193b`). Edge Function `frete-logistica-v1` redeployada via Supabase CLI com extensões (7 filtros + actions `list_by_status`/`get_with_ocorrencias`). Netlify rebuild Published 18:22 BRT. Smoke E2E via Playwright `lucas.carmo@flowcode.cc`: V 1.38 confirmada Sidebar; Torre de Controle 5 cards (Em Trânsito 1 / Reentrega 0 / Agendados 0 / Devoluções 0 / Recusadas 0) com NFe 99999 listada; Busca encontrou frete id=1 com filtros; Detalhe view 7 seções + edit (mudou status Em Separação → Em Trânsito, persistiu, voltou Dashboard atualizado); timeline placeholder "Sem atualizações... R-LOG-4". Bloco "Entrega" no detalhe do pedido validado por análise de código (`SalesPage.tsx:2024` — condição `FEATURE_LOG_CRM_ENABLED && selectedSale.integracaoERP?.notaFiscalNumero` correta); visual smoke pendente em pedido Faturado/Enviado. Bucket Storage `logistica-comprovantes` ainda não criado (Tarefa 9 cursor-brief) — botão "Tirar foto / Anexar" exposto, upload degrada graciosamente. Screenshots em `archive/screenshots/2026-05-21-e2e-rlog2-prod/`.

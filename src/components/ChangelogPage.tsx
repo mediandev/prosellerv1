@@ -8,6 +8,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.39',
+    items: [
+      'Logística > Rastreio SSW automático: ao abrir o detalhe de um frete com chave NFe, o sistema consulta a API da SSW e atualiza a timeline de ocorrências em tempo real (cache de 30 min).',
+      'Logística > Status atualizado automaticamente: o status do frete (Em Trânsito, Agendado, Entregue, Recusado, etc.) agora é resolvido a partir das ocorrências reais do transportador — sem necessidade de edição manual.',
+      'Logística > Timeline enriquecida: eventos de entrega mostram o nome e documento do recebedor. Cores diferenciadas por tipo de evento (verde = entrega, âmbar = cliente, azul = informativo).',
+    ],
+  },
+  {
     version: 'V 1.38',
     items: [
       'Logística > Torre de Controle: 5 cards de status (Em Trânsito, Reentrega, Agendados, Devoluções em Trânsito e Recusadas) com clique direto para o detalhe do frete.',

@@ -49,6 +49,61 @@ export const DASHBOARD_BUCKETS: Record<string, string[]> = {
   "Recusadas": ["Recusado"],
 };
 
+// ---------- SSW → status_entrega mapper (R-LOG-4) ----------
+
+type StatusEntrega =
+  | 'Em Separação'
+  | 'Aguardando Coleta'
+  | 'Em Trânsito'
+  | 'Em Trânsito - Reentrega'
+  | 'Entregue'
+  | 'Agendado'
+  | 'Recusado'
+  | 'Devolvido - Trânsito'
+  | 'Devolvido - Entregue';
+
+const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
+  'Entregue',
+  'Devolvido - Entregue',
+]);
+
+export function isTerminalStatus(status: string): boolean {
+  return TERMINAL_STATUSES.has(status);
+}
+
+export function mapOcorrenciaToStatus(
+  tipo: string,
+  ocorrencia: string,
+): StatusEntrega {
+  const upper = ocorrencia.toUpperCase();
+
+  if (tipo === 'Entrega' && /\(01\)/.test(ocorrencia)) return 'Entregue';
+
+  if (/DEVOLU[CÇ][AÃ]O\s+ENTREGUE/i.test(ocorrencia) || /DEVOLVIDO\s*-\s*ENTREGUE/i.test(ocorrencia)) {
+    return 'Devolvido - Entregue';
+  }
+  if (/DEVOLVID[AO]/i.test(ocorrencia) || /DEVOLU[CÇ][AÃ]O/i.test(ocorrencia)) {
+    return 'Devolvido - Trânsito';
+  }
+
+  if (/RECUSAD[AO]/i.test(ocorrencia)) return 'Recusado';
+
+  if (tipo === 'Cliente' && /\(02\)/.test(ocorrencia)) return 'Agendado';
+  if (/AGENDAD[AO]\s*\(08\)/i.test(ocorrencia)) return 'Agendado';
+
+  if (/REENTREGA/i.test(upper)) return 'Em Trânsito - Reentrega';
+
+  return 'Em Trânsito';
+}
+
+export function resolveFreteStatusFromTracking(
+  tracking: Array<{ tipo: string; ocorrencia: string }>,
+): StatusEntrega {
+  if (tracking.length === 0) return 'Em Trânsito';
+  const latest = tracking[tracking.length - 1];
+  return mapOcorrenciaToStatus(latest.tipo, latest.ocorrencia);
+}
+
 /**
  * Calcula dias em trânsito para um frete, dada a `data_saida` (YYYY-MM-DD)
  * e a `data_entrega` (YYYY-MM-DD ou null). Retorna null se data inválida ou

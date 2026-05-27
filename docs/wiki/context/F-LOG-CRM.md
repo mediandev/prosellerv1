@@ -3,7 +3,7 @@
 > Memória sintetizada para próximo agente que retomar esta feature. Descartável após conclusão.
 > Limite v3.2: 150 linhas.
 
-**Estado atual (2026-05-21):** Onda **R-LOG-1 EM PRODUÇÃO COM FLAG LIGADA** desde 2026-05-21 (V 1.36). Migration 119 aplicada via Cursor MCP + 4 Edge Functions deployadas via Supabase CLI + flags `FEATURE_LOG_CRM=true` / `VITE_FEATURE_LOG_CRM=true`. Smoke E2E completo via Playwright em `proseller.app.br`: 1 transportador + 1 região + 1 origem + 1 frete criados como evidência (id=1 em cada). **Próxima onda recomendada:** R-LOG-2 (Torre de Controle + Busca + Detalhe, classe B, sem bloqueador — prompt pronto). R-LOG-3 espera projeto Supabase de staging antes de tocar `tiny-enviar-pedido-venda-v1`.
+**Estado atual (2026-05-26):** Ondas **R-LOG-1 (V 1.36) + R-LOG-2 (V 1.38) EM PRODUÇÃO COM FLAGS LIGADAS**. **R-LOG-4 (V 1.39) implementada** na branch `feat/log-crm-R-LOG-4`, aguardando push/deploy. SSW Tracking on-demand com cache 30 min (ADR-008). Migration 120 (ALTER TYPE + 3 ADD COLUMN). Nova Edge Function `ssw-tracking-v1` + `frete-logistica-v1` estendida. Feature flag `FEATURE_LOG_CRM_SSW` separada (nasce OFF). **Próxima onda recomendada:** INC-018 (bug permissões — pré-1ºJun) ou R-LOG-3 (auto-create frete — exige staging Supabase).
 
 ---
 

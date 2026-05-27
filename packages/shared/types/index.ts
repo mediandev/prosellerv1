@@ -6,3 +6,4 @@ export * from "./transportador-logistica";
 export * from "./regiao-origem";
 export * from "./frete-logistica";
 export * from "./fatura-transportadora";
+export * from "./ssw-tracking";

@@ -3,15 +3,31 @@
 > Estado vivo do projeto. Único arquivo de controle, junto com `git log`.
 > Atualizar ao final de cada sessão.
 
-**Última atualização:** 2026-05-21 (sessão — F-LOG-CRM R-LOG-2 implementada na branch `feat/log-crm-R-LOG-2`, V 1.38, aguardando push/deploy)
+**Última atualização:** 2026-05-26 (sessão — F-LOG-CRM R-LOG-4 implementada na branch `feat/log-crm-R-LOG-4`, V 1.39, aguardando push/deploy)
 
 ---
 
 ## 1. Em andamento
 
-**F-LOG-CRM · Migração módulo Logis (LogCRM Bubble → ProSeller V1) — R-LOG-2 IMPLEMENTADA (branch `feat/log-crm-R-LOG-2`, V 1.38), aguardando push/deploy. R-LOG-1 EM PRODUÇÃO desde 2026-05-21.**
+**F-LOG-CRM · Migração módulo Logis (LogCRM Bubble → ProSeller V1) — R-LOG-4 IMPLEMENTADA (branch `feat/log-crm-R-LOG-4`, V 1.39), aguardando push/deploy. R-LOG-1 (V 1.36) + R-LOG-2 (V 1.38) EM PRODUÇÃO.**
 
-Branch R-LOG-1 mergeada em main. Plano completo em 8 ondas: ver `docs/wiki/context/F-LOG-CRM.md` e `docs/plans/feature-contracts/F-LOG-{1..8}.md`.
+Branch R-LOG-1 + R-LOG-2 mergeadas em main. Plano completo em 8 ondas: ver `docs/wiki/context/F-LOG-CRM.md` e `docs/plans/feature-contracts/F-LOG-{1..8}.md`.
+
+R-LOG-4 entregue nesta sessão (2026-05-26):
+- ✅ ADR-008 documentado (polling on-demand com cache 30 min, sem cron).
+- ✅ Migration 120 (ALTER TYPE `Entrega` + 3 ADD COLUMN: `nome_recebedor`, `nro_doc_recebedor`, `data_hora_efetiva`).
+- ✅ `_shared/ssw-client.ts` — fetch SSW, parser, mapper to DB rows, cache staleness.
+- ✅ `_shared/frete-logistica-helpers.ts` estendido — mapper `ocorrencia → status_entrega`, `isTerminalStatus`, `resolveFreteStatusFromTracking`.
+- ✅ `_shared/log-crm-feature-flag.ts` estendido — `FEATURE_LOG_CRM_SSW` separada.
+- ✅ Nova Edge Function `ssw-tracking-v1/index.ts` (standalone wrapper para debug).
+- ✅ `frete-logistica-v1/index.ts` — `get_with_ocorrencias` orquestra polling SSW on-demand com fail-safe.
+- ✅ `packages/shared/types/ssw-tracking.ts` — Zod schema SSW response (union discriminada).
+- ✅ `packages/shared/types/frete-logistica.ts` — 3 campos novos + `Entrega` no `TipoOcorrenciaSSW`.
+- ✅ `FreteOcorrenciaTimeline.tsx` — cores por tipo, nome_recebedor em entregas, placeholder atualizado.
+- ✅ Bump V 1.39 + 3 bullets changelog.
+- ✅ Feature Contract F-LOG-4.md atualizado de esqueleto para completo (10 CAs).
+- ✅ Testes: 2 unit Vitest (Zod SSW + mapper status, 19/19 verdes) + 1 edge Deno (helpers SSW).
+- ⏳ **Pendente humano:** abrir PR + aplicar migration 120 via Cursor MCP + deploy de `ssw-tracking-v1` e `frete-logistica-v1` via CLI + secret `FEATURE_LOG_CRM_SSW` + smoke E2E. Brief completo em `cursor-brief.md` Tarefa 10.
 
 R-LOG-2 entregue nesta sessão (2026-05-21):
 - ✅ Feature Contract detalhado em `docs/plans/feature-contracts/F-LOG-2.md` (12 CAs).

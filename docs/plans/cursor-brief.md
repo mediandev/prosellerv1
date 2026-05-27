@@ -29,6 +29,7 @@
 - [Tarefa 7 — Cadastro do vendedor "Empresa - Venda Direta ES"](#tarefa-7--cadastro-do-vendedor-empresa---venda-direta-es)
 - [Tarefa 8 — F-LOG-CRM R-LOG-1 (migration 119 + 4 Edge Functions, **PROD ONLY** com rede reforçada)](#tarefa-8--f-log-crm-r-log-1-migration-119--4-edge-functions-prod-only-com-rede-reforçada)
 - [Tarefa 9 — F-LOG-CRM R-LOG-2 · Bucket Storage `logistica-comprovantes`](#tarefa-9--f-log-crm-r-log-2--bucket-storage-logistica-comprovantes)
+- [Tarefa 10 — F-LOG-CRM R-LOG-4 · Migration 120 + deploy ssw-tracking-v1 + frete-logistica-v1](#tarefa-10--f-log-crm-r-log-4--migration-120--deploy-ssw-tracking-v1--frete-logistica-v1)
 
 ---
 
@@ -1080,6 +1081,68 @@ delete from storage.buckets where id = 'logistica-comprovantes';
 - A UI degrada graciosamente se o bucket não existir: mensagem "Bucket `logistica-comprovantes` ainda não foi criado neste projeto. Upload em breve." aparece no `FreteDetalhePage`.
 - Se policies forem mais restritivas no futuro (ex.: cada vendedor só vê fotos da própria empresa), criar nova migration; a estratégia atual é "todos autenticados" para acelerar Cântico em 1º/junho.
 - Status de execução: registrar no `TODO.md §1` quando concluído (`bucket criado em <SHA>`).
+
+---
+
+## Tarefa 10 — F-LOG-CRM R-LOG-4 · Migration 120 + deploy ssw-tracking-v1 + frete-logistica-v1
+
+**Feature associada:** F-LOG-CRM R-LOG-4 (SSW Tracking on-demand).
+**MCP:** Supabase MCP (projeto `xxoiqfraeolsqsmsheue`) — `apply_migration` para migration 120.
+**Cenário:** D (integração externa em produção). Migration é DDL aditivo puro (ADD VALUE + ADD COLUMN).
+**ADR de referência:** `docs/decisions/adr/ADR-008-ssw-polling-on-demand.md`.
+
+### Operação
+
+1. Aplicar migration 120 (`supabase/migrations/120_ssw_tracking_adjustments.sql`) via `apply_migration`.
+2. Cadastrar secret `FEATURE_LOG_CRM_SSW=false` (nasce OFF — liga só após smoke).
+3. Deploy Edge Functions via CLI local:
+   - `npx supabase functions deploy ssw-tracking-v1 --project-ref xxoiqfraeolsqsmsheue`
+   - `npx supabase functions deploy frete-logistica-v1 --project-ref xxoiqfraeolsqsmsheue`
+4. Frontend V 1.39 via Netlify (rebuild de `main` após merge da PR R-LOG-4).
+5. Ligar `FEATURE_LOG_CRM_SSW=true` em Supabase Secrets.
+
+### Pré-condições
+
+- [ ] R-LOG-4 mergeada em `main`.
+- [ ] R-LOG-1 + R-LOG-2 em produção (V 1.38 — confirmado 2026-05-21).
+- [ ] Migration 119 já aplicada (tabela `frete_logistica_ocorrencia` existe).
+
+### Smoke pós-migration (step 1)
+
+```sql
+-- Confirmar enum expandido.
+SELECT unnest(enum_range(NULL::tipo_ocorrencia_ssw));
+-- Esperado: 5 valores incluindo 'Entrega'.
+
+-- Confirmar colunas adicionadas.
+SELECT column_name FROM information_schema.columns
+WHERE table_name = 'frete_logistica_ocorrencia'
+  AND column_name IN ('nome_recebedor', 'nro_doc_recebedor', 'data_hora_efetiva');
+-- Esperado: 3 linhas.
+```
+
+### Smoke pós-deploy (step 5 — flag ON)
+
+- [ ] Em `proseller.app.br` (backoffice `lucas.carmo@flowcode.cc`): Logística > Busca > abrir detalhe do frete que tenha chave NFe = `32260522601109000117550010000062991150815200`.
+- [ ] Timeline deve popular com ~7 ocorrências (DOCUMENTO EMITIDO ... MERCADORIA ENTREGUE).
+- [ ] Status do frete deve atualizar automaticamente para "Entregue".
+- [ ] Evento de entrega mostra "Recebido por: <nome>" (se SSW retornar).
+- [ ] Reabrir detalhe antes de 30 min → timeline carrega do cache (sem chamada SSW nos logs).
+
+### Smoke `ssw-tracking-v1` standalone
+
+```
+GET /functions/v1/ssw-tracking-v1?chave_nfe=32260522601109000117550010000062991150815200
+Authorization: Bearer <token>
+apikey: <anon_key>
+```
+Esperado: `{ success: true, ssw_success: true, ocorrencias: [...] }`.
+
+### Rollback
+
+1. **Flag OFF:** `FEATURE_LOG_CRM_SSW=false` → polling para imediatamente. Cadastros e torre de controle continuam funcionando normalmente.
+2. **Reverter Edge Function:** redeploy `frete-logistica-v1` da versão R-LOG-2 (`git checkout <sha-rlog2> -- supabase/functions/frete-logistica-v1/index.ts` + `npx supabase functions deploy`).
+3. **Migration 120:** DDL aditivo — colunas e enum value ficam inertes sem uso. Não requer rollback (DROP VALUE não existe no PostgreSQL; colunas NULL não dão overhead).
 
 ---
 

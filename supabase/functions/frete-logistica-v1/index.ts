@@ -2,19 +2,28 @@
 // F-LOG-CRM R-LOG-1 · CRUD do cabeçalho do frete.
 // F-LOG-CRM R-LOG-2 · Estende GET com 7 filtros, paginação (hard cap 100),
 // action=list_by_status (5 buckets) e action=get_with_ocorrencias.
+// F-LOG-CRM R-LOG-4 · get_with_ocorrencias agora faz polling SSW on-demand
+// com cache 30 min (ADR-008). Gated por FEATURE_LOG_CRM_SSW.
 // Gated por FEATURE_LOG_CRM. Backoffice + vendedor podem criar (vendedor restrito
 // à própria empresa); deleção é backoffice-only. Soft-delete via deleted_at.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { isLogCrmEnabledFromEnv } from '../_shared/log-crm-feature-flag.ts'
+import { isLogCrmEnabledFromEnv, isLogCrmSswEnabledFromEnv } from '../_shared/log-crm-feature-flag.ts'
 import {
   csvParam,
   clampLimit,
   clampOffset,
   DASHBOARD_BUCKETS,
   diasEmTransito,
+  isTerminalStatus,
+  resolveFreteStatusFromTracking,
 } from '../_shared/frete-logistica-helpers.ts'
+import {
+  fetchSswTracking,
+  mapSswToOcorrencias,
+  isCacheStale,
+} from '../_shared/ssw-client.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -156,6 +165,9 @@ function formatOcorrencia(row: Record<string, unknown>) {
     filial: row.filial ?? null,
     cidade: row.cidade ?? null,
     uf: row.uf ?? null,
+    nomeRecebedor: row.nome_recebedor ?? null,
+    nroDocRecebedor: row.nro_doc_recebedor ?? null,
+    dataHoraEfetiva: row.data_hora_efetiva ? new Date(row.data_hora_efetiva as string).toISOString() : null,
     rawPayload: row.raw_payload ?? null,
   }
 }
@@ -184,16 +196,85 @@ async function handleGetWithOcorrencias(supabase: ReturnType<typeof createClient
     .eq('id', id)
     .is('deleted_at', null)
     .single()
-  if (freteErr || !freteRow) return { frete: null as EnrichedFrete | null, ocorrencias: [] }
+  if (freteErr || !freteRow) return { frete: null as EnrichedFrete | null, ocorrencias: [], sswPolled: false }
+
+  const frete = freteRow as Record<string, unknown>
+  const chaveNfe = frete.nfe_chave_acesso as string | null
+  const currentStatus = frete.status_entrega as string
+
+  let sswPolled = false
+
+  const shouldPollSsw = isLogCrmSswEnabledFromEnv()
+    && !!chaveNfe
+    && /^[0-9]{44}$/.test(chaveNfe)
+    && !isTerminalStatus(currentStatus)
+
+  if (shouldPollSsw) {
+    const { data: latestOcorr } = await supabase
+      .from('frete_logistica_ocorrencia')
+      .select('created_at')
+      .eq('frete_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    const latestCreatedAt = latestOcorr?.created_at as string | null | undefined
+
+    if (isCacheStale(latestCreatedAt)) {
+      console.log(`[${FUNC_NAME}] SSW polling para frete ${id}, chave ${chaveNfe!.substring(0, 10)}...`)
+      const sswResponse = await fetchSswTracking(chaveNfe!)
+
+      if (sswResponse.success && sswResponse.documento.tracking.length > 0) {
+        const inserts = mapSswToOcorrencias(sswResponse, id)
+
+        await supabase.from('frete_logistica_ocorrencia').delete().eq('frete_id', id)
+        const { error: insertErr } = await supabase
+          .from('frete_logistica_ocorrencia')
+          .insert(inserts)
+        if (insertErr) {
+          console.error(`[${FUNC_NAME}] Erro ao inserir ocorrências SSW:`, insertErr.message)
+        } else {
+          sswPolled = true
+          const newStatus = resolveFreteStatusFromTracking(
+            sswResponse.documento.tracking.map((t) => ({ tipo: t.tipo, ocorrencia: t.ocorrencia })),
+          )
+          const statusPatch: Record<string, unknown> = {
+            status_entrega: newStatus,
+            updated_at: new Date().toISOString(),
+          }
+          if (newStatus === 'Entregue') {
+            const lastTracking = sswResponse.documento.tracking[sswResponse.documento.tracking.length - 1]
+            if (lastTracking?.data_hora_efetiva) {
+              const d = new Date(lastTracking.data_hora_efetiva)
+              if (!isNaN(d.getTime())) {
+                statusPatch.data_entrega = d.toISOString().split('T')[0]
+              }
+            }
+          }
+          await supabase.from('frete_logistica').update(statusPatch).eq('id', id)
+          console.log(`[${FUNC_NAME}] Status atualizado para '${newStatus}', ${inserts.length} ocorrências inseridas`)
+        }
+      } else {
+        console.log(`[${FUNC_NAME}] SSW sem dados novos (success=${sswResponse.success}, msg=${sswResponse.message}) — ocorrências existentes preservadas`)
+      }
+    }
+  }
+
+  const { data: freshFreteRow } = sswPolled
+    ? await supabase.from('frete_logistica').select(SELECT_WITH_JOINS).eq('id', id).is('deleted_at', null).single()
+    : { data: freteRow }
+
   const { data: ocorrRows, error: ocorrErr } = await supabase
     .from('frete_logistica_ocorrencia')
     .select('*')
     .eq('frete_id', id)
     .order('data_hora', { ascending: false })
   if (ocorrErr) throw new Error(ocorrErr.message)
+
   return {
-    frete: enrichFrete(freteRow as Record<string, unknown>),
+    frete: enrichFrete((freshFreteRow || freteRow) as Record<string, unknown>),
     ocorrencias: (ocorrRows || []).map((row) => formatOcorrencia(row as Record<string, unknown>)),
+    sswPolled,
   }
 }
 

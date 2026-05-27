@@ -16,3 +16,11 @@ export function isLogCrmFeatureEnabled(value: string | undefined | null): boolea
 export function isLogCrmEnabledFromEnv(): boolean {
   return isLogCrmFeatureEnabled(Deno.env.get('FEATURE_LOG_CRM'));
 }
+
+export function isLogCrmSswFeatureEnabled(value: string | undefined | null): boolean {
+  return value === 'true';
+}
+
+export function isLogCrmSswEnabledFromEnv(): boolean {
+  return isLogCrmSswFeatureEnabled(Deno.env.get('FEATURE_LOG_CRM_SSW'));
+}

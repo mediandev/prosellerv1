@@ -1,70 +1,64 @@
-# F-LOG-4 · Integração SSW Tracking — Edge Function + ocorrências
+# F-LOG-4 · Integração SSW Tracking — on-demand com cache 30 min
 
-**Risco:** **D** · **Branch:** `feat/log-crm-R-LOG-4` (futura) · **CI alvo:** N3 · **Depende de:** F-LOG-1 + F-LOG-2 (ambas em produção a partir de V 1.38).
-
-> **Esqueleto v3 (2026-05-21).** Classe D mantida porque toca produção + integração externa, mas:
->  - API SSW pública (sem auth, sem ADR-006), rate limit 20 req/s.
->  - **R-LOG-2 (V 1.38) já entregou a UI da timeline** (`FreteOcorrenciaTimeline`) com placeholder quando `frete_logistica_ocorrencia` está vazia. Esta onda precisa apenas popular a tabela — não há mais trabalho de frontend.
+**Risco:** **D** · **Branch:** `feat/log-crm-R-LOG-4` · **CI alvo:** N3 · **Depende de:** F-LOG-1 (V 1.36) + F-LOG-2 (V 1.38), ambas em produção.
 
 ## Objetivo
 
-Atualizar `frete_logistica_ocorrencia` consumindo a API SSW pública. Estratégia provável (a confirmar em ADR-008): **on-demand** ao abrir Detalhe do frete (Bubble faz assim) com **cache local de 30-60 min** em `frete_logistica_ocorrencia.updated_at`. Cron Supabase opcional como catch-up diário para fretes "Em Trânsito" há > 24h sem polling recente.
+Popular `frete_logistica_ocorrencia` com dados reais da API SSW pública, atualizar automaticamente `status_entrega` do frete, e exibir timeline enriquecida no detalhe do frete (UI já entregue em R-LOG-2).
 
-## Contrato da API SSW (confirmado 2026-05-20)
+## ADR-008 (decidido 2026-05-26)
 
-- **Endpoint:** `POST https://ssw.inf.br/api/trackingdanfe`
-- **Auth:** nenhuma.
-- **Headers:** `Content-Type: application/json` (resposta JSON) ou `application/x-www-form-urlencoded` (resposta XML).
-- **Body JSON:** `{"chave_nfe": "<44 dígitos>"}`.
-- **Body form:** `chave_nfe=<44 dígitos>`.
-- **Schema resposta (mínimo confirmado):** `{success: boolean, message: string, ...}`. Campos extras do `success=true` (timeline ocorrências) pendentes — falta 1 chave NFe ativa para mapear (Valentim, sem urgência; podemos usar chave da doc `43160400850257000132550010000083991000083990` como exemplo Zod parcial).
-- **Erros mapeados:**
-  - `{success:false, message:"Chave da DANFE deve possuir 44 digitos."}` — chave curta ou ausente.
-  - `{success:false, message:"Chave da DANFE invalida."}` — chave com caracteres não numéricos.
-  - `{success:false, message:"Nenhum documento localizado"}` — chave 44 dígitos mas não conhecida pela SSW.
-  - `{success:false, message:"Method not allowed"}` — GET (só POST é aceito).
-- **Rate limit oficial:** 20 req/s ("Todas as chamadas para APIs e Webservices tem um limite de 20 requisições por segundo. As chamadas extras serão recusadas." — `ssw.inf.br/ajuda`).
-- **Documentação oficial:** `https://ssw.inf.br/ajuda/trackingdanfe.html`.
+On-demand ao abrir detalhe do frete. Cache 30 min baseado em `created_at` da última ocorrência. Skip em status terminal (Entregue, Devolvido - Entregue). Sem cron. Fail-safe: se SSW retorna erro ou array vazio, NÃO deleta ocorrências existentes.
 
-## Definition of Ready
+## Critérios de Aceite
 
-- [x] ~~ADR-006~~ **CANCELADA** — integração pública, sem credenciais por transportadora. Ver DECISIONS_LOG 2026-05-20.
-- [ ] **ADR-008** decidido: frequência do polling (on-demand + cache vs. cron periódico vs. híbrido).
-- [x] Rate-limit SSW levantado: **20 req/s.**
-- [ ] Schema completo da resposta SSW `success=true` mapeado (precisa 1 chave NFe ativa do Valentim — sem urgência, ou usar chave da doc para esqueleto Zod).
-- [ ] Mapping código SSW → `tipo_ocorrencia_ssw` definido (códigos vistos: 01, 02, 67, 71, 80 — listar completo via Valentim ou observação).
-- [ ] Feature flag `FEATURE_LOG_CRM_SSW` (separada de `FEATURE_LOG_CRM` para permitir polling off enquanto cadastros estão on).
-- [ ] Rollback plan para staging→prod.
+| # | CA | Validação |
+|---|---|---|
+| 1 | `get_with_ocorrencias` consulta SSW quando cache > 30 min e chave NFe presente | Abrir detalhe do frete 1 (chave 3226...) → timeline popula com 7 ocorrências |
+| 2 | Ocorrências persistidas em `frete_logistica_ocorrencia` com todos os campos | SELECT da tabela confirma 7 rows com `nome_recebedor`, `data_hora_efetiva` preenchidos no evento ENTREGUE |
+| 3 | `status_entrega` atualizado automaticamente (mapper) | Frete 1 passa de "Em Separação" para "Entregue" após polling |
+| 4 | Cache 30 min respeitado | Reabrir detalhe antes de 30 min → não chama SSW de novo (log Edge Function confirma) |
+| 5 | Skip em status terminal | Frete com status "Entregue" → não chama SSW |
+| 6 | Fail-safe: SSW fora do ar não apaga ocorrências | Simular erro SSW → ocorrências existentes preservadas |
+| 7 | Flag `FEATURE_LOG_CRM_SSW=false` desliga polling | Desligar flag → `get_with_ocorrencias` retorna ocorrências do DB sem chamar SSW |
+| 8 | `ssw-tracking-v1` standalone funciona | GET `?chave_nfe=3226...` retorna ocorrências normalizadas |
+| 9 | Timeline UI exibe `nome_recebedor` em eventos de entrega | Evento "MERCADORIA ENTREGUE (01)" mostra "Recebido por: FULANO" |
+| 10 | Bump V 1.39 visível no Sidebar | Tooltip mostra 3 bullets R-LOG-4 |
 
 ## Escopo incluído
 
-- `supabase/functions/ssw-tracking-v1/index.ts` — wrapper Deno da chamada SSW pública. Recebe `nfe_chave_acesso`, retorna ocorrências normalizadas em formato Zod `OcorrenciaSSW`.
-- `supabase/functions/frete-logistica-v1` GET-by-id passa a chamar `ssw-tracking-v1` quando `nfe_chave_acesso != null` e `updated_at` da última ocorrência > N minutos.
-- Cron Supabase `pg_cron` (job `ssw_catchup_diario`) — se ADR-008 escolher esse caminho.
-- Persistência em `frete_logistica_ocorrencia` (tabela já criada em migration 119) com `raw_payload jsonb` preservando resposta original.
-- Mapper `codigo_ssw → status_entrega` para atualizar o status interno do frete a partir dos códigos SSW (ex.: 01 → "Entregue", 02 → "Agendado").
+- Migration 120 (ALTER TYPE + 3 ADD COLUMN).
+- `_shared/ssw-client.ts` (fetch + parse + cache check).
+- `_shared/frete-logistica-helpers.ts` (mapper SSW → status_entrega).
+- `_shared/log-crm-feature-flag.ts` (FEATURE_LOG_CRM_SSW).
+- `ssw-tracking-v1/index.ts` (standalone wrapper).
+- `frete-logistica-v1/index.ts` (get_with_ocorrencias orquestra SSW).
+- `packages/shared/types/ssw-tracking.ts` (Zod SSW response).
+- `packages/shared/types/frete-logistica.ts` (3 campos novos + Entrega no enum).
+- `FreteOcorrenciaTimeline.tsx` (cores, nome_recebedor, placeholder atualizado).
+- `ChangelogPage.tsx` + `App.tsx` (V 1.39).
+- ADR-008.
 
 ## Escopo excluído
 
-- UI de configuração de credenciais SSW por transportadora (não existe mais — ADR-006 cancelada).
-- Indicadores SLA (R-LOG-5).
-- Suporte a outras transportadoras fora SSW (TA-AMERICANA, CAMILO DOS SANTOS — `transportador_logistica.ssw_dominio = NULL` → não consulta API).
+- SalesPage (não tocar além de R-LOG-2).
+- Cron / pg_cron.
+- Tiny integration (R-LOG-3).
+- Indicadores financeiros (R-LOG-5).
+- Parser PDF/EDI (R-LOG-7 adiada).
 
-## Arquivos prováveis
+## Rollback
 
-- `supabase/functions/ssw-tracking-v1/index.ts` (novo).
-- `supabase/functions/frete-logistica-v1/index.ts` (modificada — adiciona chamada ssw-tracking-v1 no GET-by-id).
-- `packages/shared/types/ssw-tracking.ts` (novo Zod schema da resposta).
-- `packages/shared/types/frete-logistica.ts` (estende `OcorrenciaSSW` com campos confirmados).
-- Migration `~120` para `pg_cron` job se ADR-008 escolher esse caminho.
+1. `FEATURE_LOG_CRM_SSW=false` → polling para, timeline mostra dados do DB.
+2. Redeploy `frete-logistica-v1` anterior (git checkout da versão R-LOG-2).
+3. Migration 120 é DDL aditivo — colunas e enum value ficam inertes sem uso.
 
-## Dependências externas
+## Deploy (cursor-brief)
 
-- API SSW pública (`https://ssw.inf.br/api/trackingdanfe`).
-- Rate limit 20 req/s — projetar batch/throttle.
-
-## Bloqueadores
-
-- **ADR-008** pendente — não abrir esta onda antes.
-- R-LOG-1 deployada em produção (atualmente PR #22 mergeada em main, aguardando deploy via cursor-brief Tarefa 8).
-- R-LOG-2 pelo menos parcial (Detalhe do frete onde o polling on-demand acontece).
+1. Migration 120 via Cursor MCP `apply_migration` direto em prod.
+2. Secret `FEATURE_LOG_CRM_SSW=false` (nasce OFF).
+3. `npx supabase functions deploy ssw-tracking-v1 --project-ref xxoiqfraeolsqsmsheue`.
+4. `npx supabase functions deploy frete-logistica-v1 --project-ref xxoiqfraeolsqsmsheue`.
+5. Frontend V 1.39 via Netlify.
+6. Ligar `FEATURE_LOG_CRM_SSW=true`.
+7. Smoke: abrir detalhe frete com chave NFe → timeline popula.

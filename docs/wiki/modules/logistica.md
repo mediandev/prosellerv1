@@ -1,7 +1,7 @@
 # Módulo — Logística (F-LOG-CRM)
 
-> Estado: **R-LOG-1 em produção desde 2026-05-21 com flag LIGADA** (V 1.36). **R-LOG-2 implementada** (branch `feat/log-crm-R-LOG-2`, V 1.38, aguardando push). `FEATURE_LOG_CRM=true` em Supabase + `VITE_FEATURE_LOG_CRM=true` em Netlify.
-> Última atualização: 2026-05-21.
+> Estado: **R-LOG-1 (V 1.36) + R-LOG-2 (V 1.38) em produção com flags ligadas**. **R-LOG-4 implementada** (branch `feat/log-crm-R-LOG-4`, V 1.39, aguardando push/deploy). `FEATURE_LOG_CRM=true` + `FEATURE_LOG_CRM_SSW` nasce `false` (liga após smoke).
+> Última atualização: 2026-05-26.
 
 ## Propósito
 
@@ -31,7 +31,7 @@ Todas as 4 Edge Functions retornam **503** quando `FEATURE_LOG_CRM != "true"`.
 - `fatura_transportadora` — estrutura apenas (CRUD em R-LOG-6).
 - `fatura_transportadora_item` — idem.
 
-4 ENUMs: `status_entrega_frete` (9), `tipo_ocorrencia_ssw` (4), `grupo_transportador` (5), `status_fatura_transportadora` (3).
+4 ENUMs: `status_entrega_frete` (9), `tipo_ocorrencia_ssw` (5 — inclui `Entrega` desde migration 120), `grupo_transportador` (5), `status_fatura_transportadora` (3).
 
 RLS habilitada em todas as 7 tabelas (defesa em profundidade). Policy SELECT para `authenticated`; escritas só por service_role via Edge Function.
 
@@ -47,7 +47,7 @@ Indexes em: `frete_logistica.nfe_numero`, `nfe_chave_acesso`, `empresa_id`, `sta
   - `LogisticaDashboardPage.tsx` — Torre de Controle (5 cards de status, sem indicadores financeiros — adiados para R-LOG-5).
   - `LogisticaBuscaPage.tsx` — lista paginada com 7 filtros + paginação client-side.
   - `FreteDetalhePage.tsx` — 7 seções + timeline + upload câmera/arquivo (DACTE + comprovante).
-  - `FreteOcorrenciaTimeline.tsx` — placeholder quando vazio; integração SSW chega em R-LOG-4.
+  - `FreteOcorrenciaTimeline.tsx` — **R-LOG-4: exibe ocorrências reais SSW** com cores por tipo (verde=Entrega, âmbar=Cliente, azul=Informativo) e nome_recebedor em eventos de entrega.
   - `FreteStatusBadge.tsx` — chip colorido reutilizável.
   - `FreteResumoCard.tsx` — bloco "Entrega" inserido no Diálogo "Detalhes da Venda" (`SalesPage`).
 - `src/services/logisticaService.ts` — wrappers HTTP. **R-LOG-2: 3 funções novas** (`listFretes`, `listFretesByStatus`, `getFreteWithOcorrencias`).
@@ -59,13 +59,20 @@ Indexes em: `frete_logistica.nfe_numero`, `nfe_chave_acesso`, `empresa_id`, `sta
 Zod em `packages/shared/types/`:
 - `transportador-logistica.ts` — `TransportadorLogistica`, `Create`, `Update`, `GrupoTransportador`.
 - `regiao-origem.ts` — `RegiaoDestino`, `OrigemFrete` + Create/Update.
-- `frete-logistica.ts` — `FreteLogistica`, `Create`, `Update`, `StatusEntregaFrete`, `OcorrenciaSSW`, `TipoOcorrenciaSSW`.
+- `frete-logistica.ts` — `FreteLogistica`, `Create`, `Update`, `StatusEntregaFrete`, `OcorrenciaSSW`, `TipoOcorrenciaSSW` (inclui `Entrega` desde R-LOG-4).
+- `ssw-tracking.ts` — **R-LOG-4 novo.** `SswTrackingResponse` (union discriminada), `SswTrackingItem`, `SswTrackingSuccess`, `SswTrackingError`.
 - `fatura-transportadora.ts` — `FaturaTransportadora`, itens, `StatusFaturaTransportadora`.
+
+### Shared Edge Function modules (R-LOG-4)
+- `_shared/ssw-client.ts` — fetch SSW, parse, mapper to DB rows, cache staleness check.
+- `_shared/frete-logistica-helpers.ts` — mapper `ocorrencia → status_entrega`, `isTerminalStatus`, `resolveFreteStatusFromTracking`.
+- `_shared/log-crm-feature-flag.ts` — `FEATURE_LOG_CRM` + **R-LOG-4: `FEATURE_LOG_CRM_SSW`** (flag separada).
 
 ## Features cobertas / planejadas
 
 - **R-LOG-1** (em produção, V 1.36) — Schema + cadastros + Novo Frete manual.
-- **R-LOG-2** (implementada, V 1.38, aguardando push/deploy) — Torre de Controle + Busca + Detalhe + bloco "Entrega" no detalhe do pedido + upload comprovante via câmera.
+- **R-LOG-2** (em produção, V 1.38) — Torre de Controle + Busca + Detalhe + bloco "Entrega" no detalhe do pedido + upload comprovante via câmera.
+- **R-LOG-4** (implementada, V 1.39, aguardando push/deploy) — SSW Tracking on-demand com cache 30 min. Polling da API SSW no `get_with_ocorrencias`, mapper automático status, timeline enriquecida com nome_recebedor. ADR-008 decidido. Migration 120 (ALTER TYPE + ADD COLUMNS).
 - **R-LOG-3** (backlog, classe C) — Hook em `tiny-enviar-pedido-venda-v1` cria frete automático.
 - **R-LOG-4** (backlog, classe D) — Integração SSW Tracking. *Timeline já está pronta na UI; precisa apenas popular `frete_logistica_ocorrencia`.*
 - **R-LOG-5** (backlog) — Indicadores financeiros do Dashboard.

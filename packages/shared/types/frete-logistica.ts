@@ -25,6 +25,7 @@ export type StatusEntregaFrete = z.infer<typeof StatusEntregaFrete>;
 export const TipoOcorrenciaSSW = z.enum([
   "Cliente",
   "Informativo",
+  "Entrega",
   "Sistema",
   "Operacional",
 ]);
@@ -51,6 +52,9 @@ export const OcorrenciaSSW = z.object({
   filial: z.string().nullable(),
   cidade: z.string().nullable(),
   uf: z.string().regex(/^[A-Z]{2}$/).nullable(),
+  nomeRecebedor: z.string().nullable(),
+  nroDocRecebedor: z.string().nullable(),
+  dataHoraEfetiva: z.string().datetime().nullable(),
   rawPayload: z.unknown().nullable(),
 });
 export type OcorrenciaSSW = z.infer<typeof OcorrenciaSSW>;
