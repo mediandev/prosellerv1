@@ -1,5 +1,14 @@
 # Changelog
 
+## V 1.19 — 2026-05-27
+
+### Integridade front-backend
+
+- **Removidos todos os mock fallbacks** — 14 pontos no `api.ts` onde erros de API eram silenciosamente engolidos e dados gravados apenas no localStorage. Agora erros propagam para o usuário. Entidades afetadas: produtos (create/update), segmentos (create), listas de preço (create), formas de pagamento (create/update), vendedores (read), condições de pagamento (read), marcas (read), tipos de produto (read), unidades de medida (read).
+- **Overloads RPC duplicados removidos** — `create_user_v2` e `generate_vendedor_comissao` tinham versões antigas coexistindo em produção. Versões mortas removidas.
+
+---
+
 ## V 1.18 — 2026-05-27
 
 ### Bug Fixes

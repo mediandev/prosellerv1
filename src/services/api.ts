@@ -1283,10 +1283,8 @@ export const api = {
 
         return sellers;
       } catch (error) {
-        console.error('[API] Erro ao buscar vendedores, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        return getStoredData(entityConfig.storageKey, entityConfig.data);
+        console.error('[API] Erro ao buscar vendedores:', error);
+        throw error;
       }
     }
 
@@ -1308,10 +1306,8 @@ export const api = {
 
         return formas;
       } catch (error) {
-        console.error('[API] Erro ao buscar formas de pagamento, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        return getStoredData(entityConfig.storageKey, entityConfig.data);
+        console.error('[API] Erro ao buscar formas de pagamento:', error);
+        throw error;
       }
     }
 
@@ -1346,10 +1342,8 @@ export const api = {
           intervaloParcela: cond.intervaloParcela || [],
         }));
       } catch (error) {
-        console.error('[API] Erro ao buscar condições de pagamento, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        return getStoredData(entityConfig.storageKey, entityConfig.data);
+        console.error('[API] Erro ao buscar condições de pagamento:', error);
+        throw error;
       }
     }
 
@@ -1388,13 +1382,8 @@ export const api = {
 
         return segmentos;
       } catch (error) {
-        console.error('[API] Erro ao listar segmentos, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        if (entityConfig) {
-          return getStoredData(entityConfig.storageKey, entityConfig.data);
-        }
-        return [];
+        console.error('[API] Erro ao listar segmentos:', error);
+        throw error;
       }
     }
 
@@ -1445,10 +1434,8 @@ export const api = {
 
         return produtos;
       } catch (error) {
-        console.error('[API] Erro ao listar produtos, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        return getStoredData(entityConfig.storageKey, entityConfig.data);
+        console.error('[API] Erro ao listar produtos:', error);
+        throw error;
       }
     }
 
@@ -1465,13 +1452,8 @@ export const api = {
 
         return marcas;
       } catch (error) {
-        console.error('[API] Erro ao listar marcas, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        if (entityConfig) {
-          return getStoredData(entityConfig.storageKey, entityConfig.data);
-        }
-        return [];
+        console.error('[API] Erro ao listar marcas:', error);
+        throw error;
       }
     }
 
@@ -1488,13 +1470,8 @@ export const api = {
 
         return tipos;
       } catch (error) {
-        console.error('[API] Erro ao listar tipos de produto, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        if (entityConfig) {
-          return getStoredData(entityConfig.storageKey, entityConfig.data);
-        }
-        return [];
+        console.error('[API] Erro ao listar tipos de produto:', error);
+        throw error;
       }
     }
 
@@ -1559,13 +1536,8 @@ export const api = {
 
         return unidades;
       } catch (error) {
-        console.error('[API] Erro ao listar unidades de medida, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        if (entityConfig) {
-          return getStoredData(entityConfig.storageKey, entityConfig.data);
-        }
-        return [];
+        console.error('[API] Erro ao listar unidades de medida:', error);
+        throw error;
       }
     }
 
@@ -1740,12 +1712,8 @@ export const api = {
         console.log(`[API] ${listas.length} listas de preço encontradas`);
         return listas;
       } catch (error) {
-        console.error('[API] Erro ao listar listas de preço, usando mock:', error);
-        const entityConfig = entityMap[entity];
-        if (entityConfig) {
-          return getStoredData(entityConfig.storageKey, entityConfig.data);
-        }
-        return [];
+        console.error('[API] Erro ao listar listas de preço:', error);
+        throw error;
       }
     }
 
@@ -1912,15 +1880,8 @@ export const api = {
         // A resposta vem no formato { success: true, data: {...} }
         return response.data || response;
       } catch (error) {
-        console.error('[API] Erro ao buscar produto, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        const data = getStoredData(entityConfig.storageKey, entityConfig.data);
-        const item = data.find((item: any) => item.id === id);
-        if (!item) {
-          throw new Error(`Produto ${id} não encontrado`);
-        }
-        return item;
+        console.error('[API] Erro ao buscar produto:', error);
+        throw error;
       }
     }
 
@@ -2140,21 +2101,7 @@ export const api = {
         clearOptionsCache('segmentos-cliente');
         return response.data || response;
       } catch (error) {
-        console.error('[API] Erro ao criar segmento, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        if (entityConfig) {
-          const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
-          const novoItem = {
-            ...data,
-            id: data.id || `${entity}-${Date.now()}`,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-          storedData.push(novoItem);
-          saveStoredData(entityConfig.storageKey, storedData);
-          return novoItem;
-        }
+        console.error('[API] Erro ao criar segmento:', error);
         throw error;
       }
     }
@@ -2192,19 +2139,8 @@ export const api = {
         // A resposta vem no formato { success: true, data: {...} }
         return response.data || response;
       } catch (error) {
-        console.error('[API] Erro ao criar produto, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
-        const novoItem = {
-          ...data,
-          id: data.id || `${entity}-${Date.now()}`,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        storedData.push(novoItem);
-        saveStoredData(entityConfig.storageKey, storedData);
-        return novoItem;
+        console.error('[API] Erro ao criar produto:', error);
+        throw error;
       }
     }
 
@@ -2223,20 +2159,7 @@ export const api = {
         const response = await callEdgeFunction('listas-preco-v2', 'POST', payload);
         return mapListaPrecoFromApi(response?.data ?? response);
       } catch (error) {
-        console.error('[API] Erro ao criar lista de preço, usando mock:', error);
-        const entityConfig = entityMap['listas-preco'];
-        if (entityConfig) {
-          const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
-          const novoItem = {
-            ...data,
-            id: data.id || `listas-preco-${Date.now()}`,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-          storedData.push(novoItem);
-          saveStoredData(entityConfig.storageKey, storedData);
-          return novoItem;
-        }
+        console.error('[API] Erro ao criar lista de preço:', error);
         throw error;
       }
     }
@@ -2395,19 +2318,8 @@ export const api = {
         clearOptionsCache('formas-pagamento');
         return response.forma || response.data?.forma || response;
       } catch (error) {
-        console.error('[API] Erro ao criar forma de pagamento, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
-        const novoItem = {
-          ...data,
-          id: data.id || `${entity}-${Date.now()}`,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        storedData.push(novoItem);
-        saveStoredData(entityConfig.storageKey, storedData);
-        return novoItem;
+        console.error('[API] Erro ao criar forma de pagamento:', error);
+        throw error;
       }
     }
 
@@ -2603,22 +2515,8 @@ export const api = {
         // A resposta vem no formato { success: true, data: {...} }
         return response.data || response;
       } catch (error) {
-        console.error('[API] Erro ao atualizar produto, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
-        const index = storedData.findIndex((item: any) => item.id === id);
-        if (index === -1) {
-          throw new Error(`Produto ${id} não encontrado`);
-        }
-        storedData[index] = {
-          ...storedData[index],
-          ...data,
-          id,
-          updatedAt: new Date(),
-        };
-        saveStoredData(entityConfig.storageKey, storedData);
-        return storedData[index];
+        console.error('[API] Erro ao atualizar produto:', error);
+        throw error;
       }
     }
 
@@ -2636,22 +2534,8 @@ export const api = {
         clearOptionsCache('formas-pagamento');
         return response.forma || response.data?.forma || response;
       } catch (error) {
-        console.error('[API] Erro ao atualizar forma de pagamento, usando mock:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        const storedData = getStoredData(entityConfig.storageKey, entityConfig.data);
-        const index = storedData.findIndex((item: any) => item.id === id);
-        if (index === -1) {
-          throw new Error(`${entity} ${id} não encontrado`);
-        }
-        storedData[index] = {
-          ...storedData[index],
-          ...data,
-          id,
-          updatedAt: new Date(),
-        };
-        saveStoredData(entityConfig.storageKey, storedData);
-        return storedData[index];
+        console.error('[API] Erro ao atualizar forma de pagamento:', error);
+        throw error;
       }
     }
 
