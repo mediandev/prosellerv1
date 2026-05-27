@@ -1,5 +1,17 @@
 # Changelog
 
+## V 1.20 — 2026-05-27
+
+### Integridade front-backend (continuação)
+
+- **Removidos mock fallbacks de vendas** — `vendas.list()`, `vendas.delete()` e `vendas.getById()` não caem mais em localStorage quando a API falha. Erros agora propagam para o usuário.
+- **Aprovação de clientes conectada ao banco** — `clientes.getPendentes/aprovar/rejeitar` operavam 100% em mock (localStorage). Agora usam as edge functions `clientes-v2`, `aprovar-cliente-v2` e `rejeitar-cliente-v2`.
+- **Notificações sem mock** — `notificacoes.list()` não retorna mais dados falsos em caso de erro.
+- **Listagem de clientes sem mock** — `api.get('clientes')` não cai mais em mock data.
+- **Endpoints de referência sem return []** — tipos de pessoa, situações, grupos/redes, tipos de veículo, categorias de conta corrente, empresas, metas e logs de importação agora propagam erros em vez de retornar array vazio silenciosamente.
+
+---
+
 ## V 1.19 — 2026-05-27
 
 ### Integridade front-backend

@@ -1412,11 +1412,7 @@ export const api = {
         return listas;
       } catch (error) {
         console.error('[API] Erro ao listar clientes:', error);
-        const entityConfig = entityMap[entity];
-        if (entityConfig) {
-          return getStoredData(entityConfig.storageKey, entityConfig.data);
-        }
-        return [];
+        throw error;
       }
     }
 
@@ -1495,12 +1491,7 @@ export const api = {
         return condicoes;
       } catch (error) {
         console.error('[API] Erro ao listar condições de pagamento:', error);
-        // Fallback para mock em caso de erro
-        const entityConfig = entityMap[entity];
-        if (entityConfig) {
-          return getStoredData(entityConfig.storageKey, entityConfig.data);
-        }
-        return [];
+        throw error;
       }
     }
 
@@ -1519,7 +1510,7 @@ export const api = {
         return tipos;
       } catch (error) {
         console.error('[API] Erro ao listar tipos de pessoa:', error);
-        return [];
+        throw error;
       }
     }
 
@@ -1566,7 +1557,7 @@ export const api = {
         }
       } catch (error) {
         console.error('[API] Erro ao listar situações:', error);
-        return [];
+        throw error;
       }
     }
 
@@ -1606,7 +1597,7 @@ export const api = {
         }
       } catch (error) {
         console.error('[API] Erro ao listar grupos/redes:', error);
-        return [];
+        throw error;
       }
     }
 
@@ -1620,7 +1611,7 @@ export const api = {
         return tipos;
       } catch (error) {
         console.error('[API] Erro ao listar tipos de veículo:', error);
-        return [];
+        throw error;
       }
     }
 
@@ -1634,7 +1625,7 @@ export const api = {
         return categorias;
       } catch (error) {
         console.error('[API] Erro ao listar categorias de conta corrente:', error);
-        return [];
+        throw error;
       }
     }
 
@@ -1733,7 +1724,7 @@ export const api = {
         return empresas;
       } catch (error) {
         console.error('[API] Erro ao listar empresas:', error);
-        return [];
+        throw error;
       }
     }
 
@@ -1997,14 +1988,8 @@ export const api = {
           })),
         };
       } catch (error) {
-        console.error('[API] Erro ao buscar venda, usando fallback:', error);
-        // Fallback para localStorage em caso de erro
-        const vendas = carregarVendasDoLocalStorage();
-        const venda = vendas.find(v => v.id === id);
-        if (!venda) {
-          throw new Error(`Venda ${id} não encontrada`);
-        }
-        return venda;
+        console.error('[API] Erro ao buscar venda:', error);
+        throw error;
       }
     }
 
@@ -3083,16 +3068,8 @@ export const api = {
         await callEdgeFunction('pedido-venda-v2', 'DELETE', undefined, entityId);
         return { success: true };
       } catch (error) {
-        console.error('[API] Erro ao excluir venda, usando fallback:', error);
-        // Fallback para localStorage em caso de erro
-        const vendas = carregarVendasDoLocalStorage();
-        const index = vendas.findIndex(v => v.id === entityId);
-        if (index === -1) {
-          throw new Error(`Venda ${entityId} não encontrada`);
-        }
-        vendas.splice(index, 1);
-        salvarVendasNoLocalStorage(vendas);
-        return { success: true };
+        console.error('[API] Erro ao excluir venda:', error);
+        throw error;
       }
     }
 
@@ -3153,38 +3130,22 @@ export const api = {
   // Custom endpoints
   clientes: {
     getPendentes: async () => {
-      const clientes = getStoredData('mockClientes', mockClientes);
-      return clientes.filter((c: any) => c.statusAprovacao === 'pendente');
+      const response = await callEdgeFunction('clientes-v2', 'GET', undefined, undefined, {
+        status_aprovacao: 'pendente',
+        limit: '100',
+      });
+      const raw = response?.data?.clientes ?? response?.clientes ?? [];
+      return Array.isArray(raw) ? raw : [];
     },
 
     aprovar: async (id: string) => {
-      const clientes = getStoredData('mockClientes', mockClientes);
-      const index = clientes.findIndex((c: any) => c.id === id);
-      if (index === -1) {
-        throw new Error(`Cliente ${id} não encontrado`);
-      }
-      clientes[index] = {
-        ...clientes[index],
-        statusAprovacao: 'aprovado',
-        dataAprovacao: new Date().toISOString().split('T')[0],
-      };
-      saveStoredData('mockClientes', clientes);
-      return clientes[index];
+      const response = await callEdgeFunction('aprovar-cliente-v2', 'POST', { cliente_id: parseInt(id, 10) });
+      return response?.data ?? response;
     },
 
     rejeitar: async (id: string, motivo: string) => {
-      const clientes = getStoredData('mockClientes', mockClientes);
-      const index = clientes.findIndex((c: any) => c.id === id);
-      if (index === -1) {
-        throw new Error(`Cliente ${id} não encontrado`);
-      }
-      clientes[index] = {
-        ...clientes[index],
-        statusAprovacao: 'rejeitado',
-        motivoRejeicao: motivo,
-      };
-      saveStoredData('mockClientes', clientes);
-      return clientes[index];
+      const response = await callEdgeFunction('rejeitar-cliente-v2', 'POST', { cliente_id: parseInt(id, 10), motivo });
+      return response?.data ?? response;
     },
   },
   notificacoes: {
@@ -3197,9 +3158,8 @@ export const api = {
         });
         return Array.isArray(response) ? response : (response?.data || []);
       } catch (error) {
-        console.error('[API] Erro ao listar notificacoes, usando fallback local:', error);
-        const notificacoes = getStoredData('mockNotificacoes', notificacoesMock);
-        return notificacoes || [];
+        console.error('[API] Erro ao listar notificacoes:', error);
+        throw error;
       }
     },
 
@@ -3379,7 +3339,7 @@ export const api = {
         return metas;
       } catch (error) {
         console.error('[API] Erro ao buscar todas as metas:', error);
-        return [];
+        throw error;
       }
     },
 
@@ -3594,25 +3554,8 @@ export const api = {
           stats,
         };
       } catch (error) {
-        console.error('[API] Erro ao listar vendas, usando fallback:', error);
-        // Fallback para localStorage em caso de erro
-        const vendas = carregarVendasDoLocalStorage();
-        return {
-          vendas,
-          pagination: { page: 1, limit: 100, total: vendas.length, total_pages: 1 },
-          stats: {
-            total: 0,
-            totalVendas: 0,
-            concluidas: 0,
-            totalConcluidas: 0,
-            emAndamento: 0,
-            totalEmAndamento: 0,
-            ticketMedio: 0,
-            outrosPedidosTotal: 0,
-            outrosPedidosConcluidos: 0,
-            outrosPedidosEmAndamento: 0,
-          },
-        };
+        console.error('[API] Erro ao listar vendas:', error);
+        throw error;
       }
     },
 
@@ -4167,7 +4110,7 @@ export const api = {
         return Array.isArray(response) ? response : [];
       } catch (error) {
         console.error('[API] Erro ao listar logs de importação:', error);
-        return [];
+        throw error;
       }
     },
 
