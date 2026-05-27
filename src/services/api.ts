@@ -1773,38 +1773,37 @@ export const api = {
     if (entity === 'vendas') {
       try {
         console.log('[API] Buscando vendas via Edge Function pedido-venda-v2...');
-        const queryParams: Record<string, string> = {
-          page: '1',
-          limit: '1000', // Buscar todas (limite máximo)
-        };
+        const baseParams: Record<string, string> = {};
 
         if (options?.params) {
-          if (options.params.search) {
-            queryParams.search = String(options.params.search);
-          }
-          if (options.params.status) {
-            queryParams.status = String(options.params.status);
-          }
-          if (options.params.vendedorId) {
-            queryParams.vendedor = String(options.params.vendedorId);
-          }
-          if (options.params.clienteId) {
-            queryParams.cliente = String(options.params.clienteId);
-          }
+          if (options.params.search) baseParams.search = String(options.params.search);
+          if (options.params.status) baseParams.status = String(options.params.status);
+          if (options.params.vendedorId) baseParams.vendedor = String(options.params.vendedorId);
+          if (options.params.clienteId) baseParams.cliente = String(options.params.clienteId);
           if (options.params.dataInicio) {
-            const dataInicio = new Date(options.params.dataInicio);
-            queryParams.dataInicio = dataInicio.toISOString().split('T')[0];
+            baseParams.dataInicio = new Date(options.params.dataInicio).toISOString().split('T')[0];
           }
           if (options.params.dataFim) {
-            const dataFim = new Date(options.params.dataFim);
-            queryParams.dataFim = dataFim.toISOString().split('T')[0];
+            baseParams.dataFim = new Date(options.params.dataFim).toISOString().split('T')[0];
           }
         }
 
-        const response = await callEdgeFunction('pedido-venda-v2', 'GET', undefined, undefined, queryParams);
+        const allPedidos: any[] = [];
+        let page = 1;
+        let totalPages = 1;
 
-        // A resposta vem no formato { pedidos: [...], pagination: {...}, stats: {...} }
-        const pedidos = response?.pedidos || [];
+        while (page <= totalPages) {
+          const queryParams = { ...baseParams, page: String(page), limit: '100' };
+          const response = await callEdgeFunction('pedido-venda-v2', 'GET', undefined, undefined, queryParams);
+          const pedidos = response?.pedidos || [];
+          allPedidos.push(...pedidos);
+          totalPages = response?.pagination?.total_pages ?? 1;
+          if (!Number.isFinite(totalPages) || totalPages < 1) totalPages = 1;
+          page++;
+        }
+
+        console.log(`[API] Total vendas carregadas: ${allPedidos.length} (${page - 1} páginas)`);
+        const pedidos = allPedidos;
 
         // Mapear para formato Venda esperado pelo frontend
         return pedidos.map((p: any) => ({
@@ -1858,10 +1857,8 @@ export const api = {
           geraReceita: p.geraReceita,
         }));
       } catch (error) {
-        console.error('[API] Erro ao buscar vendas, usando fallback:', error);
-        // Fallback para localStorage em caso de erro
-        const vendas = carregarVendasDoLocalStorage();
-        return vendas;
+        console.error('[API] Erro ao buscar vendas:', error);
+        throw error;
       }
     }
 
