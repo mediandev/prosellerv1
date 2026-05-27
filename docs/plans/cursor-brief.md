@@ -30,6 +30,7 @@
 - [Tarefa 8 — F-LOG-CRM R-LOG-1 (migration 119 + 4 Edge Functions, **PROD ONLY** com rede reforçada)](#tarefa-8--f-log-crm-r-log-1-migration-119--4-edge-functions-prod-only-com-rede-reforçada)
 - [Tarefa 9 — F-LOG-CRM R-LOG-2 · Bucket Storage `logistica-comprovantes`](#tarefa-9--f-log-crm-r-log-2--bucket-storage-logistica-comprovantes)
 - [Tarefa 10 — F-LOG-CRM R-LOG-4 · Migration 120 + deploy ssw-tracking-v1 + frete-logistica-v1](#tarefa-10--f-log-crm-r-log-4--migration-120--deploy-ssw-tracking-v1--frete-logistica-v1)
+- [Tarefa 11 — F-LOG-CRM R-LOG-3 · Migration 121 + deploy tiny-enviar-pedido-venda-v1 + secret AUTO_FRETE](#tarefa-11--f-log-crm-r-log-3--migration-121--deploy-tiny-enviar-pedido-venda-v1--secret-auto_frete)
 
 ---
 
@@ -1143,6 +1144,94 @@ Esperado: `{ success: true, ssw_success: true, ocorrencias: [...] }`.
 1. **Flag OFF:** `FEATURE_LOG_CRM_SSW=false` → polling para imediatamente. Cadastros e torre de controle continuam funcionando normalmente.
 2. **Reverter Edge Function:** redeploy `frete-logistica-v1` da versão R-LOG-2 (`git checkout <sha-rlog2> -- supabase/functions/frete-logistica-v1/index.ts` + `npx supabase functions deploy`).
 3. **Migration 120:** DDL aditivo — colunas e enum value ficam inertes sem uso. Não requer rollback (DROP VALUE não existe no PostgreSQL; colunas NULL não dão overhead).
+
+---
+
+## Tarefa 11 — F-LOG-CRM R-LOG-3 · Migration 121 + deploy tiny-enviar-pedido-venda-v1 + secret AUTO_FRETE
+
+**Feature associada:** F-LOG-CRM R-LOG-3 (auto-create frete após envio ao Tiny).
+**MCP:** Supabase MCP (projeto `xxoiqfraeolsqsmsheue`) — `apply_migration` para migration 121.
+**Cenário:** C (toca Edge Function crítica de produção). Feature flag `FEATURE_LOG_CRM_AUTO_FRETE` nasce `false`.
+**Feature Contract:** `docs/plans/feature-contracts/F-LOG-3.md`.
+
+### Operação (3 etapas sequenciais)
+
+**Etapa A — Migration 121 via Cursor MCP:**
+
+```
+Usando Supabase MCP (projeto xxoiqfraeolsqsmsheue, ambiente PRODUCTION),
+aplique a migration 121_frete_logistica_uq_pedido_venda.sql.
+
+mcp__supabase__apply_migration({
+  name: '121_frete_logistica_uq_pedido_venda',
+  query: `CREATE UNIQUE INDEX IF NOT EXISTS uq_frete_logistica_pedido_venda
+  ON frete_logistica (pedido_venda_id)
+  WHERE pedido_venda_id IS NOT NULL AND deleted_at IS NULL;`
+})
+
+IMPORTANTE: use apply_migration, NUNCA execute_sql para DDL.
+```
+
+Smoke pós-apply:
+```sql
+SELECT indexname, indexdef FROM pg_indexes
+WHERE schemaname = 'public' AND tablename = 'frete_logistica'
+  AND indexname = 'uq_frete_logistica_pedido_venda';
+-- Esperado: 1 linha com "UNIQUE" e "WHERE pedido_venda_id IS NOT NULL AND deleted_at IS NULL".
+```
+
+**Etapa B — Cadastrar secret `FEATURE_LOG_CRM_AUTO_FRETE=false`:**
+
+Via Supabase Dashboard (Project Settings › Edge Functions › Secrets) ou MCP:
+```
+supabase secrets set FEATURE_LOG_CRM_AUTO_FRETE=false
+```
+
+**Etapa C — Deploy `tiny-enviar-pedido-venda-v1` via CLI local (ADR-005, MCP PROIBIDO):**
+
+```powershell
+git checkout main && git pull
+npx supabase functions deploy tiny-enviar-pedido-venda-v1 --project-ref xxoiqfraeolsqsmsheue
+```
+
+> **⚠️ Este é o deploy mais crítico do projeto.** INC-001 aconteceu nesta mesma função. Verificar que o SHA local de `main` é o commit esperado (com o hook R-LOG-3) antes de executar.
+
+### Pré-condições
+
+- [ ] R-LOG-3 mergeada em `main`.
+- [ ] R-LOG-1 em produção (tabela `frete_logistica` existe).
+- [ ] Janela operacional fora do expediente (antes 8h ou após 19h BRT).
+- [ ] `FEATURE_LOG_CRM_AUTO_FRETE` ausente no Supabase Dashboard (validar visualmente).
+
+### Smoke E2E (após Etapa C, com flag OFF)
+
+1. Enviar pedido normal ao Tiny → sucesso normal (zero regressão).
+2. `SELECT COUNT(*) FROM frete_logistica WHERE pedido_venda_id = <pedido_testado>;` → 0 (flag OFF = hook não dispara).
+
+### Ativação (separada — só após smoke E2E verde)
+
+1. `supabase secrets set FEATURE_LOG_CRM_AUTO_FRETE=true`
+2. Aguardar 30s propagação.
+3. Enviar pedido de teste ao Tiny → sucesso + `SELECT * FROM frete_logistica WHERE pedido_venda_id = <pedido>;` → 1 linha com `status_entrega = 'Em Separação'`, `nfe_numero = null`.
+4. Reenviar mesmo pedido → frete NÃO duplica (ON CONFLICT DO NOTHING via unique index).
+5. Logística > Busca → novo frete aparece na lista.
+
+### Rollback
+
+1. **Flag OFF (instantâneo):** `supabase secrets set FEATURE_LOG_CRM_AUTO_FRETE=false` → hook desativado.
+2. **Reverter Edge Function:** redeploy da versão anterior: `git checkout <sha-pre-rlog3> -- supabase/functions/tiny-enviar-pedido-venda-v1/index.ts` + `npx supabase functions deploy tiny-enviar-pedido-venda-v1 --project-ref xxoiqfraeolsqsmsheue`.
+3. **Migration 121:** DDL aditivo (CREATE UNIQUE INDEX). Index fica inerte sem uso. Se quiser remover: `DROP INDEX IF EXISTS uq_frete_logistica_pedido_venda;`.
+4. **Fretes auto-criados:** ficam na tabela. Podem ser soft-deleted via `UPDATE frete_logistica SET deleted_at = NOW() WHERE pedido_venda_id IS NOT NULL AND criado_por = '<service_role_user>';` se decisão de reverter completamente.
+
+### Critério de aceite da Tarefa 11
+
+- [ ] Migration 121 aplicada, smoke de index verde.
+- [ ] Secret `FEATURE_LOG_CRM_AUTO_FRETE=false` cadastrada.
+- [ ] `tiny-enviar-pedido-venda-v1` deployada via CLI local (NÃO via MCP).
+- [ ] Smoke flag OFF: envio ao Tiny funciona normalmente, sem frete criado.
+- [ ] Smoke flag ON: envio cria frete, retry não duplica.
+- [ ] `TODO.md §1` atualizado com SHA + timestamp.
+- [ ] `docs/wiki/log.md` recebeu entrada R-LOG-3.
 
 ---
 

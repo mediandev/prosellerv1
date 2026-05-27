@@ -24,3 +24,11 @@ export function isLogCrmSswFeatureEnabled(value: string | undefined | null): boo
 export function isLogCrmSswEnabledFromEnv(): boolean {
   return isLogCrmSswFeatureEnabled(Deno.env.get('FEATURE_LOG_CRM_SSW'));
 }
+
+export function isLogCrmAutoFreteFeatureEnabled(value: string | undefined | null): boolean {
+  return value === 'true';
+}
+
+export function isLogCrmAutoFreteEnabledFromEnv(): boolean {
+  return isLogCrmAutoFreteFeatureEnabled(Deno.env.get('FEATURE_LOG_CRM_AUTO_FRETE'));
+}

@@ -8,6 +8,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.41',
+    items: [
+      'Logística > Frete automático: ao enviar um pedido de venda ao Tiny com sucesso, o sistema cria automaticamente um registro de frete vinculado ao pedido (com status "Em Separação"). Funcionalidade controlada por feature flag — peça acesso ao administrador para habilitar.',
+    ],
+  },
+  {
+    version: 'V 1.40',
+    items: [
+      'Usuários > Permissões de backoffice agora são salvas corretamente. Antes, ao editar permissões de outro backoffice (ex.: clientes.todos, usuarios.criar, config.geral), o sistema rejeitava a operação com erro — agora persiste normalmente.',
+    ],
+  },
+  {
     version: 'V 1.39',
     items: [
       'Logística > Rastreio SSW automático: ao abrir o detalhe de um frete com chave NFe, o sistema consulta a API da SSW e atualiza a timeline de ocorrências em tempo real (cache de 30 min).',
