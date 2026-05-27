@@ -565,6 +565,9 @@ serve(async (req) => {
 
       const cpfCnpj = body.cpfCnpj ?? body.cpf_cnpj ?? null
 
+      const descontoPadrao = body.descontoPadrao ?? body.desconto ?? null
+      const condicaoPadrao = body.condicaoPadrao ?? body.condicao_padrao ?? null
+
       const { data: rpcData, error: rpcError } = await supabase.rpc('update_cliente_v2', {
         p_cliente_id: idNum,
         p_nome: String(nome).trim(),
@@ -588,9 +591,20 @@ serve(async (req) => {
         p_set_requisitos_logisticos: requisitosLogisticos.hasValue,
         p_requisitos_logisticos: requisitosLogisticos.value,
         p_telefone: body.telefoneFixoPrincipal ?? body.telefone ?? body.contato?.telefoneFixoPrincipal ?? null,
-        p_telefone_adicional: body.telefoneCelularPrincipal ?? '',
-        p_website: body.site ?? '',
-        p_email: body.emailPrincipal ?? body.email ?? body.contato?.emailPrincipal ?? '',
+        p_telefone_adicional: body.telefoneCelularPrincipal ?? body.telefone_adicional ?? null,
+        p_email: body.emailPrincipal ?? body.email ?? body.contato?.emailPrincipal ?? null,
+        p_email_nf: body.emailNFe ?? body.emailNf ?? body.email_nf ?? body.contato?.emailNFe ?? body.contato?.emailNf ?? null,
+        p_website: body.site ?? body.website ?? null,
+        p_observacao_contato: body.observacaoContato ?? body.observacao_contato ?? null,
+        p_cep: body.cep ?? body.endereco?.cep ?? null,
+        p_rua: body.logradouro ?? body.endereco?.logradouro ?? body.rua ?? null,
+        p_numero: body.numero ?? body.endereco?.numero ?? null,
+        p_complemento: body.complemento ?? body.endereco?.complemento ?? null,
+        p_bairro: body.bairro ?? body.endereco?.bairro ?? null,
+        p_cidade: body.municipio ?? body.endereco?.municipio ?? body.cidade ?? null,
+        p_uf: body.uf ?? body.endereco?.uf ?? null,
+        p_desconto: descontoPadrao != null ? Number(descontoPadrao) : null,
+        p_condicao_padrao: condicaoPadrao != null ? Number(condicaoPadrao) : null,
       })
       if (rpcError) throw new Error(rpcError.message)
       const row = Array.isArray(rpcData) && rpcData[0] ? rpcData[0] : rpcData

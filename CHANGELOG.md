@@ -1,5 +1,18 @@
 # Changelog
 
+## V 1.18 — 2026-05-27
+
+### Bug Fixes
+
+- **Desconto comercial e condição padrão não persistiam na edição** — A RPC `update_cliente_v2` não possuía os parâmetros `p_desconto` e `p_condicao_padrao`. Campos eram coletados pelo formulário mas nunca gravados no banco ao editar um cliente.
+- **Campos faltantes no PUT do clientes-v2** — Edge function não enviava `email_nf`, campos de endereço e `observacao_contato` para a RPC na atualização. Corrigido para enviar todos os campos do formulário.
+
+### Migrations
+
+- `115_fix_update_cliente_missing_fields.sql` — Recria `update_cliente_v2` com `p_desconto` e `p_condicao_padrao`, além de dropar overloads legados.
+
+---
+
 ## V 1.17 — 2026-05-26
 
 ### Ajustes de dados (produção)
