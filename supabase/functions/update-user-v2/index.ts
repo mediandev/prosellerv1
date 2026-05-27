@@ -1,5 +1,6 @@
 ﻿import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { SUPPORTED_SELLER_PERMISSION_IDS, SUPPORTED_BACKOFFICE_PERMISSION_IDS } from '../_shared/permission-ids.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -48,29 +49,6 @@ interface UpdateUserBody {
   dadosBancarios?: any
   contatosAdicionais?: any[]
 }
-
-const SUPPORTED_SELLER_PERMISSION_IDS = new Set<string>([
-  'clientes.visualizar',
-  'clientes.criar',
-  'clientes.editar',
-  'clientes.excluir',
-  'vendas.visualizar',
-  'vendas.criar',
-  'vendas.editar',
-  'vendas.excluir',
-  'relatorios.visualizar',
-  'contacorrente.visualizar',
-  'contacorrente.criar',
-  'contacorrente.editar',
-  'contacorrente.excluir',
-  'produtos.visualizar',
-  'produtos.criar',
-  'produtos.editar',
-  'produtos.excluir',
-  'comissoes.visualizar',
-  'comissoes.lancamentos.editar',
-  'comissoes.lancamentos.excluir',
-])
 
 // Helper: Valida JWT (mesmo cÃ³digo da get-user-v2)
 async function validateJWT(
@@ -156,15 +134,21 @@ function sanitizeInput(input: string): string {
   return typeof input === 'string' ? input.trim().replace(/[<>]/g, '').replace(/javascript:/gi, '').replace(/on\w+=/gi, '') : ''
 }
 
-function sanitizeAndValidatePermissionIds(permissionIds: string[]): string[] {
+function sanitizeAndValidatePermissionIds(
+  permissionIds: string[],
+  targetTipo: 'backoffice' | 'vendedor' = 'vendedor'
+): string[] {
   const sanitizedPermissions = permissionIds
     .filter((permissionId) => typeof permissionId === 'string')
     .map((permissionId) => sanitizeInput(permissionId).trim())
     .filter((permissionId) => permissionId.length > 0)
 
   const uniquePermissions = Array.from(new Set(sanitizedPermissions))
+  const allowlist = targetTipo === 'backoffice'
+    ? SUPPORTED_BACKOFFICE_PERMISSION_IDS
+    : SUPPORTED_SELLER_PERMISSION_IDS
   const invalidPermissions = uniquePermissions.filter(
-    (permissionId) => !SUPPORTED_SELLER_PERMISSION_IDS.has(permissionId)
+    (permissionId) => !allowlist.has(permissionId)
   )
 
   if (invalidPermissions.length > 0) {
@@ -248,7 +232,11 @@ serve(async (req) => {
       if (!Array.isArray(body.permissoes)) {
         throw new ValidationError('permissoes deve ser um array de strings')
       }
-      sanitizedData.permissoes = sanitizeAndValidatePermissionIds(body.permissoes)
+      sanitizedData.permissoes = body.permissoes
+        .filter((p: unknown) => typeof p === 'string')
+        .map((p: string) => sanitizeInput(p).trim())
+        .filter((p: string) => p.length > 0)
+      sanitizedData.permissoes = [...new Set(sanitizedData.permissoes)]
     }
 
     console.log('[UPDATE-USER-V2] Step 5: Calling RPC function update_user_v2...', { p_user_id: userId, p_updated_by: user.id })
@@ -284,6 +272,9 @@ serve(async (req) => {
       if (user.tipo !== 'backoffice') {
         throw new ValidationError('Apenas backoffice pode alterar permissoes')
       }
+
+      const targetTipo = (rpcData[0]?.tipo || 'vendedor') as 'backoffice' | 'vendedor'
+      sanitizedData.permissoes = sanitizeAndValidatePermissionIds(sanitizedData.permissoes, targetTipo)
 
       const targetUserId =
         (typeof rpcData[0]?.user_id === 'string' && rpcData[0].user_id.length > 0)

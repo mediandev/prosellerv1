@@ -7,6 +7,7 @@ import { corsHeaders, createHttpSuccessResponse } from '../_shared/types.ts'
 import { consultarSimplesNacional } from '../_shared/receitaws-client.ts'
 import { resolveNaturezaTiny } from '../_shared/natureza-resolver.ts'
 import { formatDateBR } from '../_shared/date-br.ts'
+import { autoCreateFreteLogistica } from '../_shared/frete-auto-create.ts'
 
 type TinyRetorno = {
   retorno?: any
@@ -722,6 +723,19 @@ serve(async (req) => {
 
     if (updError) {
       throw createBadRequestError('Falha ao atualizar pedido_venda com id_tiny', { code: updError.code, message: updError.message })
+    }
+
+    // R-LOG-3: best-effort auto-create frete_logistica (behind feature flag, never blocks response)
+    if (Deno.env.get('FEATURE_LOG_CRM_AUTO_FRETE') === 'true') {
+      await autoCreateFreteLogistica(supabase, {
+        pedidoVendaId: pedidoId,
+        empresaId,
+        clienteId: pedido.cliente_id || null,
+        vendedorId: vendedorUuid || null,
+        valorProdutos: valorFinal,
+        criadoPor: user.id,
+        traceId,
+      })
     }
 
     const duration = Date.now() - startTime

@@ -3,7 +3,7 @@
 > Memória sintetizada para próximo agente que retomar esta feature. Descartável após conclusão.
 > Limite v3.2: 150 linhas.
 
-**Estado atual (2026-05-26):** Ondas **R-LOG-1 (V 1.36) + R-LOG-2 (V 1.38) EM PRODUÇÃO COM FLAGS LIGADAS**. **R-LOG-4 (V 1.39) implementada** na branch `feat/log-crm-R-LOG-4`, aguardando push/deploy. SSW Tracking on-demand com cache 30 min (ADR-008). Migration 120 (ALTER TYPE + 3 ADD COLUMN). Nova Edge Function `ssw-tracking-v1` + `frete-logistica-v1` estendida. Feature flag `FEATURE_LOG_CRM_SSW` separada (nasce OFF). **Próxima onda recomendada:** INC-018 (bug permissões — pré-1ºJun) ou R-LOG-3 (auto-create frete — exige staging Supabase).
+**Estado atual (2026-05-27):** Ondas **R-LOG-1 (V 1.36) + R-LOG-2 (V 1.38) + R-LOG-4 (V 1.39) EM PRODUÇÃO**. **R-LOG-3 (V 1.41) implementada** — hook em `tiny-enviar-pedido-venda-v1` auto-cria `frete_logistica` após envio ao Tiny. Feature flag `FEATURE_LOG_CRM_AUTO_FRETE` separada (nasce OFF). Migration 121 (UNIQUE INDEX em `pedido_venda_id`). Helper `_shared/frete-auto-create.ts`. Aguardando: merge em `main`, migration 121 via cursor-brief Tarefa 11, deploy via CLI local. **Próxima onda recomendada:** R-LOG-5 (dashboard) ou R-LOG-6 (faturas).
 
 ---
 
@@ -61,8 +61,8 @@ RLS tenant-scoped por `empresa_id` (replica padrão de `cliente`/`pedido_venda`)
 |---|---|---|---|---|
 | **R-LOG-1** | Schema base + cadastros lookup + Novo Frete manual | **B** | N1+matriz | **EM PRODUÇÃO desde 2026-05-21 com flag LIGADA (V 1.36).** |
 | **R-LOG-2** | Torre Controle + Busca + Detalhe + bloco Entrega no Pedido | **B** | N1+matriz | **IMPLEMENTADA (V 1.38, branch `feat/log-crm-R-LOG-2`)** — aguardando push/deploy autorizado pelo humano. |
-| R-LOG-3 | Hook em tiny-enviar-pedido-venda-v1 (auto-cria frete) | **C** | N2 | backlog — **bloqueado** pelo provisionamento de Supabase free de staging |
-| R-LOG-4 | Integração SSW Tracking | **D** | N3 | backlog — **destravada** (ADR-006 cancelada); só ADR-008 (polling) antes. *Timeline já está pronta na UI; só precisa popular `frete_logistica_ocorrencia`.* |
+| **R-LOG-3** | Hook em tiny-enviar-pedido-venda-v1 (auto-cria frete) | **C** | N2 | **IMPLEMENTADA (V 1.41)** — aguardando merge + migration 121 + deploy (cursor-brief Tarefa 11). Flag `FEATURE_LOG_CRM_AUTO_FRETE` nasce OFF. |
+| **R-LOG-4** | Integração SSW Tracking | **D** | N3 | **EM PRODUÇÃO (V 1.39)** — SSW Tracking on-demand com cache 30 min (ADR-008). |
 | R-LOG-5 | Indicadores financeiros do Dashboard | B | N1+matriz | backlog — adiado por decisão Valentim 2026-05-21 (urgência é trazer o que tem para desligar Bubble em 1ºJun) |
 | R-LOG-6 | Faturas — CRUD manual | B | N1+matriz | backlog |
 | R-LOG-7 | Parser PDF/EDI | **D** | N3 | backlog — ADR-007 antes; pode simplificar com WS SSW |

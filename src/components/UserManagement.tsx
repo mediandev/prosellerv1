@@ -210,10 +210,9 @@ export function UserManagement() {
           permissoes: formulario.permissoes,
         })
           .then((usuarioAtualizado) => {
-            // Manter permissões (não são atualizadas via Edge Function ainda)
             const usuarioComPermissoes = {
               ...usuarioAtualizado,
-              permissoes: formulario.permissoes,
+              permissoes: usuarioAtualizado.permissoes || formulario.permissoes,
             };
             setUsuarios(usuarios.map((u) => u.id === usuarioEditando ? usuarioComPermissoes : u));
             toast.success("Usuário atualizado com sucesso!");
