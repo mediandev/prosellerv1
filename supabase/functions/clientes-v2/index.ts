@@ -353,6 +353,33 @@ serve(async (req) => {
 
       const cpfCnpj = body.cpfCnpj ?? body.cpf_cnpj ?? null
 
+      // Processar empresaFaturamento
+      let empresaFaturamentoId: number | null = null
+      if (body.empresaFaturamento) {
+        if (typeof body.empresaFaturamento === 'object' && body.empresaFaturamento.id) {
+          empresaFaturamentoId = Number(body.empresaFaturamento.id)
+        } else if (typeof body.empresaFaturamento === 'number') {
+          empresaFaturamentoId = body.empresaFaturamento
+        } else if (typeof body.empresaFaturamento === 'string' && body.empresaFaturamento.trim() !== '') {
+          empresaFaturamentoId = Number(body.empresaFaturamento)
+        }
+      } else if (body.empresaFaturamentoId) {
+        empresaFaturamentoId = Number(body.empresaFaturamentoId)
+      }
+
+      // Processar condicoesPagamento
+      let condicoesPagamentoIds: number[] | null = null
+      if (body.condicoesPagamentoAssociadas && Array.isArray(body.condicoesPagamentoAssociadas) && body.condicoesPagamentoAssociadas.length > 0) {
+        if (typeof body.condicoesPagamentoAssociadas[0] === 'object') {
+          condicoesPagamentoIds = body.condicoesPagamentoAssociadas.map((c: any) => Number(c.condicao_id ?? c.condicaoId ?? c.id ?? c)).filter((n: number) => !isNaN(n))
+        } else {
+          condicoesPagamentoIds = body.condicoesPagamentoAssociadas.map((c: any) => Number(c)).filter((n: number) => !isNaN(n))
+        }
+      }
+
+      const segmentoIdNum = body.segmentoId ?? body.segmento_id
+      const descontoPadrao = body.descontoPadrao ?? body.desconto ?? null
+
       const p = {
         p_nome: String(nome).trim(),
         p_nome_fantasia: body.nomeFantasia ?? body.nome_fantasia ?? null,
@@ -360,23 +387,30 @@ serve(async (req) => {
         p_ref_tipo_pessoa_id_fk: refTipoPessoaId,
         p_inscricao_estadual: body.inscricaoEstadual ?? body.inscricao_estadual ?? null,
         p_codigo: body.codigo ?? null,
-        p_grupo_rede: grupoId,
+        p_grupo_rede: grupoId ? null : (body.grupoRede ?? body.grupo_rede ?? null),
+        p_grupo_id: grupoId,
+        p_segmento_id: segmentoIdNum != null ? Number(segmentoIdNum) : null,
+        p_tipo_segmento: segmentoIdNum != null ? String(segmentoIdNum) : null,
         p_lista_de_preco: body.listaPrecos ?? body.lista_de_preco != null ? Number(body.listaPrecos ?? body.lista_de_preco) : null,
         p_desconto_financeiro: body.descontoFinanceiro ?? body.desconto_financeiro ?? 0,
         p_pedido_minimo: body.pedidoMinimo ?? body.pedido_minimo ?? 0,
         p_vendedoresatribuidos: body.vendedoresAtribuidos ?? body.vendedoresatribuidos ?? (body.vendedorAtribuido?.id ? [body.vendedorAtribuido.id] : null),
         p_observacao_interna: body.observacoesInternas ?? body.observacao_interna ?? null,
-        p_tipo_segmento: body.segmentoId ?? body.segmento_id != null ? String(body.segmentoId ?? body.segmento_id) : null,
         p_telefone: body.telefoneFixoPrincipal ?? body.telefone ?? body.contato?.telefoneFixoPrincipal ?? null,
         p_telefone_adicional: body.telefoneCelularPrincipal,
         p_website: body.site,
         p_email: body.emailPrincipal ?? body.email ?? body.contato?.emailPrincipal ?? null,
+        p_email_nf: body.emailNf ?? body.email_nf ?? body.contato?.emailNf ?? null,
         p_cep: body.cep ?? body.endereco?.cep ?? null,
         p_rua: body.logradouro ?? body.endereco?.logradouro ?? body.rua ?? null,
         p_numero: body.numero ?? body.endereco?.numero ?? null,
         p_bairro: body.bairro ?? body.endereco?.bairro ?? null,
         p_cidade: body.municipio ?? body.endereco?.municipio ?? body.cidade ?? null,
         p_uf: body.uf ?? body.endereco?.uf ?? null,
+        p_empresa_faturamento_id: empresaFaturamentoId,
+        p_desconto: descontoPadrao != null ? Number(descontoPadrao) : null,
+        p_condicao_padrao: body.condicaoPadrao ?? body.condicao_padrao != null ? Number(body.condicaoPadrao ?? body.condicao_padrao) : null,
+        p_condicoes_pagamento_ids: condicoesPagamentoIds,
         p_criado_por: user.id,
         p_requisitos_logisticos: requisitosLogisticos.value,
       }
