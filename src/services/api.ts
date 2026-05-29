@@ -1862,38 +1862,49 @@ export const api = {
     if (entity === 'vendas') {
       try {
         console.log('[API] Buscando vendas via Edge Function pedido-venda-v2...');
-        const queryParams: Record<string, string> = {
-          page: '1',
-          limit: '1000', // Buscar todas (limite máximo)
-        };
+        const baseParams: Record<string, string> = {};
 
         if (options?.params) {
           if (options.params.search) {
-            queryParams.search = String(options.params.search);
+            baseParams.search = String(options.params.search);
           }
           if (options.params.status) {
-            queryParams.status = String(options.params.status);
+            baseParams.status = String(options.params.status);
           }
           if (options.params.vendedorId) {
-            queryParams.vendedor = String(options.params.vendedorId);
+            baseParams.vendedor = String(options.params.vendedorId);
           }
           if (options.params.clienteId) {
-            queryParams.cliente = String(options.params.clienteId);
+            baseParams.cliente = String(options.params.clienteId);
           }
           if (options.params.dataInicio) {
             const dataInicio = new Date(options.params.dataInicio);
-            queryParams.dataInicio = dataInicio.toISOString().split('T')[0];
+            baseParams.dataInicio = dataInicio.toISOString().split('T')[0];
           }
           if (options.params.dataFim) {
             const dataFim = new Date(options.params.dataFim);
-            queryParams.dataFim = dataFim.toISOString().split('T')[0];
+            baseParams.dataFim = dataFim.toISOString().split('T')[0];
           }
         }
 
-        const response = await callEdgeFunction('pedido-venda-v2', 'GET', undefined, undefined, queryParams);
+        // A edge function pedido-venda-v2 limita a 100 itens por página: pedir
+        // limit=1000 retornava só os 100 pedidos MAIS RECENTES, então o dashboard
+        // subcontava (e o total oscilava conforme entravam pedidos novos no dia).
+        // Agora percorremos TODAS as páginas e juntamos tudo.
+        const pedidos: any[] = [];
+        let page = 1;
+        let totalPages = 1;
+        do {
+          const queryParams = { ...baseParams, page: String(page), limit: '100' };
+          const response = await callEdgeFunction('pedido-venda-v2', 'GET', undefined, undefined, queryParams);
+          const lote = response?.pedidos || [];
+          pedidos.push(...lote);
+          totalPages = Number(response?.pagination?.total_pages ?? 1);
+          if (!Number.isFinite(totalPages) || totalPages < 1) totalPages = 1;
+          page++;
+        } while (page <= totalPages);
 
-        // A resposta vem no formato { pedidos: [...], pagination: {...}, stats: {...} }
-        const pedidos = response?.pedidos || [];
+        console.log(`[API] Total vendas carregadas: ${pedidos.length} (${totalPages} página(s))`);
 
         // Mapear para formato Venda esperado pelo frontend
         return pedidos.map((p: any) => ({
