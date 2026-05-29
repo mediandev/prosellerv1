@@ -317,7 +317,11 @@ serve(async (req) => {
       // Extrair grupo_id (UUID) do grupoRede
       let grupoId: string | null = null
       if (body.grupoRede || body.grupo_rede || body.grupoId || body.grupo_id) {
-        const grupoValue = body.grupoId ?? body.grupo_id ?? body.grupoRede ?? body.grupo_rede
+        // Usar nullish (??) aceitava string vazia ("") como valor válido — o frontend
+        // envia grupoId: "" junto do UUID em grupoRede, então o grupo nunca era resolvido.
+        // Pegar o primeiro valor realmente preenchido.
+        const grupoValue = [body.grupoId, body.grupo_id, body.grupoRede, body.grupo_rede]
+          .find((v) => v != null && String(v).trim() !== '')
         // Verificar se e UUID (ID)
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(grupoValue))
         if (isUUID) {
@@ -435,7 +439,11 @@ serve(async (req) => {
       // Extrair grupo_id (UUID) do grupoRede
       let grupoId: string | null = null
       if (body.grupoRede || body.grupo_rede || body.grupoId || body.grupo_id) {
-        const grupoValue = body.grupoId ?? body.grupo_id ?? body.grupoRede ?? body.grupo_rede
+        // Usar nullish (??) aceitava string vazia ("") como valor válido — o frontend
+        // envia grupoId: "" junto do UUID em grupoRede, então o grupo nunca era resolvido.
+        // Pegar o primeiro valor realmente preenchido.
+        const grupoValue = [body.grupoId, body.grupo_id, body.grupoRede, body.grupo_rede]
+          .find((v) => v != null && String(v).trim() !== '')
         // Verificar se e UUID (ID)
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(grupoValue))
         if (isUUID) {
