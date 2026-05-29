@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.42',
+    items: [
+      'Dashboard > "Vendas Totais" corrigido: o painel passou a considerar TODOS os pedidos do período. Antes carregava apenas os 100 pedidos mais recentes, o que subcontava o total e fazia o valor oscilar ao longo do dia (ex.: cair de 506k para 457k sem cancelamento). Agora o número fica completo e estável.',
+      'Dashboard > o valor de "Vendas Totais" passa a usar sempre o valor do pedido (estável). Para ver apenas pedidos já faturados/enviados, use o filtro "Status de Vendas > Vendas concluídas".',
+    ],
+  },
+  {
     version: 'V 1.41',
     items: [
       'Logística > Frete automático: ao enviar um pedido de venda ao Tiny com sucesso, o sistema cria automaticamente um registro de frete vinculado ao pedido (com status "Em Separação"). Funcionalidade controlada por feature flag — peça acesso ao administrador para habilitar.',
