@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.45',
+    items: [
+      'Pedidos > Corrigido: ao trocar ou re-selecionar o cliente em um pedido (inclusive ao duplicar), os campos do cliente — entre eles a Natureza de Operação — sumiam e impediam o envio. Agora os campos continuam visíveis para você selecionar a natureza e concluir o pedido.',
+    ],
+  },
+  {
     version: 'V 1.44',
     items: [
       'Clientes > Código automático: ao cadastrar um cliente, o sistema agora gera o código sozinho (maior código atual + 1), pelo servidor. Não é mais preciso digitar o código manualmente — o campo fica em branco e é preenchido ao salvar.',

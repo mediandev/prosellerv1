@@ -1503,10 +1503,11 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         return [...prev, clienteCompleto];
       });
 
-      // Mostrar campos do cliente após seleção (apenas no modo criar)
-      if (modo === 'criar') {
-        setMostrarCamposCliente(true);
-      }
+      // Mostrar campos do cliente após seleção, em QUALQUER modo (criar/editar/duplicar).
+      // Bug: handleClienteChange escondia os campos (setMostrarCamposCliente(false)) ao
+      // trocar/re-selecionar cliente, mas só restaurava no modo criar — em editar/duplicar
+      // a Natureza de Operação sumia e não dava para reenviar o pedido.
+      setMostrarCamposCliente(true);
     } catch (error) {
       console.error('[VENDAS] Erro ao carregar dados do cliente:', error);
 
@@ -1620,10 +1621,11 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
       setClienteComboOpen(false);
       setClienteSearchTerm('');
 
-      // Mostrar campos do cliente após seleção (apenas no modo criar)
-      if (modo === 'criar') {
-        setMostrarCamposCliente(true);
-      }
+      // Mostrar campos do cliente após seleção, em QUALQUER modo (criar/editar/duplicar).
+      // Bug: handleClienteChange escondia os campos (setMostrarCamposCliente(false)) ao
+      // trocar/re-selecionar cliente, mas só restaurava no modo criar — em editar/duplicar
+      // a Natureza de Operação sumia e não dava para reenviar o pedido.
+      setMostrarCamposCliente(true);
     } finally {
       setIsLoadingCliente(false); // Finalizar carregamento
     }
