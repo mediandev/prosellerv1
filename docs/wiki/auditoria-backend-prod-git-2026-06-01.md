@@ -32,6 +32,26 @@ Projeto Supabase (prod): `xxoiqfraeolsqsmsheue`.
   (`pg_get_functiondef`, idempotente) + **19 edge functions** que estavam só em prod
   ou divergentes.
 
+## ⚠️ Schema NÃO é reproduzível pelo git (achado 2026-06-01, parte 2)
+
+O baseline #37 cobriu **funções**, mas o **schema (tabelas/colunas/triggers)** continua fora:
+- **39 das 62 tabelas** sem `CREATE TABLE` em migration nenhuma — inclui core: `produto`,
+  `dados_vendedor`, `metas_vendedor`, `listas_preco`, `conta_corrente_cliente`,
+  `pedido_venda_produtos`, `cliente_contato`, vários `ref_*`. (Algumas acentuadas podem
+  ser falso-negativo; a maioria é real.)
+- **Migrations:** 187 registradas em prod (`supabase_migrations.schema_migrations`) × 90
+  arquivos no git. Parte é drift de nome (`NNN_nome` vs `nome`), mas muita coisa de schema
+  só existe em prod (RLS, create table, triggers, colunas, conta-corrente RPCs).
+- Triggers: 10 `create trigger` no git × 12 em prod. RLS: 151 `create policy` no git ×
+  130 em prod (RLS razoavelmente coberto; tabelas não).
+
+**Conclusão:** reconstruir o banco só pelo git NÃO reproduz o schema de prod.
+
+**Correção:** dump de schema completo como baseline —
+`supabase db dump --schema public -f supabase/schema_baseline.sql` (captura tabelas,
+colunas, constraints, índices, RLS, triggers e funções). Pendente de execução (precisa de
+conexão direta ao banco; rodar via CLI/Cursor).
+
 ## 🪦 Candidatos a CÓDIGO MORTO (não usados) — NÃO deletar sem verificar
 
 Critério: nome **sem nenhuma referência** no front (`main`), nas edges (git + dumps de
