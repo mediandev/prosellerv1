@@ -1,29 +1,10 @@
-﻿import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-interface AuthenticatedUser {
-  id: string
-  email: string
-  tipo: 'backoffice' | 'vendedor'
-  ativo: boolean
-}
-
-interface CreateUserBody {
-  email: string
-  nome: string
-  tipo: 'backoffice' | 'vendedor'
-  ref_user_role_id?: number
-  user_login?: string
-  auth_user_id?: string
-  permissoes?: string[]
-}
-
-const SUPPORTED_SELLER_PERMISSION_IDS = new Set<string>([
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+};
+const SUPPORTED_SELLER_PERMISSION_IDS = new Set([
   'clientes.visualizar',
   'clientes.criar',
   'clientes.editar',
@@ -43,363 +24,318 @@ const SUPPORTED_SELLER_PERMISSION_IDS = new Set<string>([
   'produtos.excluir',
   'comissoes.visualizar',
   'comissoes.lancamentos.editar',
-  'comissoes.lancamentos.excluir',
-])
-
+  'comissoes.lancamentos.excluir'
+]);
 // Helper: Valida JWT e retorna usuÃ¡rio autenticado
-async function validateJWT(
-  req: Request,
-  supabaseUrl: string,
-  supabaseServiceKey: string
-): Promise<{ user: AuthenticatedUser | null; error: string | null }> {
+async function validateJWT(req, supabaseUrl, supabaseServiceKey) {
   try {
-    console.log('[AUTH] Starting JWT validation...')
-    
-    const authHeader = req.headers.get('Authorization')
-    console.log('[AUTH] Authorization header present:', !!authHeader)
-    
+    console.log('[AUTH] Starting JWT validation...');
+    const authHeader = req.headers.get('Authorization');
+    console.log('[AUTH] Authorization header present:', !!authHeader);
     if (!authHeader) {
-      console.log('[AUTH] ERROR: Missing authorization header')
-      return { user: null, error: 'Missing authorization header' }
+      console.log('[AUTH] ERROR: Missing authorization header');
+      return {
+        user: null,
+        error: 'Missing authorization header'
+      };
     }
-
-    const token = authHeader.replace('Bearer ', '')
-    console.log('[AUTH] Token extracted, length:', token.length)
-    
+    const token = authHeader.replace('Bearer ', '');
+    console.log('[AUTH] Token extracted, length:', token.length);
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       global: {
-        headers: { Authorization: authHeader },
-      },
-    })
-
-    console.log('[AUTH] Calling supabase.auth.getUser...')
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token)
-    
+        headers: {
+          Authorization: authHeader
+        }
+      }
+    });
+    console.log('[AUTH] Calling supabase.auth.getUser...');
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
     if (authError) {
       console.error('[AUTH] ERROR: Auth error from Supabase:', {
         message: authError.message,
         status: authError.status,
         name: authError.name
-      })
-      return { user: null, error: 'Invalid or expired token' }
+      });
+      return {
+        user: null,
+        error: 'Invalid or expired token'
+      };
     }
-    
     if (!authUser) {
-      console.error('[AUTH] ERROR: No authUser returned from Supabase')
-      return { user: null, error: 'Invalid or expired token' }
+      console.error('[AUTH] ERROR: No authUser returned from Supabase');
+      return {
+        user: null,
+        error: 'Invalid or expired token'
+      };
     }
-
     console.log('[AUTH] Auth user found:', {
       id: authUser.id,
       email: authUser.email
-    })
-
-    console.log('[AUTH] Querying user table with user_id:', authUser.id)
-    const { data: userData, error: userError } = await supabase
-      .from('user')
-      .select('user_id, email, tipo, ativo')
-      .eq('user_id', authUser.id)
-      .eq('ativo', true)
-      .is('deleted_at', null)
-      .single()
-
+    });
+    console.log('[AUTH] Querying user table with user_id:', authUser.id);
+    const { data: userData, error: userError } = await supabase.from('user').select('user_id, email, tipo, ativo').eq('user_id', authUser.id).eq('ativo', true).is('deleted_at', null).single();
     if (userError) {
       console.error('[AUTH] ERROR: Database query error:', {
         message: userError.message,
         details: userError.details,
         hint: userError.hint,
         code: userError.code
-      })
-      
-      console.log('[AUTH] Trying to find user without active filter...')
-      const { data: inactiveUser } = await supabase
-        .from('user')
-        .select('user_id, email, tipo, ativo')
-        .eq('user_id', authUser.id)
-        .is('deleted_at', null)
-        .single()
-      
+      });
+      console.log('[AUTH] Trying to find user without active filter...');
+      const { data: inactiveUser } = await supabase.from('user').select('user_id, email, tipo, ativo').eq('user_id', authUser.id).is('deleted_at', null).single();
       if (inactiveUser) {
         console.log('[AUTH] User found but inactive:', {
           user_id: inactiveUser.user_id,
           email: inactiveUser.email,
           tipo: inactiveUser.tipo,
           ativo: inactiveUser.ativo
-        })
-        return { user: null, error: 'User not found or inactive' }
+        });
+        return {
+          user: null,
+          error: 'User not found or inactive'
+        };
       } else {
-        console.error('[AUTH] User not found in database table')
-        return { user: null, error: 'User not found or inactive' }
+        console.error('[AUTH] User not found in database table');
+        return {
+          user: null,
+          error: 'User not found or inactive'
+        };
       }
     }
-
     if (!userData) {
-      console.error('[AUTH] ERROR: No userData returned from query')
-      return { user: null, error: 'User not found or inactive' }
+      console.error('[AUTH] ERROR: No userData returned from query');
+      return {
+        user: null,
+        error: 'User not found or inactive'
+      };
     }
-
     console.log('[AUTH] User data found:', {
       user_id: userData.user_id,
       email: userData.email,
       tipo: userData.tipo,
       ativo: userData.ativo
-    })
-
-    const authenticatedUser: AuthenticatedUser = {
+    });
+    const authenticatedUser = {
       id: userData.user_id,
       email: userData.email || authUser.email || '',
-      tipo: userData.tipo as 'backoffice' | 'vendedor',
-      ativo: userData.ativo,
-    }
-
+      tipo: userData.tipo,
+      ativo: userData.ativo
+    };
     console.log('[AUTH] JWT validation successful:', {
       id: authenticatedUser.id,
       email: authenticatedUser.email,
       tipo: authenticatedUser.tipo
-    })
-
-    return { user: authenticatedUser, error: null }
+    });
+    return {
+      user: authenticatedUser,
+      error: null
+    };
   } catch (error) {
     console.error('[AUTH] EXCEPTION: Error validating JWT:', {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined
-    })
-    return { user: null, error: 'Authentication error' }
+    });
+    return {
+      user: null,
+      error: 'Authentication error'
+    };
   }
 }
-
 // Helper: Cria resposta de erro de autenticaÃ§Ã£o
-function createAuthErrorResponse(message: string, statusCode: number = 401): Response {
-  return new Response(
-    JSON.stringify({ 
-      error: message,
-      timestamp: new Date().toISOString()
-    }),
-    { 
-      status: statusCode,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+function createAuthErrorResponse(message, statusCode = 401) {
+  return new Response(JSON.stringify({
+    error: message,
+    timestamp: new Date().toISOString()
+  }), {
+    status: statusCode,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json'
     }
-  )
+  });
 }
-
 // Helper: Cria resposta de erro de permissÃ£o
-function createPermissionErrorResponse(message: string = 'Insufficient permissions'): Response {
-  return new Response(
-    JSON.stringify({ 
-      error: message,
-      timestamp: new Date().toISOString()
-    }),
-    { 
-      status: 403,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+function createPermissionErrorResponse(message = 'Insufficient permissions') {
+  return new Response(JSON.stringify({
+    error: message,
+    timestamp: new Date().toISOString()
+  }), {
+    status: 403,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json'
     }
-  )
+  });
 }
-
 // Helper: Cria resposta de sucesso HTTP
-function createHttpSuccessResponse<T>(
-  data: T,
-  status: number = 200,
-  meta?: Record<string, any>
-): Response {
-  return new Response(
-    JSON.stringify({
-      success: true,
-      data,
-      meta: {
-        timestamp: new Date().toISOString(),
-        ...meta,
-      },
-    }),
-    {
-      status,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+function createHttpSuccessResponse(data, status = 200, meta) {
+  return new Response(JSON.stringify({
+    success: true,
+    data,
+    meta: {
+      timestamp: new Date().toISOString(),
+      ...meta
     }
-  )
+  }), {
+    status,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json'
+    }
+  });
 }
-
 // Helper: Formata resposta de erro
-function formatErrorResponse(error: Error | unknown): Response {
-  let statusCode = 500
-  let errorMessage = 'Internal server error'
-
+function formatErrorResponse(error) {
+  let statusCode = 500;
+  let errorMessage = 'Internal server error';
   if (error instanceof Error) {
-    errorMessage = error.message
-    
+    errorMessage = error.message;
     if (error.message.includes('Unauthorized') || error.message.includes('authentication')) {
-      statusCode = 401
+      statusCode = 401;
     } else if (error.message.includes('permission') || error.message.includes('forbidden')) {
-      statusCode = 403
+      statusCode = 403;
     } else if (error.message.includes('not found')) {
-      statusCode = 404
+      statusCode = 404;
     } else if (error.message.includes('validation') || error.message.includes('invalid') || error.message.includes('obrigatÃ³rio')) {
-      statusCode = 400
+      statusCode = 400;
     }
   }
-
   console.error('[ERROR]', {
     message: errorMessage,
     statusCode,
-    stack: error instanceof Error ? error.stack : undefined,
-  })
-
-  return new Response(
-    JSON.stringify({
-      success: false,
-      error: errorMessage,
-      timestamp: new Date().toISOString(),
-    }),
-    {
-      status: statusCode,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    stack: error instanceof Error ? error.stack : undefined
+  });
+  return new Response(JSON.stringify({
+    success: false,
+    error: errorMessage,
+    timestamp: new Date().toISOString()
+  }), {
+    status: statusCode,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json'
     }
-  )
+  });
 }
-
 // Helper: Valida email
-function validateEmail(email: string): boolean {
-  if (!email) return false
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+function validateEmail(email) {
+  if (!email) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
-
 // Helper: Sanitiza input
-function sanitizeInput(input: string): string {
-  if (typeof input !== 'string') return ''
-  return input.trim().replace(/[<>]/g, '').replace(/javascript:/gi, '').replace(/on\w+=/gi, '')
+function sanitizeInput(input) {
+  if (typeof input !== 'string') return '';
+  return input.trim().replace(/[<>]/g, '').replace(/javascript:/gi, '').replace(/on\w+=/gi, '');
 }
-
-function sanitizeAndValidatePermissionIds(permissionIds: string[]): string[] {
-  const sanitizedPermissions = permissionIds
-    .filter((permissionId) => typeof permissionId === 'string')
-    .map((permissionId) => sanitizeInput(permissionId).trim())
-    .filter((permissionId) => permissionId.length > 0)
-
-  const uniquePermissions = Array.from(new Set(sanitizedPermissions))
-  const invalidPermissions = uniquePermissions.filter(
-    (permissionId) => !SUPPORTED_SELLER_PERMISSION_IDS.has(permissionId)
-  )
-
+function sanitizeAndValidatePermissionIds(permissionIds) {
+  const sanitizedPermissions = permissionIds.filter((permissionId)=>typeof permissionId === 'string').map((permissionId)=>sanitizeInput(permissionId).trim()).filter((permissionId)=>permissionId.length > 0);
+  const uniquePermissions = Array.from(new Set(sanitizedPermissions));
+  const invalidPermissions = uniquePermissions.filter((permissionId)=>!SUPPORTED_SELLER_PERMISSION_IDS.has(permissionId));
   if (invalidPermissions.length > 0) {
-    throw new ValidationError(`Permissoes invalidas: ${invalidPermissions.join(', ')}`)
+    throw new ValidationError(`Permissoes invalidas: ${invalidPermissions.join(', ')}`);
   }
-
-  return uniquePermissions
+  return uniquePermissions;
 }
-
 // Helper: Valida nÃ£o vazio
-function validateNotEmpty(value: string | null | undefined): boolean {
-  return value !== null && value !== undefined && value.trim().length > 0
+function validateNotEmpty(value) {
+  return value !== null && value !== undefined && value.trim().length > 0;
 }
-
 // Helper: Valida comprimento mÃ­nimo
-function validateMinLength(value: string, minLength: number): boolean {
-  return value && value.trim().length >= minLength
+function validateMinLength(value, minLength) {
+  return value && value.trim().length >= minLength;
 }
-
 // Helper: Cria erro de validaÃ§Ã£o
 class ValidationError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'ValidationError'
+  constructor(message){
+    super(message);
+    this.name = 'ValidationError';
   }
 }
-
-serve(async (req) => {
-  const startTime = Date.now()
+serve(async (req)=>{
+  const startTime = Date.now();
   console.log('[CREATE-USER-V2] Request received:', {
     method: req.method,
     url: req.url,
     timestamp: new Date().toISOString()
-  })
-
+  });
   if (req.method === 'OPTIONS') {
-    console.log('[CREATE-USER-V2] OPTIONS request, returning CORS headers')
-    return new Response('ok', { headers: corsHeaders })
+    console.log('[CREATE-USER-V2] OPTIONS request, returning CORS headers');
+    return new Response('ok', {
+      headers: corsHeaders
+    });
   }
-
   try {
     // 1. AUTENTICAÃ‡ÃƒO
-    console.log('[CREATE-USER-V2] Step 1: Starting authentication...')
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    console.log('[CREATE-USER-V2] Supabase URL:', supabaseUrl ? 'SET' : 'NOT SET')
-
-    const { user, error: authError } = await validateJWT(req, supabaseUrl, supabaseServiceKey)
-
+    console.log('[CREATE-USER-V2] Step 1: Starting authentication...');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    console.log('[CREATE-USER-V2] Supabase URL:', supabaseUrl ? 'SET' : 'NOT SET');
+    const { user, error: authError } = await validateJWT(req, supabaseUrl, supabaseServiceKey);
     if (authError) {
       console.error('[CREATE-USER-V2] Authentication failed:', {
         error: authError,
         hasUser: !!user
-      })
-      return createAuthErrorResponse(authError || 'Unauthorized')
+      });
+      return createAuthErrorResponse(authError || 'Unauthorized');
     }
-
     if (!user) {
-      console.error('[CREATE-USER-V2] No user returned from validateJWT')
-      return createAuthErrorResponse('Unauthorized')
+      console.error('[CREATE-USER-V2] No user returned from validateJWT');
+      return createAuthErrorResponse('Unauthorized');
     }
-
     console.log('[CREATE-USER-V2] Authentication successful:', {
       userId: user.id,
       email: user.email,
       tipo: user.tipo
-    })
-
+    });
     // 2. VERIFICAR PERMISSÃ•ES
-    console.log('[CREATE-USER-V2] Step 2: Checking permissions...')
+    console.log('[CREATE-USER-V2] Step 2: Checking permissions...');
     if (user.tipo !== 'backoffice') {
       console.error('[CREATE-USER-V2] Permission denied:', {
         userTipo: user.tipo,
         required: 'backoffice'
-      })
-      return createPermissionErrorResponse('Apenas usuÃ¡rios backoffice podem criar usuÃ¡rios')
+      });
+      return createPermissionErrorResponse('Apenas usuÃ¡rios backoffice podem criar usuÃ¡rios');
     }
-
-    console.log('[CREATE-USER-V2] Permission check passed')
-
+    console.log('[CREATE-USER-V2] Permission check passed');
     // 3. VALIDAÃ‡ÃƒO DE INPUT
-    console.log('[CREATE-USER-V2] Step 3: Validating input...')
-    const body: CreateUserBody = await req.json()
+    console.log('[CREATE-USER-V2] Step 3: Validating input...');
+    const body = await req.json();
     console.log('[CREATE-USER-V2] Request body received:', {
       email: body.email,
       nome: body.nome ? `${body.nome.substring(0, 20)}...` : null,
       tipo: body.tipo,
       hasAuthUserId: !!body.auth_user_id
-    })
-
+    });
     if (!validateNotEmpty(body.email)) {
-      console.error('[CREATE-USER-V2] Validation error: Email is required')
-      throw new ValidationError('Email Ã© obrigatÃ³rio')
+      console.error('[CREATE-USER-V2] Validation error: Email is required');
+      throw new ValidationError('Email Ã© obrigatÃ³rio');
     }
-
     if (!validateNotEmpty(body.nome)) {
-      console.error('[CREATE-USER-V2] Validation error: Nome is required')
-      throw new ValidationError('Nome Ã© obrigatÃ³rio')
+      console.error('[CREATE-USER-V2] Validation error: Nome is required');
+      throw new ValidationError('Nome Ã© obrigatÃ³rio');
     }
-
     if (!validateMinLength(body.nome, 2)) {
-      console.error('[CREATE-USER-V2] Validation error: Nome too short')
-      throw new ValidationError('Nome deve ter pelo menos 2 caracteres')
+      console.error('[CREATE-USER-V2] Validation error: Nome too short');
+      throw new ValidationError('Nome deve ter pelo menos 2 caracteres');
     }
-
-    if (!body.tipo || !['backoffice', 'vendedor'].includes(body.tipo)) {
-      console.error('[CREATE-USER-V2] Validation error: Invalid tipo')
-      throw new ValidationError('Tipo deve ser "backoffice" ou "vendedor"')
+    if (!body.tipo || ![
+      'backoffice',
+      'vendedor'
+    ].includes(body.tipo)) {
+      console.error('[CREATE-USER-V2] Validation error: Invalid tipo');
+      throw new ValidationError('Tipo deve ser "backoffice" ou "vendedor"');
     }
-
     if (!validateEmail(body.email)) {
-      console.error('[CREATE-USER-V2] Validation error: Invalid email format')
-      throw new ValidationError('Formato de email invÃ¡lido')
+      console.error('[CREATE-USER-V2] Validation error: Invalid email format');
+      throw new ValidationError('Formato de email invÃ¡lido');
     }
     if (body.permissoes !== undefined && !Array.isArray(body.permissoes)) {
-      console.error('[CREATE-USER-V2] Validation error: permissoes must be an array')
-      throw new ValidationError('permissoes deve ser um array de strings')
+      console.error('[CREATE-USER-V2] Validation error: permissoes must be an array');
+      throw new ValidationError('permissoes deve ser um array de strings');
     }
-
-    console.log('[CREATE-USER-V2] Input validation passed')
-
+    console.log('[CREATE-USER-V2] Input validation passed');
     // 4. SANITIZAÃ‡ÃƒO
-    console.log('[CREATE-USER-V2] Step 4: Sanitizing data...')
+    console.log('[CREATE-USER-V2] Step 4: Sanitizing data...');
     const sanitizedData = {
       email: sanitizeInput(body.email).toLowerCase().trim(),
       nome: sanitizeInput(body.nome).trim(),
@@ -407,13 +343,93 @@ serve(async (req) => {
       ref_user_role_id: body.ref_user_role_id || null,
       user_login: body.user_login ? sanitizeInput(body.user_login).trim() : null,
       auth_user_id: body.auth_user_id || null,
-      permissoes: body.permissoes !== undefined
-        ? sanitizeAndValidatePermissionIds(body.permissoes)
-        : null,
+      permissoes: body.permissoes !== undefined ? body.tipo === 'backoffice' ? body.permissoes.filter((p)=>typeof p === 'string').map((p)=>sanitizeInput(p).trim()).filter((p)=>p.length > 0) : sanitizeAndValidatePermissionIds(body.permissoes) : null
+    };
+    console.log('[CREATE-USER-V2] Data sanitized');
+    // 4.5. CONVITE POR EMAIL (quando auth_user_id não fornecido)
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      global: {
+        headers: {
+          Authorization: req.headers.get('Authorization') || ''
+        }
+      }
+    });
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    let conviteEnviado = false;
+    if (!sanitizedData.auth_user_id) {
+      console.log('[CREATE-USER-V2] Step 4.5: No auth_user_id — sending invite email...');
+      const redirectTo = body.redirect_to || 'https://proseller.app.br';
+      // FIX (B): reativar usuário soft-deletado com o mesmo email em vez de barrar.
+      // delete-user-v2 é soft-delete e mantém o usuário no Supabase Auth; sem isto, recriar
+      // dispara "email já cadastrado" no inviteUserByEmail.
+      const { data: existentesEmail } = await supabaseAdmin
+        .from('user')
+        .select('user_id, email, ativo, deleted_at')
+        .ilike('email', sanitizedData.email);
+      const usuarioAtivo = (existentesEmail || []).find((u)=> !u.deleted_at);
+      const usuarioSoftDeletado = (existentesEmail || []).find((u)=> !!u.deleted_at);
+      if (usuarioAtivo) {
+        throw new ValidationError('Já existe um usuário ativo com este email');
+      }
+      if (usuarioSoftDeletado) {
+        console.log('[CREATE-USER-V2] Reativando usuário soft-deletado:', usuarioSoftDeletado.user_id);
+        const updateReativacao = {
+          deleted_at: null,
+          ativo: true,
+          nome: sanitizedData.nome,
+          tipo: sanitizedData.tipo,
+          ref_user_role_id: sanitizedData.ref_user_role_id,
+        };
+        if (sanitizedData.permissoes) updateReativacao.permissoes = sanitizedData.permissoes;
+        const { data: reativado, error: reativarError } = await supabaseAdmin
+          .from('user')
+          .update(updateReativacao)
+          .eq('user_id', usuarioSoftDeletado.user_id)
+          .select('user_id, email, nome, tipo, ativo, permissoes')
+          .maybeSingle();
+        if (reativarError || !reativado) {
+          throw new Error(`Falha ao reativar usuário: ${reativarError?.message || 'linha não encontrada'}`);
+        }
+        let conviteReenviado = false;
+        try {
+          const { error: recErr } = await supabaseAdmin.auth.resetPasswordForEmail(sanitizedData.email, { redirectTo });
+          if (recErr) console.error('[CREATE-USER-V2] Reativação: falha ao reenviar acesso:', recErr.message);
+          else conviteReenviado = true;
+        } catch (e) {
+          console.error('[CREATE-USER-V2] Reativação: exceção ao reenviar acesso:', e);
+        }
+        const durationReativacao = Date.now() - startTime;
+        console.log(`[CREATE-USER-V2] SUCCESS (reativado): ${reativado.user_id} by ${user.id} (${durationReativacao}ms)`);
+        return createHttpSuccessResponse({
+          user: reativado,
+          message: conviteReenviado
+            ? 'Usuário reativado e link de acesso reenviado por email'
+            : 'Usuário reativado. Peça ao usuário para usar "Esqueci minha senha" para definir a senha.',
+          convite_enviado: conviteReenviado,
+          reativado: true,
+        }, 200, { userId: user.id, duration: `${durationReativacao}ms` });
+      }
+      const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(sanitizedData.email, {
+        redirectTo,
+        data: {
+          nome: sanitizedData.nome,
+          tipo: sanitizedData.tipo
+        }
+      });
+      if (inviteError) {
+        console.error('[CREATE-USER-V2] Invite error:', {
+          message: inviteError.message,
+          status: inviteError.status
+        });
+        throw new Error(`Erro ao enviar convite: ${inviteError.message}`);
+      }
+      if (!inviteData?.user?.id) {
+        throw new Error('Invite succeeded but no user ID returned');
+      }
+      sanitizedData.auth_user_id = inviteData.user.id;
+      conviteEnviado = true;
+      console.log('[CREATE-USER-V2] Invite sent successfully, auth_user_id:', sanitizedData.auth_user_id);
     }
-
-    console.log('[CREATE-USER-V2] Data sanitized')
-
     // 5. CHAMADA RPC
     console.log('[CREATE-USER-V2] Step 5: Calling RPC function...', {
       p_email: sanitizedData.email,
@@ -421,15 +437,7 @@ serve(async (req) => {
       p_tipo: sanitizedData.tipo,
       p_created_by: user.id,
       has_auth_user_id: !!sanitizedData.auth_user_id
-    })
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      global: {
-        headers: { Authorization: req.headers.get('Authorization') || '' },
-      },
-    })
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
-
+    });
     const { data: rpcData, error: rpcError } = await supabase.rpc('create_user_v2', {
       p_email: sanitizedData.email,
       p_nome: sanitizedData.nome,
@@ -437,78 +445,60 @@ serve(async (req) => {
       p_ref_user_role_id: sanitizedData.ref_user_role_id,
       p_user_login: sanitizedData.user_login,
       p_created_by: user.id,
-      p_auth_user_id: sanitizedData.auth_user_id,
-    })
-
+      p_auth_user_id: sanitizedData.auth_user_id
+    });
     if (rpcError) {
       console.error('[CREATE-USER-V2] RPC Error:', {
         message: rpcError.message,
         details: rpcError.details,
         hint: rpcError.hint,
         code: rpcError.code
-      })
-      throw new Error(`Database operation failed: ${rpcError.message}`)
+      });
+      throw new Error(`Database operation failed: ${rpcError.message}`);
     }
-
     console.log('[CREATE-USER-V2] RPC call successful:', {
       dataLength: rpcData?.length || 0,
       createdUserId: rpcData?.[0]?.user_id
-    })
-
+    });
     if (!rpcData || rpcData.length === 0) {
-      console.error('[CREATE-USER-V2] ERROR: RPC returned empty data')
-      throw new Error('Failed to create user')
+      console.error('[CREATE-USER-V2] ERROR: RPC returned empty data');
+      throw new Error('Failed to create user');
     }
     if (sanitizedData.permissoes) {
-      const targetUserId = typeof rpcData[0].user_id === 'string' && rpcData[0].user_id.length > 0
-        ? rpcData[0].user_id
-        : null
-
+      const targetUserId = typeof rpcData[0].user_id === 'string' && rpcData[0].user_id.length > 0 ? rpcData[0].user_id : null;
       if (!targetUserId) {
-        throw new Error('Created user_id not returned for permissions update')
+        throw new Error('Created user_id not returned for permissions update');
       }
-
-      const { data: permissionsRow, error: permsError } = await supabaseAdmin
-        .from('user')
-        .update({ permissoes: sanitizedData.permissoes })
-        .eq('user_id', targetUserId)
-        .select('user_id, permissoes')
-        .maybeSingle()
-
+      const { data: permissionsRow, error: permsError } = await supabaseAdmin.from('user').update({
+        permissoes: sanitizedData.permissoes
+      }).eq('user_id', targetUserId).select('user_id, permissoes').maybeSingle();
       if (permsError) {
-        console.error('[CREATE-USER-V2] ERROR updating user permissions:', permsError)
-        throw new Error(`Database operation failed: ${permsError.message}`)
+        console.error('[CREATE-USER-V2] ERROR updating user permissions:', permsError);
+        throw new Error(`Database operation failed: ${permsError.message}`);
       }
       if (!permissionsRow) {
-        throw new Error(`Permissions update affected 0 rows for user_id ${targetUserId}`)
+        throw new Error(`Permissions update affected 0 rows for user_id ${targetUserId}`);
       }
-
-      rpcData[0].permissoes = permissionsRow.permissoes
+      rpcData[0].permissoes = permissionsRow.permissoes;
     }
-
     // 6. RESPOSTA
-    const duration = Date.now() - startTime
-    console.log(`[CREATE-USER-V2] SUCCESS: User created: ${rpcData[0].user_id} by ${user.id} (${duration}ms)`)
-
-    return createHttpSuccessResponse(
-      {
-        user: rpcData[0],
-        message: 'UsuÃ¡rio criado com sucesso',
-      },
-      201,
-      {
-        userId: user.id,
-        duration: `${duration}ms`,
-      }
-    )
+    const duration = Date.now() - startTime;
+    console.log(`[CREATE-USER-V2] SUCCESS: User created: ${rpcData[0].user_id} by ${user.id} (${duration}ms)`);
+    return createHttpSuccessResponse({
+      user: rpcData[0],
+      message: conviteEnviado ? 'Usuário criado e convite enviado por email' : 'Usuário criado com sucesso',
+      convite_enviado: conviteEnviado
+    }, 201, {
+      userId: user.id,
+      duration: `${duration}ms`
+    });
   } catch (error) {
-    const duration = Date.now() - startTime
+    const duration = Date.now() - startTime;
     console.error('[CREATE-USER-V2] EXCEPTION:', {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
       duration: `${duration}ms`
-    })
-    return formatErrorResponse(error)
+    });
+    return formatErrorResponse(error);
   }
-})
-
+});
