@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.43',
+    items: [
+      'Clientes > "Situação" (Ativo / Inativo / Excluído) agora é exibida corretamente na ficha e na lista. Antes, ao mudar a situação de um cliente (ex.: para "Excluído"), a alteração era salva mas a tela voltava a mostrar "Ativo" — agora reflete o valor real.',
+      'Como consequência, a lista e os indicadores passam a mostrar os clientes Inativos/Excluídos com a situação verdadeira (antes apareciam todos como "Ativo").',
+    ],
+  },
+  {
     version: 'V 1.42',
     items: [
       'Dashboard > "Vendas Totais" corrigido: o painel passou a considerar TODOS os pedidos do período. Antes carregava apenas os 100 pedidos mais recentes, o que subcontava o total e fazia o valor oscilar ao longo do dia (ex.: cair de 506k para 457k sem cancelamento). Agora o número fica completo e estável.',

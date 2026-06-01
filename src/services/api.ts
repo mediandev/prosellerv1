@@ -519,12 +519,24 @@ function extractCondicaoPagamentoIdFromVinculo(item: any): string | null {
 function mapClienteFromApi(item: any): any {
   if (!item) return item;
   const statusAprovacao = item.statusAprovacao ?? item.status_aprovacao ?? 'pendente';
-  let situacao = item.situacao ?? 'Análise';
-  if (statusAprovacao === 'aprovado') situacao = 'Ativo';
-  else if (statusAprovacao === 'rejeitado') situacao = 'Reprovado';
-  else if (statusAprovacao === 'pendente') situacao = 'Análise';
-  if (typeof situacao === 'string' && (situacao.includes('?') || situacao.toLowerCase() === 'analise')) {
-    situacao = 'Análise';
+  // Situação real vem do ref_situacao (campo `situacao`). Normaliza p/ Title-case
+  // (a lista colore por Title-case; o form casa case-insensitive). Só deriva do
+  // status como fallback quando a situação real não vier (linhas legadas).
+  const SITUACAO_CANON: Record<string, string> = {
+    ativo: 'Ativo', inativo: 'Inativo', excluido: 'Excluído', 'excluído': 'Excluído',
+    analise: 'Análise', 'análise': 'Análise', reprovado: 'Reprovado',
+    prospeccao: 'Prospecção', 'prospecção': 'Prospecção',
+  };
+  let situacao: string | null = null;
+  const situacaoRaw = item.situacao;
+  if (situacaoRaw != null && String(situacaoRaw).trim() !== '' && !String(situacaoRaw).includes('?')) {
+    const key = String(situacaoRaw).trim().toLowerCase();
+    situacao = SITUACAO_CANON[key] ?? String(situacaoRaw).trim();
+  }
+  if (!situacao) {
+    if (statusAprovacao === 'aprovado') situacao = 'Ativo';
+    else if (statusAprovacao === 'rejeitado') situacao = 'Reprovado';
+    else situacao = 'Análise';
   }
 
   // Mapear condições_cliente (array de objetos) para condicoesPagamentoAssociadas (array de IDs)
