@@ -47,10 +47,12 @@ O baseline #37 cobriu **funções**, mas o **schema (tabelas/colunas/triggers)**
 
 **Conclusão:** reconstruir o banco só pelo git NÃO reproduz o schema de prod.
 
-**Correção:** dump de schema completo como baseline —
-`supabase db dump --schema public -f supabase/schema_baseline.sql` (captura tabelas,
-colunas, constraints, índices, RLS, triggers e funções). Pendente de execução (precisa de
-conexão direta ao banco; rodar via CLI/Cursor).
+**Correção aplicada (✅):** schema baseline capturado **via SQL** (catálogo) em
+**`supabase/schema_baseline.sql`** — sem precisar de senha do banco. Contém: 51 sequences,
+62 tabelas, 177 constraints, 99 índices, 54 RLS-enable, 130 policies, 12 triggers. (Funções
+estão na migration 117.) É **best-effort** (montado do catálogo) — para rebuild 100% fiel,
+ainda vale gerar um `supabase db dump` quando houver acesso ao banco; identity/generated
+columns e ordem de dependências podem exigir ajuste. Não foi aplicado em prod (prod já tem tudo).
 
 ## 🪦 Candidatos a CÓDIGO MORTO (não usados) — NÃO deletar sem verificar
 
