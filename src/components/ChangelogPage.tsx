@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.44',
+    items: [
+      'Clientes > Código automático: ao cadastrar um cliente, o sistema agora gera o código sozinho (maior código atual + 1), pelo servidor. Não é mais preciso digitar o código manualmente — o campo fica em branco e é preenchido ao salvar.',
+      'Geração à prova de duplicidade mesmo com vários usuários cadastrando ao mesmo tempo. Quem preferir ainda pode voltar ao modo manual em Configurações.',
+    ],
+  },
+  {
     version: 'V 1.43',
     items: [
       'Clientes > "Situação" (Ativo / Inativo / Excluído) agora é exibida corretamente na ficha e na lista. Antes, ao mudar a situação de um cliente (ex.: para "Excluído"), a alteração era salva mas a tela voltava a mostrar "Ativo" — agora reflete o valor real.',

@@ -21,7 +21,9 @@ class CustomerCodeService {
       return JSON.parse(stored);
     }
 
-    return { modo: 'manual' };
+    // Default global: automático. O servidor (create_cliente_v2) gera o código
+    // (maior código + 1) quando vier em branco. Usuário ainda pode trocar p/ manual.
+    return { modo: 'automatico' };
   }
 
   salvarConfiguracao(config: CustomerCodeConfig): void {

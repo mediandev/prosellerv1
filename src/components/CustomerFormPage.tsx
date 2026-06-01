@@ -241,13 +241,15 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
       }
     }
 
-    // Gerar código automático se necessário
+    // Código: no modo automático sem código digitado, deixa em branco para o
+    // servidor gerar (maior código + 1) — fonte única e à prova de concorrência.
     let codigoFinal = formData.codigo;
-    if (modo === 'criar' && customerCodeService.ehModoAutomatico()) {
-      if (!codigoFinal || codigoFinal.trim() === '') {
-        codigoFinal = customerCodeService.gerarProximoCodigo() || undefined;
-        setFormData({ ...formData, codigo: codigoFinal });
-      }
+    const codigoAutomaticoBackend =
+      modo === 'criar' &&
+      customerCodeService.ehModoAutomatico() &&
+      (!codigoFinal || codigoFinal.trim() === '');
+    if (codigoAutomaticoBackend) {
+      codigoFinal = undefined;
     }
 
 
@@ -255,7 +257,7 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
     let codigoTinySistemaFinal = formData.codigoTinySistema;
     let codigoTinyIdExternoFinal = formData.codigoTinyIdExterno;
 
-    if (modo === 'criar') {
+    if (modo === 'criar' && !codigoAutomaticoBackend) {
       try {
         const clientesExistentes = await api.get('clientes') as Cliente[];
         const resolucaoCodigo = customerCodeService.resolverCodigoComPrioridade(

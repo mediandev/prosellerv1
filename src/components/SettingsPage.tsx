@@ -1304,11 +1304,11 @@ export function SettingsPage({
                     checked={codigoClienteConfig.modo === 'automatico'}
                     onCheckedChange={(checked) => {
                       const novoModo = checked ? 'automatico' : 'manual';
-                      const novaConfig = customerCodeService.alterarModo(novoModo, clientesMock);
+                      const novaConfig = customerCodeService.alterarModo(novoModo, []);
                       setCodigoClienteConfig(novaConfig);
-                      
+
                       if (checked) {
-                        toast.success(`Código automático ativado. Próximo código: ${String(novaConfig.proximoCodigo).padStart(6, '0')}`);
+                        toast.success('Código automático ativado. O servidor gera o próximo número (maior código + 1) ao salvar cada cliente.');
                       } else {
                         toast.info('Código manual ativado. Você deverá informar o código ao cadastrar clientes.');
                       }
@@ -1317,53 +1317,12 @@ export function SettingsPage({
                 </div>
 
                 {codigoClienteConfig.modo === 'automatico' && (
-                  <div className="p-4 border rounded-lg bg-muted/50 space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="proximoCodigo">Próximo Código</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          id="proximoCodigo"
-                          type="number"
-                          min="1"
-                          value={codigoClienteConfig.proximoCodigo}
-                          onChange={(e) => {
-                            const novoCodigo = parseInt(e.target.value) || 1;
-                            const novaConfig = customerCodeService.definirProximoCodigo(novoCodigo);
-                            setCodigoClienteConfig(novaConfig);
-                          }}
-                          className="max-w-[200px]"
-                        />
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            const novaConfig = customerCodeService.resetarCodigo(clientesMock);
-                            setCodigoClienteConfig(novaConfig);
-                            toast.success(`Próximo código resetado para: ${String(novaConfig.proximoCodigo).padStart(6, '0')}`);
-                          }}
-                        >
-                          Resetar
-                        </Button>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Código que será usado no próximo cliente cadastrado: <strong>{String(codigoClienteConfig.proximoCodigo).padStart(6, '0')}</strong>
-                      </p>
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-2">
-                      <Label>Informações</Label>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">Maior código em uso:</span>
-                          <p className="font-medium">{String(codigoClienteConfig.maiorCodigoExistente).padStart(6, '0')}</p>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Total de clientes:</span>
-                          <p className="font-medium">{clientesMock.length}</p>
-                        </div>
-                      </div>
-                    </div>
+                  <div className="p-4 border rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground">
+                      Os códigos são gerados <strong>automaticamente pelo servidor</strong>, em ordem
+                      crescente (maior código existente + 1), no momento em que o cliente é salvo.
+                      Não é necessário informar nada — o campo "Código do Cliente" fica em branco no cadastro.
+                    </p>
                   </div>
                 )}
               </div>
