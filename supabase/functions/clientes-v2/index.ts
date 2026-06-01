@@ -84,10 +84,13 @@ function formatErrorResponse(error: unknown): Response {
 function mapClienteListItem(row: Record<string, unknown>): Record<string, unknown> {
   const id = row.cliente_id ?? row.id
   const statusAprovacao = row.status_aprovacao ?? row.statusAprovacao ?? 'pendente'
-  let situacao = (row as any).situacao ?? 'Analise'
-  if (statusAprovacao === 'aprovado') situacao = 'Ativo'
-  else if (statusAprovacao === 'rejeitado') situacao = 'Reprovado'
-  else if (statusAprovacao === 'pendente') situacao = 'Analise'
+  // Situação real vem do ref_situacao (situacao_nome). Só deriva do status como fallback.
+  let situacao = (row as any).situacao_nome ?? (row as any).situacao ?? null
+  if (!situacao) {
+    if (statusAprovacao === 'aprovado') situacao = 'Ativo'
+    else if (statusAprovacao === 'rejeitado') situacao = 'Reprovado'
+    else situacao = 'Analise'
+  }
   return {
     id: id != null ? String(id) : '',
     razaoSocial: row.nome ?? row.razaoSocial ?? '',
@@ -398,7 +401,7 @@ serve(async (req) => {
         p_lista_de_preco: body.listaPrecos ?? body.lista_de_preco != null ? Number(body.listaPrecos ?? body.lista_de_preco) : null,
         p_desconto_financeiro: body.descontoFinanceiro ?? body.desconto_financeiro ?? 0,
         p_pedido_minimo: body.pedidoMinimo ?? body.pedido_minimo ?? 0,
-        p_vendedoresatribuidos: body.vendedoresAtribuidos ?? body.vendedoresatribuidos ?? (body.vendedorAtribuido?.id ? [body.vendedorAtribuido.id] : null),
+        p_vendedoresatribuidos: (Array.isArray(body.vendedoresAtribuidos ?? body.vendedoresatribuidos) ? (body.vendedoresAtribuidos ?? body.vendedoresatribuidos).map((v: any) => String(v && typeof v === 'object' ? (v.id ?? v.user_id) : v)).filter((s: string) => s && s !== 'undefined' && s !== 'null') : (body.vendedorAtribuido?.id ? [String(body.vendedorAtribuido.id)] : null)),
         p_observacao_interna: body.observacoesInternas ?? body.observacao_interna ?? null,
         p_telefone: body.telefoneFixoPrincipal ?? body.telefone ?? body.contato?.telefoneFixoPrincipal ?? null,
         p_telefone_adicional: body.telefoneCelularPrincipal,
