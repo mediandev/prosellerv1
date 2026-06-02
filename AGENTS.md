@@ -252,6 +252,7 @@ Ao fim da feature: resumo ≤ 5 linhas em `wiki/features/F-NNN.md` (C/D), linha 
 - **`docs/` versionado.** Qualquer `.md` solto vai para a subpasta certa, nunca solto na raiz.
 - **Deploy de Edge Function só via Supabase CLI** (ADR-005). MCP Cursor proibido para `deploy_edge_function`.
 - **Bump `systemVersion`** em `src/App.tsx` `SidebarUserInfo` toda PR que dispara deploy visível em produção.
+- **O git ESPELHA produção — commitar ANTES de deployar (auditoria 2026-06-02).** Edge functions e migrations rodam em prod por **deploy manual**; historicamente isso era feito sem commitar, gerando divergência repo↔prod (código rodando em prod fora do git). Regra: **sempre commitar no `main` antes de deployar**, e deployar **sempre a partir do `main`** — nunca de outro branch nem código não-commitado. Ao editar edge/RPC, partir do que está no `main` (que agora espelha prod). Baseline de schema/funções: `supabase/schema_baseline.sql` + migration de baseline. Detalhes e listas de código morto: `docs/wiki/auditoria-backend-prod-git-2026-06-01.md`.
 
 ---
 
@@ -261,7 +262,7 @@ Ao fim da feature: resumo ≤ 5 linhas em `wiki/features/F-NNN.md` (C/D), linha 
 - **Commits:** `tipo(escopo): resumo (#F-NNN)` quando houver referência no TODO.
 - **Encoding:** UTF-8, LF, sem BOM.
 - **Idioma:** código e PR em pt-BR quando o domínio é BR (CNPJ, vendedor, comissão). Mensagens técnicas genéricas podem ficar em inglês.
-- **Branch de trabalho:** `main` é fonte de verdade. `master` é obsoleta — ignore.
+- **Branch de trabalho:** `main` é a **fonte de verdade ÚNICA** — front, edge functions E migrations. `master` foi **ARQUIVADA na convergência de 2026-06-02** (ver `docs/wiki/auditoria-backend-prod-git-2026-06-01.md`); não usar. Deploy de backend é manual e sempre a partir do `main` (commitar antes — ver §14).
 
 ---
 
