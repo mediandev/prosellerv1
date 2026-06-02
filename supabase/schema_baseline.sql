@@ -1,72 +1,24 @@
 -- ============================================================================
 -- SCHEMA BASELINE — snapshot do schema public de PRODUÇÃO em 2026-06-01.
--- Montado via catálogo (pg_get_constraintdef / pg_get_indexdef / pg_get_triggerdef /
--- pg_policies / format_type) porque ~39 das 62 tabelas não existiam em migration.
--- Objetivo: versionar o schema que JÁ está em prod. NÃO foi aplicado em prod por
--- este arquivo (prod já tem tudo). As FUNÇÕES estão na migration 117 (baseline).
--- Best-effort: revisar antes de usar para rebuild (identity/generated columns e
--- ordem de dependências podem exigir ajuste). Para rebuild fiel, prefira `supabase db dump`.
--- Conteúdo: 51 sequences, 62 tabelas, 177 constraints, 99 índices, 54 RLS-enable, 130 policies, 12 triggers.
+-- Montado 100% via catálogo do Postgres (sem senha do banco), incluindo enums e
+-- colunas IDENTITY. As FUNÇÕES estão na migration 117 (baseline).
+-- NÃO foi aplicado em prod (prod já tem tudo) — serve para versionar/reproduzir.
+-- Ordem p/ rebuild: enums -> tabelas -> (migration 117: funções) -> constraints ->
+-- índices -> RLS -> policies -> triggers. Sequences são das colunas identity (auto).
+-- Conteúdo: 4 enums, 62 tabelas, 177 constraints, 99 índices, 54 RLS-enable, 130 policies, 12 triggers.
 -- ============================================================================
 
--- ========== SEQUENCES (51) ==========
+-- ========== TYPES / ENUMS (4) ==========
 
-CREATE SEQUENCE IF NOT EXISTS public.ref_situacao_ref_situacao_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public."Condição_De_Pagamento_Condição_ID_seq";
-CREATE SEQUENCE IF NOT EXISTS public.cliente_cliente_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.cliente_vendedores_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.contatos_associados_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.listas_preco_comissionamento_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.listas_preco_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.natureza_operacao_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public."detalhes_pedido_venda_pedido_venda_id (PK) (FK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."pedido_venda_produtos_pedido_venda_produtos_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."condições_cliente_id_seq";
-CREATE SEQUENCE IF NOT EXISTS public.marcas_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public."pedido_venda_pedido_venda_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public.produto_vendedor_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public."ref_origem_produto_ref_origem_produto_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."ref_intermediadores_ref_intermediador_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."ref_formas_envio_ref_formas_envio_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."ref_pagador_frete_ref_pagador_frete_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."ref_embalagem_ref_embalagem_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."ref_permissão_produto_ref_permissao_id_seq";
-CREATE SEQUENCE IF NOT EXISTS public.ref_empresas_subsidiarias_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.produtos_listas_precos_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.ref_forma_pagamento_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.vendedores_cliente_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public."ref_unidade_ref_unidade_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."vendedor_comissão_vendedor_comissao_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."ref_user_role_ref_user_role_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."transportador_pedido_venda_pedido_venda_id (PK) (FK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."ref_tipo_pessoa_ref_tipo_pessoa_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."ref_tipo_endereço_tipo_endereco_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public.ref_tipo_produto_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public."dados_comissão_ref_comissão_id_seq";
-CREATE SEQUENCE IF NOT EXISTS public."produto_produto_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."ref_formar_frete_ref_formas_frete_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public."ref_tipo_embalagem_ref_tipo_embalagem_id (PK)_seq";
-CREATE SEQUENCE IF NOT EXISTS public.conta_corrente_cliente_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.metas_vendedor_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.pagamento_acordo_cliente_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.lancamentos_comissao_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.pagamentos_comissao_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.segmento_cliente_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.controle_comissao_periodo_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.tiny_empresa_natureza_operacao_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.ref_unidade_medida_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.regiao_destino_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.transportador_logistica_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.origem_frete_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.frete_logistica_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.frete_logistica_ocorrencia_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.fatura_transportadora_id_seq;
-CREATE SEQUENCE IF NOT EXISTS public.fatura_transportadora_item_id_seq;
+CREATE TYPE public.grupo_transportador AS ENUM ('ATIVA', 'BRASSPRESS', 'TA_AMERICANA', 'CAMILO', 'OUTROS');
+CREATE TYPE public.status_entrega_frete AS ENUM ('Em Separação', 'Aguardando Coleta', 'Em Trânsito', 'Em Trânsito - Reentrega', 'Entregue', 'Agendado', 'Recusado', 'Devolvido - Trânsito', 'Devolvido - Entregue');
+CREATE TYPE public.status_fatura_transportadora AS ENUM ('Aberta', 'Paga', 'Em_Analise');
+CREATE TYPE public.tipo_ocorrencia_ssw AS ENUM ('Cliente', 'Informativo', 'Sistema', 'Operacional', 'Entrega');
 
--- ========== TABLES (62) ==========
+-- ========== TABLES (com IDENTITY) (62) ==========
 
 CREATE TABLE IF NOT EXISTS public."Condicao_De_Pagamento" (
-  "Condição_ID" bigint NOT NULL,
+  "Condição_ID" bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   "Parcelamento" boolean,
   "Condição_de_crédito" boolean,
   "Quantidade_parcelas" double precision,
@@ -97,7 +49,7 @@ CREATE TABLE IF NOT EXISTS public.cliente (
   inscricao_estadual text,
   inscricao_municipal text,
   marca_mae text,
-  cliente_id bigint NOT NULL,
+  cliente_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   lista_de_preco bigint,
   "observação_nfe" text,
   "empresaFaturamento" bigint,
@@ -174,18 +126,18 @@ CREATE TABLE IF NOT EXISTS public.cliente_historico_alteracoes (
   metadados jsonb
 );
 CREATE TABLE IF NOT EXISTS public.cliente_vendedores (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   cliente_id bigint,
   vendedor_id uuid DEFAULT gen_random_uuid()
 );
 CREATE TABLE IF NOT EXISTS public."condições_cliente" (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   "ID_condições" bigint,
   "ID_cliente" bigint,
   descricao text
 );
 CREATE TABLE IF NOT EXISTS public.conta_corrente_cliente (
-  id bigint NOT NULL,
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   cliente_id bigint NOT NULL,
   vendedor_uuid uuid,
   data date NOT NULL,
@@ -198,7 +150,7 @@ CREATE TABLE IF NOT EXISTS public.conta_corrente_cliente (
   categoria_id uuid
 );
 CREATE TABLE IF NOT EXISTS public.contatos_associados (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   "Nome" text,
   "Setor" text,
   "Telefone" text,
@@ -206,7 +158,7 @@ CREATE TABLE IF NOT EXISTS public.contatos_associados (
   "ID_cliente" text
 );
 CREATE TABLE IF NOT EXISTS public.controle_comissao_periodo (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   vendedor_uuid uuid NOT NULL,
   periodo text NOT NULL,
   status text DEFAULT 'aberto'::text NOT NULL,
@@ -216,7 +168,7 @@ CREATE TABLE IF NOT EXISTS public.controle_comissao_periodo (
   fechado_por uuid
 );
 CREATE TABLE IF NOT EXISTS public.dados_comissao (
-  "ref_comissão_id" bigint NOT NULL,
+  "ref_comissão_id" bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   "Descrição" text,
   "Modelo_tabela" text,
   "informações" text
@@ -260,7 +212,7 @@ CREATE TABLE IF NOT EXISTS public.dados_vendedor (
   contatos_adicionais jsonb DEFAULT '[]'::jsonb
 );
 CREATE TABLE IF NOT EXISTS public.detalhes_pedido_venda (
-  pedido_venda_id bigint NOT NULL,
+  pedido_venda_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   created_at timestamp with time zone,
   data_previsao_entrega date,
   data_envio date,
@@ -366,7 +318,7 @@ CREATE TABLE IF NOT EXISTS public.grupos_redes (
   deleted_at timestamp with time zone
 );
 CREATE TABLE IF NOT EXISTS public.lancamentos_comissao (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   vendedor_uuid uuid NOT NULL,
   data_lancamento date DEFAULT CURRENT_DATE NOT NULL,
   tipo text NOT NULL,
@@ -377,7 +329,7 @@ CREATE TABLE IF NOT EXISTS public.lancamentos_comissao (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 CREATE TABLE IF NOT EXISTS public.listas_preco (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   data_criacao timestamp with time zone DEFAULT now() NOT NULL,
   nome character varying,
   desconto numeric DEFAULT '0'::numeric,
@@ -385,7 +337,7 @@ CREATE TABLE IF NOT EXISTS public.listas_preco (
   codigo_sequencial text
 );
 CREATE TABLE IF NOT EXISTS public.listas_preco_comissionamento (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   lista_preco_id bigint NOT NULL,
   desconto_minimo numeric NOT NULL,
   desconto_maximo numeric NOT NULL,
@@ -393,7 +345,7 @@ CREATE TABLE IF NOT EXISTS public.listas_preco_comissionamento (
   data_criacao timestamp with time zone DEFAULT now() NOT NULL
 );
 CREATE TABLE IF NOT EXISTS public.marcas (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   created_at timestamp with time zone DEFAULT now() NOT NULL,
   descricao text
 );
@@ -409,7 +361,7 @@ CREATE TABLE IF NOT EXISTS public.metas_vendedor (
   mes integer NOT NULL
 );
 CREATE TABLE IF NOT EXISTS public.natureza_operacao (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text,
   tem_comissao boolean,
   codigo text,
@@ -447,7 +399,7 @@ CREATE TABLE IF NOT EXISTS public.origem_frete (
   updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 CREATE TABLE IF NOT EXISTS public.pagamento_acordo_cliente (
-  id bigint NOT NULL,
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   conta_corrente_id bigint NOT NULL,
   data_pagamento date,
   forma_pagamento text NOT NULL,
@@ -458,7 +410,7 @@ CREATE TABLE IF NOT EXISTS public.pagamento_acordo_cliente (
   forma_pagamento_id bigint
 );
 CREATE TABLE IF NOT EXISTS public.pagamentos_comissao (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   vendedor_uuid uuid NOT NULL,
   data_pagamento date DEFAULT CURRENT_DATE NOT NULL,
   valor numeric(15,2) NOT NULL,
@@ -470,7 +422,7 @@ CREATE TABLE IF NOT EXISTS public.pagamentos_comissao (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 CREATE TABLE IF NOT EXISTS public.pedido_venda (
-  "pedido_venda_ID" bigint NOT NULL,
+  "pedido_venda_ID" bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   cliente_id bigint,
   vendedor_uuid uuid DEFAULT gen_random_uuid(),
   natureza_operacao text,
@@ -513,7 +465,7 @@ CREATE TABLE IF NOT EXISTS public.pedido_venda (
   tiny_fallback_used text
 );
 CREATE TABLE IF NOT EXISTS public.pedido_venda_produtos (
-  pedido_venda_produtos_id bigint NOT NULL,
+  pedido_venda_produtos_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   pedido_venda_id bigint NOT NULL,
   produto_id bigint NOT NULL,
   quantidade numeric,
@@ -530,7 +482,7 @@ CREATE TABLE IF NOT EXISTS public.pedido_venda_produtos (
   unidade text
 );
 CREATE TABLE IF NOT EXISTS public.produto (
-  produto_id bigint NOT NULL,
+  produto_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   descricao text,
   codigo_sku text,
   ref_origem_produto_id bigint,
@@ -596,19 +548,19 @@ CREATE TABLE IF NOT EXISTS public.produto_backup (
   tipo text
 );
 CREATE TABLE IF NOT EXISTS public.produto_vendedor (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   "Id_produto" bigint,
   "Id_vendedor" uuid,
   "Condição_associada" bigint
 );
 CREATE TABLE IF NOT EXISTS public.produtos_listas_precos (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   produto_id bigint,
   lista_preco_id bigint,
   preco numeric
 );
 CREATE TABLE IF NOT EXISTS public.ref_empresas_subsidiarias (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text,
   "identificação" text,
   chave_api text,
@@ -625,7 +577,7 @@ CREATE TABLE IF NOT EXISTS public.ref_empresas_subsidiarias (
   deleted_at timestamp with time zone
 );
 CREATE TABLE IF NOT EXISTS public.ref_forma_pagamento (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text NOT NULL,
   descricao text,
   usar_em_conta_corrente boolean DEFAULT true,
@@ -635,32 +587,32 @@ CREATE TABLE IF NOT EXISTS public.ref_forma_pagamento (
   updated_at timestamp with time zone DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS public.ref_formar_frete (
-  ref_formas_frete_id bigint NOT NULL,
+  ref_formas_frete_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text,
   ref_formas_envio_id bigint
 );
 CREATE TABLE IF NOT EXISTS public.ref_formas_envio (
-  ref_formas_envio_id bigint NOT NULL,
+  ref_formas_envio_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text
 );
 CREATE TABLE IF NOT EXISTS public.ref_intermediadores (
-  ref_intermediador_id bigint NOT NULL,
+  ref_intermediador_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text
 );
 CREATE TABLE IF NOT EXISTS public.ref_meio_pagamento (
-  ref_pagamento_id bigint NOT NULL,
+  ref_pagamento_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text
 );
 CREATE TABLE IF NOT EXISTS public.ref_origem_produto (
-  ref_origem_produto_id bigint NOT NULL,
+  ref_origem_produto_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text
 );
 CREATE TABLE IF NOT EXISTS public.ref_pagador_frete (
-  ref_pagador_frete_id bigint NOT NULL,
+  ref_pagador_frete_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text
 );
 CREATE TABLE IF NOT EXISTS public."ref_permissão_produto" (
-  ref_permissao_id bigint NOT NULL,
+  ref_permissao_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text
 );
 CREATE TABLE IF NOT EXISTS public.ref_situacao (
@@ -669,36 +621,36 @@ CREATE TABLE IF NOT EXISTS public.ref_situacao (
   descricao text
 );
 CREATE TABLE IF NOT EXISTS public.ref_tipo_embalagem (
-  "ref_tipo_embalagem_id (PK)" bigint NOT NULL,
+  "ref_tipo_embalagem_id (PK)" bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text
 );
 CREATE TABLE IF NOT EXISTS public."ref_tipo_endereço" (
-  tipo_endereco_id bigint NOT NULL,
+  tipo_endereco_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text
 );
 CREATE TABLE IF NOT EXISTS public.ref_tipo_pessoa (
-  ref_tipo_pessoa_id bigint NOT NULL,
+  ref_tipo_pessoa_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text,
   nome_completo text
 );
 CREATE TABLE IF NOT EXISTS public.ref_tipo_produto (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   created_at timestamp with time zone DEFAULT now() NOT NULL,
   nome text
 );
 CREATE TABLE IF NOT EXISTS public.ref_unidade (
-  ref_unidade_id bigint NOT NULL,
+  ref_unidade_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text
 );
 CREATE TABLE IF NOT EXISTS public.ref_unidade_medida (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text NOT NULL,
   sigla text NOT NULL,
   ativo boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 CREATE TABLE IF NOT EXISTS public.ref_user_role (
-  ref_user_role_id bigint NOT NULL,
+  ref_user_role_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   nome text
 );
 CREATE TABLE IF NOT EXISTS public.regiao_destino (
@@ -719,7 +671,7 @@ CREATE TABLE IF NOT EXISTS public.segmento_cliente (
   deleted_at timestamp with time zone
 );
 CREATE TABLE IF NOT EXISTS public.tiny_empresa_natureza_operacao (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   empresa_id bigint NOT NULL,
   natureza_operacao_id bigint NOT NULL,
   tiny_valor text NOT NULL,
@@ -757,7 +709,7 @@ CREATE TABLE IF NOT EXISTS public.transportador_logistica (
   atualizado_por uuid
 );
 CREATE TABLE IF NOT EXISTS public.transportador_pedido_venda (
-  pedido_venda_id bigint NOT NULL,
+  pedido_venda_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   ref_formas_envio_id bigint,
   ref_formas_frete_id bigint,
   codigo_rastreio text,
@@ -782,7 +734,7 @@ CREATE TABLE IF NOT EXISTS public."user" (
   permissoes jsonb DEFAULT '[]'::jsonb NOT NULL
 );
 CREATE TABLE IF NOT EXISTS public."vendedor_comissão" (
-  vendedor_comissao_id bigint NOT NULL,
+  vendedor_comissao_id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   vendedor_uuid uuid DEFAULT gen_random_uuid(),
   data_inicio date,
   data_final date,
@@ -809,7 +761,7 @@ CREATE TABLE IF NOT EXISTS public."vendedor_comissão" (
   editado_em timestamp with time zone
 );
 CREATE TABLE IF NOT EXISTS public.vendedores_cliente (
-  id bigint NOT NULL,
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
   "ID_vendedor" text,
   "ID_cliente" text,
   "Nome_vendedor" text,
