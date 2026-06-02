@@ -133,3 +133,25 @@ hover-card, input-otp, menubar, navigation-menu, resizable, sidebar, slider, tog
 
 > Ressalva: varredura por imports; um arquivo carregado dinamicamente/por string pode
 > aparecer como falso-morto. Conferir antes de remover.
+
+## ✋ Checklist de validação ANTES de apagar (retomar em outro momento)
+
+Decisão 2026-06-02: **não apagar agora** — só documentado. A remoção fica para uma fase
+dedicada, seguindo este checklist (do mais seguro pro menos):
+
+**Rede de segurança geral:** tudo está versionado no `main` (baseline) → qualquer remoção
+é **reversível** (re-deploy/re-CREATE a partir do git). Remover **um por vez** e observar.
+
+1. **Front (40 arquivos)** — risco baixíssimo, auto-verificável:
+   - Deletar o arquivo → rodar `npm run build` (vite). Se **passar verde**, é seguro
+     (o arquivo já não ia no bundle; tree-shaking). Se quebrar, era falso-positivo → reverter.
+2. **RPCs (`filtrar_produtosBB`, `filtrar_produtosTT`)** — validável por análise estática:
+   - Re-confirmar que o nome não aparece em `src/`, `supabase/functions/`, corpos de função
+     nem triggers. Não há chamador externo de RPC. → `DROP FUNCTION` (CREATE está no baseline).
+3. **Edges (candidatas)** — NÃO validável por código (têm URL pública). Validar por **runtime**:
+   - Supabase Dashboard → Edge Functions → abrir cada candidata → gráfico de **Invocations**.
+     **Zero invocações** num período representativo (idealmente 30–90d) = morta confirmada.
+   - Atenção especial às de integração: `tiny-verificar-pedido-v1`, `ssw-tracking-v1`
+     (podem ser chamadas por Tiny/SSW externamente).
+   - Logs via API não estavam acessíveis (retenção/plano) — por isso a checagem é no painel.
+   - Só remover (`supabase functions delete <nome>`) as com invocação zero; fonte fica no git.
