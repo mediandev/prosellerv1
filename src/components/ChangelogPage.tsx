@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.47',
+    items: [
+      'Pedidos > Ao selecionar uma natureza de operação que não gera receita (ex.: Bonificação), o campo "Condição de Pagamento" agora fica oculto e deixa de ser obrigatório — não trava mais o pedido. Para naturezas que geram receita, o campo continua obrigatório normalmente.',
+    ],
+  },
+  {
     version: 'V 1.46',
     items: [
       'Configurações > Naturezas de Operação: corrigido o problema em que criar, editar ou excluir uma natureza parecia "não salvar" — ao recarregar a página o valor antigo voltava. A alteração já era gravada, mas a lista exibia uma cópia em cache (até 12h). Agora a lista é atualizada na hora.',
