@@ -2216,6 +2216,9 @@ export const api = {
         // A resposta vem no formato { success: true, data: { condicao: {...} } }
         const condicao = response.condicao || response.data?.condicao || response;
 
+        // Invalida o cache de opções para refletir a nova condição imediatamente
+        clearOptionsCache('condicoes-pagamento');
+
         // Mapear para o formato esperado pelo frontend
         return {
           id: condicao.id,
@@ -3149,6 +3152,7 @@ export const api = {
           id: entityId,
           ...body,
         });
+        clearOptionsCache('condicoes-pagamento');
         return { success: true };
       } catch (error) {
         console.error('[API] Erro ao excluir condição de pagamento:', error);
@@ -4228,6 +4232,8 @@ export const api = {
         });
 
         // A resposta vem no formato { success: true, data: {...} }
+        // Invalida o cache de opções para a próxima listagem buscar dados frescos
+        clearOptionsCache('naturezas-operacao-v2');
         return response.data || response;
       } catch (error) {
         console.error('[API] Erro ao criar natureza, usando mock:', error);
@@ -4257,6 +4263,8 @@ export const api = {
         }, id);
 
         // A resposta vem no formato { success: true, data: {...} }
+        // Invalida o cache de opções para a próxima listagem buscar dados frescos
+        clearOptionsCache('naturezas-operacao-v2');
         return response.data || response;
       } catch (error) {
         console.error('[API] Erro ao atualizar natureza, usando mock:', error);
@@ -4269,6 +4277,7 @@ export const api = {
       try {
         console.log('[API] Excluindo natureza via Edge Function natureza-operacao-v2...');
         await callEdgeFunction('natureza-operacao-v2', 'DELETE', undefined, id);
+        clearOptionsCache('naturezas-operacao-v2');
         return { success: true };
       } catch (error) {
         console.error('[API] Erro ao excluir natureza:', error);
