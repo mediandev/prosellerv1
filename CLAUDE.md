@@ -87,7 +87,8 @@ Para cada acionamento, gero um trecho em `docs/plans/cursor-brief.md` com:
 
 ## Lembretes operacionais
 
-- **Branch de trabalho:** `main` é a fonte de verdade. Ignore `master` (obsoleta).
+- **Branch de trabalho:** `main` é a **fonte de verdade ÚNICA** — front, **edge functions E migrations**. `master` foi arquivada (não usar). Convergência feita em 2026-06-01 (ver `docs/wiki/auditoria-backend-prod-git-2026-06-01.md`).
+- **Deploy de backend a partir do `main`:** edge functions e migrations são **deploy MANUAL**, sempre a partir do `main`. **NUNCA deployar de outro branch.** **Commitar ANTES de deployar** (foi o que gerou a divergência repo↔prod histórica: deploy manual sem commit). Editar edge/RPC = partir do que está no `main` (que agora espelha prod).
 - **Imports versionados (`@x.y.z`)**: não mexa por conta própria. Lista no débito técnico.
 - **`docs/` versionado.** Qualquer `.md` solto vai para a subpasta certa (`docs/product/`, `docs/specs/`, `docs/wiki/`, etc.), nunca solto na raiz.
 
