@@ -103,3 +103,33 @@ prod), nos corpos das funções, nem como handler de trigger.
 - Reconciliar as edges baixadas (bundle transpilado) para TS limpo.
 - Processo: **commitar antes de deployar** (evita recriar essa divergência).
 - Avaliar remoção dos mortos de alta confiança (com backup).
+
+## 🪦 Código morto no FRONT (candidatos — não usados; varredura de imports)
+
+Critério: arquivo em `src/` cujo módulo **não é importado** por nenhum outro (grafo de
+imports do `main`). 40 candidatos / 250 arquivos. **Não deletar sem conferir** (lazy import,
+uso por string, etc.).
+
+### App-level — superados/órfãos (prioridade pra revisar)
+- `CustomerABCReport.tsx`, `ProductABCReport.tsx`, `SalesReport.tsx` — superados pelas versões `*Page` (essas sim em uso).
+- `CustomerManagement.tsx` — superado por `CustomersListPage`.
+- `CustomerFormContaCorrenteNovo.tsx` — versão antiga.
+- `GoalsTracking.tsx` — superado por `MetasManagement`.
+- `ERPConfigSettings.tsx`, `ERPConfigMulticompany.tsx`, `TinyERPSyncSettings.tsx`, `TinyERPSyncSettingsMulticompany.tsx` — config ERP antiga.
+- `logistica/CadastroOrigemFretePage.tsx`, `logistica/CadastroRegiaoDestinoPage.tsx` — abas Origens/Regiões removidas do menu (decisão Valentim 2026-05-21); arquivos ficaram.
+
+### One-time / debug
+- `CNPJDebugger.tsx`, `FormDataDebugger.tsx`, `SetupUsersButton.tsx`,
+  `MigracaoAuthPage.tsx`, `MigracaoVendedorId.tsx`, `services/tinyERPSync_temp.ts`,
+  `figma/ImageWithFallback.tsx`.
+
+### Mocks não usados
+- `components/mockTransactions.ts`, `data/mockCategoriasContaCorrente.ts`,
+  `data/mockImportHistory.ts`, `data/mockMarcas.ts`, `data/mockTiposProduto.ts`.
+
+### `ui/` (shadcn) — scaffolding instalado e nunca usado (15) — baixa prioridade
+accordion, aspect-ratio, breadcrumb, carousel, chart, context-menu, drawer, form,
+hover-card, input-otp, menubar, navigation-menu, resizable, sidebar, slider, toggle-group.
+
+> Ressalva: varredura por imports; um arquivo carregado dinamicamente/por string pode
+> aparecer como falso-morto. Conferir antes de remover.
