@@ -544,6 +544,13 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
     return removeDuplicatesById(condicoesDisponiveis);
   }, [formData.clienteId, formData.valorTotalProdutos, clientes, condicoes]);
 
+  // #3: natureza que "não gera receita" (ex.: Bonificação) não tem pagamento,
+  // logo não exige nem exibe condição de pagamento. Default = exige (gera receita).
+  const naturezaSelecionada = naturezas.find(
+    (n) => String(n.id) === String(formData.naturezaOperacaoId)
+  );
+  const naturezaGeraReceita = naturezaSelecionada ? naturezaSelecionada.geraReceita !== false : true;
+
   // Carregar dados iniciais
   useEffect(() => {
     carregarDadosIniciais();
@@ -1848,7 +1855,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         toast.error('Adicione pelo menos um item ao pedido');
       }
 
-      if (!formData.condicaoPagamentoId) {
+      if (naturezaGeraReceita && !formData.condicaoPagamentoId) {
         erros.add('condicaoPagamentoId');
         toast.error('Selecione uma condição de pagamento');
       }
@@ -2580,11 +2587,17 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                       onValueChange={(value) => {
                         limparErro('naturezaOperacaoId');
                         const natureza = naturezas.find(n => n.id === value);
+                        const geraReceita = natureza ? natureza.geraReceita !== false : true;
                         setFormData({
                           ...formData,
                           naturezaOperacaoId: value,
                           nomeNaturezaOperacao: natureza?.nome || '',
+                          // #3: natureza sem receita não usa condição de pagamento — limpa o campo
+                          ...(geraReceita
+                            ? {}
+                            : { condicaoPagamentoId: '', nomeCondicaoPagamento: '', percentualDescontoExtra: 0 }),
                         });
+                        if (!geraReceita) limparErro('condicaoPagamentoId');
 
                         // Mostrar demais campos após selecionar natureza (apenas no modo criar)
                         if (modo === 'criar') {
@@ -3066,6 +3079,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                     />
                   </div>
 
+                  {naturezaGeraReceita && (
                   <div className="space-y-2">
                     <Label className={campoTemErro('condicaoPagamentoId') ? 'text-destructive' : ''}>
                       Condição de Pagamento *
@@ -3113,6 +3127,7 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
                       </p>
                     )}
                   </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
