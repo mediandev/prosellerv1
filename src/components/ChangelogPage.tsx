@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.50',
+    items: [
+      'Comissões > Relatório do vendedor: as colunas "OC Cliente" e "Cliente" da tabela "Vendas do Período" voltaram a ser preenchidas. Desde 14/04/2026 as comissões geradas vinham sem esses rótulos (o nome do cliente e a OC apareciam em branco), embora os valores estivessem corretos. Corrigida a geração das comissões para gravar novamente esses campos, e preenchidos os relatórios de abril, maio e junho/2026. Nenhum valor de comissão foi alterado.',
+    ],
+  },
+  {
     version: 'V 1.48',
     items: [
       'Equipe > Vendedores: a regra de comissão (Alíquota Fixa / Definido em Lista de Preço) agora é gravada de verdade ao salvar o vendedor. Antes a escolha não era persistida e a comissão saía zerada para vendedores recém-cadastrados.',
