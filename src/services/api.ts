@@ -283,6 +283,33 @@ async function updateDadosVendedorIdtiny(userId: string, idtiny: string): Promis
   });
 }
 
+// Persiste a REGRA DE COMISSÃO do vendedor (não tratada pelo RPC update_dados_vendedor_v2).
+// dados_vendedor."Comissão": 1 = Definido em Lista de Preço, 2 = Alíquota Fixa.
+// Sem isso, a regra fica NULL no banco e o cálculo de comissão devolve zero.
+async function updateDadosVendedorComissao(
+  userId: string,
+  regraAplicavel?: string,
+  aliquotaFixa?: number,
+): Promise<void> {
+  if (regraAplicavel !== 'lista_preco' && regraAplicavel !== 'aliquota_fixa') return;
+  const token = getAuthToken();
+  const url = `${SUPABASE_URL}/rest/v1/dados_vendedor?user_id=eq.${userId}`;
+  const payload =
+    regraAplicavel === 'aliquota_fixa'
+      ? { 'Comissão': 2, aliquotafixa: Number(aliquotaFixa ?? 0) }
+      : { 'Comissão': 1, aliquotafixa: 0 };
+  await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: token ? `Bearer ${token}` : `Bearer ${SUPABASE_ANON_KEY}`,
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 // Helper para chamadas às Edge Functions com retry automático em caso de token expirado
 async function callEdgeFunction(
   functionName: string,
@@ -2595,6 +2622,11 @@ export const api = {
           await updateDadosVendedorIdtiny(createdUser.user_id, data.idTiny);
         }
 
+        // Persistir a regra de comissão (Lista de Preço / Alíquota Fixa)
+        if (data.comissoes?.regraAplicavel !== undefined) {
+          await updateDadosVendedorComissao(createdUser.user_id, data.comissoes.regraAplicavel, data.comissoes.aliquotaFixa);
+        }
+
         // Converter para formato Seller
         const seller = usuarioToSeller(createdUser);
 
@@ -3005,6 +3037,11 @@ export const api = {
 
         if (data.idTiny !== undefined) {
           await updateDadosVendedorIdtiny(String(id), data.idTiny);
+        }
+
+        // Persistir a regra de comissão (Lista de Preço / Alíquota Fixa)
+        if (data.comissoes?.regraAplicavel !== undefined) {
+          await updateDadosVendedorComissao(String(id), data.comissoes.regraAplicavel, data.comissoes.aliquotaFixa);
         }
 
         // Converter para formato Seller e mesclar dados adicionais

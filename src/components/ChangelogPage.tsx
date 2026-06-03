@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.48',
+    items: [
+      'Equipe > Vendedores: a regra de comissão (Alíquota Fixa / Definido em Lista de Preço) agora é gravada de verdade ao salvar o vendedor. Antes a escolha não era persistida e a comissão saía zerada para vendedores recém-cadastrados.',
+    ],
+  },
+  {
     version: 'V 1.47',
     items: [
       'Pedidos > Ao selecionar uma natureza de operação que não gera receita (ex.: Bonificação), o campo "Condição de Pagamento" agora fica oculto e deixa de ser obrigatório — não trava mais o pedido. Para naturezas que geram receita, o campo continua obrigatório normalmente.',
