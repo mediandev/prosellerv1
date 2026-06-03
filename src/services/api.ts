@@ -3433,8 +3433,16 @@ export const api = {
   // Custom endpoints
   clientes: {
     getPendentes: async () => {
-      const clientes = getStoredData('mockClientes', mockClientes);
-      return clientes.filter((c: any) => c.statusAprovacao === 'pendente');
+      try {
+        // Dados REAIS via edge clientes-v2 (status_aprovacao=pendente), não mock.
+        const resp = await api.get('clientes', { params: { status_aprovacao: 'pendente', page: 1, limit: 1000 } });
+        const lista = Array.isArray(resp) ? resp : (resp?.clientes ?? []);
+        return lista.filter((c: any) => (c.statusAprovacao ?? c.status_aprovacao) === 'pendente');
+      } catch (error) {
+        console.error('[API] Erro ao listar clientes pendentes, usando mock:', error);
+        const clientes = getStoredData('mockClientes', mockClientes);
+        return clientes.filter((c: any) => c.statusAprovacao === 'pendente');
+      }
     },
 
     aprovar: async (id: string) => {

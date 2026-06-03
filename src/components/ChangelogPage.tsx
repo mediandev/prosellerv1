@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.49',
+    items: [
+      'Notificações > Clientes em análise: a lista de cadastros aguardando aprovação (acessada pelo sino) agora mostra os clientes REAIS pendentes, em vez de dados de exemplo (mock). O fluxo de aprovar/rejeitar pela tela continua funcionando normalmente.',
+    ],
+  },
+  {
     version: 'V 1.48',
     items: [
       'Equipe > Vendedores: a regra de comissão (Alíquota Fixa / Definido em Lista de Preço) agora é gravada de verdade ao salvar o vendedor. Antes a escolha não era persistida e a comissão saía zerada para vendedores recém-cadastrados.',
