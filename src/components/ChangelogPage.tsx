@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.46',
+    items: [
+      'Configurações > Naturezas de Operação: corrigido o problema em que criar, editar ou excluir uma natureza parecia "não salvar" — ao recarregar a página o valor antigo voltava. A alteração já era gravada, mas a lista exibia uma cópia em cache (até 12h). Agora a lista é atualizada na hora.',
+      'Mesma correção aplicada em Configurações > Condições de Pagamento, que tinha o mesmo comportamento.',
+    ],
+  },
+  {
     version: 'V 1.45',
     items: [
       'Pedidos > Corrigido: ao trocar ou re-selecionar o cliente em um pedido (inclusive ao duplicar), os campos do cliente — entre eles a Natureza de Operação — sumiam e impediam o envio. Agora os campos continuam visíveis para você selecionar a natureza e concluir o pedido.',
