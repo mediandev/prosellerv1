@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.51',
+    items: [
+      'Dashboard: os cards (Vendas Totais, Ticket Médio, Produtos Vendidos, Positivação, Vendedores Ativos, Meta) não ficam mais presos em "Carregando..." e a "Carteira de Clientes" voltou a mostrar o total correto. A causa era o status do cliente gravado em maiúsculo ("ATIVO") não bater com a comparação interna ("Ativo"), zerando a carteira (ex.: "164 de 0 clientes") e travando todo o dashboard. Corrigida a comparação (sem diferenciar maiúsculas) e o dashboard agora carrega mesmo se a carteira vier vazia.',
+    ],
+  },
+  {
     version: 'V 1.50',
     items: [
       'Comissões > Relatório do vendedor: as colunas "OC Cliente" e "Cliente" da tabela "Vendas do Período" voltaram a ser preenchidas. Desde 14/04/2026 as comissões geradas vinham sem esses rótulos (o nome do cliente e a OC apareciam em branco), embora os valores estivessem corretos. Corrigida a geração das comissões para gravar novamente esses campos, e preenchidos os relatórios de abril, maio e junho/2026. Nenhum valor de comissão foi alterado.',

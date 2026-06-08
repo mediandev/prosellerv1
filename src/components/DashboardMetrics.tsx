@@ -750,10 +750,14 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
       // - metaLoaded: para porcentagemMeta correta (buscarMetaTotal/Vendedor resolvido).
       // Sem esses gates, o cálculo dispara múltiplos setMetrics com dados parciais,
       // causando flashes intermediários visíveis no UI.
-      const walletTotal = serverSnapshot?.customerWallet?.distribution?.total;
-      if (typeof walletTotal !== 'number' || walletTotal <= 0 || !metaLoaded) {
-        return; // cards ficam em "Carregando..." até tudo estar pronto
+      // Aguarda só o snapshot do servidor e a meta resolverem. NÃO trava quando
+      // walletTotal=0 — senão um total zerado (ex.: vendedor sem carteira, ou
+      // falha pontual) deixa TODOS os cards presos em "Carregando..." pra sempre.
+      if (!serverSnapshot || !metaLoaded) {
+        return;
       }
+      const walletTotalRaw = serverSnapshot?.customerWallet?.distribution?.total;
+      const walletTotal = typeof walletTotalRaw === 'number' ? walletTotalRaw : 0;
 
       const { current, previous } = filtrarPorPeriodo(allTransactions, period);
       const filteredCurrent = filterTransactions(current);
@@ -772,7 +776,9 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
       if (cancelled) return;
 
       calculatedMetrics.positivacaoTotal = walletTotal;
-      calculatedMetrics.positivacao = (calculatedMetrics.positivacaoCount / walletTotal) * 100;
+      calculatedMetrics.positivacao = walletTotal > 0
+        ? (calculatedMetrics.positivacaoCount / walletTotal) * 100
+        : 0;
 
       setMetrics(calculatedMetrics);
       setMetricsReady(true);
