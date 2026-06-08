@@ -142,6 +142,15 @@ function inferClienteSituacao(raw: any): string {
     else if (statusAprovacao === 'pendente') situacao = 'Analise'
   }
 
+  // Canonicaliza o casing: o banco grava "ATIVO"/"INATIVO" (maiúsculo),
+  // mas o restante do código compara com "Ativo"/"Inativo" (case-sensitive).
+  // Sem isso, walletActive/walletInactive zeram e os cards travam em "Carregando...".
+  const norm = normalizeText(situacao)
+  if (norm === 'ativo') return 'Ativo'
+  if (norm === 'inativo') return 'Inativo'
+  if (norm === 'reprovado') return 'Reprovado'
+  if (norm === 'analise') return 'Analise'
+
   return situacao
 }
 
