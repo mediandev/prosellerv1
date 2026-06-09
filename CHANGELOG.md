@@ -1,5 +1,14 @@
 # Changelog
 
+## V 1.21 — 2026-06-09
+
+### Permissionamento
+
+- **Tela de gestão de usuários alinhada ao backend** — O diálogo "Gerenciar Permissões" exibia permissões que a edge function `update-user-v2` rejeita ao salvar (`usuarios.*`, `config.*`, `*.todos`/`*.todas`), fazendo o salvamento falhar, e escondia permissões válidas (`produtos.*`, `comissoes.*`). Agora a tela filtra pela mesma allowlist do backend (`SELLER_SUPPORTED_PERMISSION_IDS`), garantindo que o que aparece é exatamente o que é concedido. Categorias exibidas: Clientes, Vendas, Relatórios, Conta Corrente, Produtos, Comissões.
+- **Permissões reais na listagem de usuários** — A edge function `list-users-v2` retornava `permissoes: null`, fazendo a tela de gestão mostrar as permissões default em vez das reais (com risco de sobrescrevê-las ao salvar). Função redeployada em produção com o merge de permissões que já estava no repo.
+
+---
+
 ## V 1.20 — 2026-05-27
 
 ### Integridade front-backend (continuação)
