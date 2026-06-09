@@ -12,6 +12,19 @@ import { Checkbox } from "./ui/checkbox";
 import { Separator } from "./ui/separator";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { Usuario, PERMISSOES_DISPONIVEIS, Permissao } from "../types/user";
+import { SELLER_SUPPORTED_PERMISSION_IDS } from "../utils/sellerPermissions";
+
+// A tela só pode exibir permissões que o backend (update-user-v2) aceita salvar e
+// que o app efetivamente aplica. Filtramos PERMISSOES_DISPONIVEIS pela mesma
+// allowlist da Edge Function para que "o que aparece" == "o que é concedido".
+const PERMISSOES_SUPORTADAS_SET = new Set<string>(SELLER_SUPPORTED_PERMISSION_IDS);
+const PERMISSOES_VISIVEIS: Permissao[] = PERMISSOES_DISPONIVEIS.filter((p) =>
+  PERMISSOES_SUPORTADAS_SET.has(p.id)
+);
+// Categorias derivadas da lista filtrada, preservando a ordem de declaração.
+const CATEGORIAS_VISIVEIS: string[] = Array.from(
+  new Set(PERMISSOES_VISIVEIS.map((p) => p.categoria))
+);
 import { toast } from "sonner@2.0.3";
 import { 
   Users, 
@@ -314,7 +327,7 @@ export function UserManagement() {
   };
 
   const handleMarcarTodasCategoria = (categoria: string) => {
-    const permissoesDaCategoria = PERMISSOES_DISPONIVEIS
+    const permissoesDaCategoria = PERMISSOES_VISIVEIS
       .filter((p) => p.categoria === categoria)
       .map((p) => p.id);
 
@@ -346,21 +359,14 @@ export function UserManagement() {
       clientes: "Clientes",
       vendas: "Vendas",
       relatorios: "Relatórios",
-      configuracoes: "Configurações",
-      usuarios: "Usuários",
       contacorrente: "Conta Corrente",
+      produtos: "Produtos",
+      comissoes: "Comissões",
     };
     return nomes[categoria] || categoria;
   };
 
-  const categorias = [
-    "clientes",
-    "vendas",
-    "relatorios",
-    "configuracoes",
-    "usuarios",
-    "contacorrente",
-  ];
+  const categorias = CATEGORIAS_VISIVEIS;
 
   return (
     <>
@@ -695,7 +701,7 @@ export function UserManagement() {
               <ScrollArea className="h-[300px] rounded-md border p-4">
                 <div className="space-y-6">
                   {categorias.map((categoria) => {
-                    const permissoesCategoria = PERMISSOES_DISPONIVEIS.filter(
+                    const permissoesCategoria = PERMISSOES_VISIVEIS.filter(
                       (p) => p.categoria === categoria
                     );
                     const todasMarcadas = permissoesCategoria.every((p) =>
@@ -786,7 +792,7 @@ export function UserManagement() {
             <ScrollArea className="h-[400px] rounded-md border p-4">
               <div className="space-y-6">
                 {categorias.map((categoria) => {
-                  const permissoesCategoria = PERMISSOES_DISPONIVEIS.filter(
+                  const permissoesCategoria = PERMISSOES_VISIVEIS.filter(
                     (p) => p.categoria === categoria
                   );
                   const todasMarcadas = permissoesCategoria.every((p) =>
