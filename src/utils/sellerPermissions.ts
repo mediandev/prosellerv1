@@ -47,6 +47,28 @@ export const SELLER_SUPPORTED_PERMISSION_IDS = [
   "comissoes.lancamentos.excluir",
 ] as const;
 
+// Permissões adicionais (além das de vendedor) que um BACKOFFICE pode receber e
+// que são EFETIVAMENTE aplicadas hoje (gating de página). Mantemos só o que tem
+// efeito real para a tela não voltar a mostrar permissão sem função.
+export const BACKOFFICE_EXTRA_PERMISSION_IDS = [
+  "clientes.aprovar",
+  "equipe.visualizar",
+  "metas.visualizar",
+  "configuracoes.visualizar",
+] as const;
+
+export const BACKOFFICE_SUPPORTED_PERMISSION_IDS = [
+  ...SELLER_SUPPORTED_PERMISSION_IDS,
+  ...BACKOFFICE_EXTRA_PERMISSION_IDS,
+] as const;
+
+// Retorna os IDs de permissão suportados (oferecidos na tela) conforme o tipo do usuário.
+export function getSupportedPermissionIdsForTipo(tipo: string): readonly string[] {
+  return tipo === "backoffice"
+    ? BACKOFFICE_SUPPORTED_PERMISSION_IDS
+    : SELLER_SUPPORTED_PERMISSION_IDS;
+}
+
 const SELLER_DEFAULT_PERMISSION_IDS: string[] = [
   "clientes.visualizar",
   "clientes.criar",

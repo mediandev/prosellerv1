@@ -34,7 +34,7 @@ export function ProductsListPage({
   onVisualizarProduto,
   refreshKey = 0,
 }: ProductsListPageProps) {
-  const { ehVendedor, temPermissao, ehBackoffice } = useAuth();
+  const { ehVendedor, temPermissao } = useAuth();
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -46,10 +46,10 @@ export function ProductsListPage({
   const [produtoToDelete, setProdutoToDelete] = useState<string | null>(null);
   const [sortField, setSortField] = useState<keyof Produto | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const canCreateProduto = temPermissao('produtos.criar') || ehBackoffice();
-  const canVisualizarProduto = temPermissao('produtos.visualizar') || ehBackoffice();
-  const canEditarProduto = temPermissao('produtos.editar') || ehBackoffice();
-  const canExcluirProduto = temPermissao('produtos.excluir') || ehBackoffice();
+  const canCreateProduto = temPermissao('produtos.criar');
+  const canVisualizarProduto = temPermissao('produtos.visualizar');
+  const canEditarProduto = temPermissao('produtos.editar');
+  const canExcluirProduto = temPermissao('produtos.excluir');
 
   // Carregar produtos do Supabase
   const carregarProdutos = async () => {
