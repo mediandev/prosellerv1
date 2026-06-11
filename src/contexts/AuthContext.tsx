@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { Usuario, TipoUsuario } from '../types/user';
+import { Usuario, TipoUsuario, ALL_PERMISSION_IDS } from '../types/user';
 import { api, getAuthToken, setAuthToken, isTokenExpiringSoon, refreshAuthToken } from '../services/api';
 import { getDefaultSellerPermissionIds } from '../utils/sellerPermissions';
 
@@ -77,41 +77,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getDefaultPermissoes = (tipo: TipoUsuario): string[] => {
     if (tipo === 'backoffice') {
-      return [
-        'clientes.visualizar',
-        'clientes.criar',
-        'clientes.editar',
-        'clientes.excluir',
-        'clientes.todos',
-        'clientes.aprovar',
-        'vendas.visualizar',
-        'vendas.criar',
-        'vendas.editar',
-        'vendas.excluir',
-        'vendas.todas',
-        'relatorios.visualizar',
-        'relatorios.todos',
-        'config.minhas_empresas',
-        'config.geral',
-        'usuarios.visualizar',
-        'usuarios.criar',
-        'usuarios.editar',
-        'usuarios.excluir',
-        'usuarios.permissoes',
-        'contacorrente.visualizar',
-        'contacorrente.criar',
-        'contacorrente.editar',
-        'contacorrente.excluir',
-        'produtos.visualizar',
-        'produtos.criar',
-        'produtos.editar',
-        'produtos.excluir',
-        'comissoes.visualizar',
-        'comissoes.lancamentos.editar',
-        'comissoes.lancamentos.excluir',
-        'configuracoes.editar',
-        'configuracoes.excluir',
-      ];
+      // Backoffice sem permissões explícitas = acesso total (catálogo completo).
+      // Garante que admins nunca fiquem sem acesso e serve de fallback seguro.
+      return [...ALL_PERMISSION_IDS];
     } else {
       return getDefaultSellerPermissionIds();
     }
