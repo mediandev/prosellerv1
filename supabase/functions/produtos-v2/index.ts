@@ -167,11 +167,13 @@ serve(async (req) => {
         // LIMIT 2000 + ORDER BY descricao: a query original (SELECT * sem LIMIT + ORDER BY created_at DESC)
         // estava estourando o statement_timeout de 60s do Postgres em produção quando a base cresceu.
         // Sintoma: dropdown de produtos no PriceListFormPage caía em fallback mock silencioso.
+        // NÃO selecionar `foto` no list: as fotos são base64 inline e o payload
+        // chegava a ~31MB / ~19s, fazendo o fetch falhar no navegador (fallback mock
+        // no dropdown de produtos). A foto é carregada sob demanda na action `get`.
         const { data: produtos, error: produtosError } = await supabase
           .from('produto')
           .select(`
             produto_id,
-            foto,
             descricao,
             codigo_sku,
             gtin,
@@ -299,7 +301,7 @@ serve(async (req) => {
 
           return {
             id: String(prod.produto_id),
-            foto: prod.foto || undefined,
+            foto: undefined, // foto não vem no list (payload); carregada na action `get`
             descricao: prod.descricao || '',
             codigoSku: prod.codigo_sku || '',
             codigoEan: prod.gtin || undefined,
