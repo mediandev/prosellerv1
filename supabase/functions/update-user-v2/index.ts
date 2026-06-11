@@ -70,6 +70,11 @@ const SUPPORTED_SELLER_PERMISSION_IDS = new Set<string>([
   'comissoes.visualizar',
   'comissoes.lancamentos.editar',
   'comissoes.lancamentos.excluir',
+  // Permissões adicionais aplicáveis a backoffice (gating de página)
+  'clientes.aprovar',
+  'equipe.visualizar',
+  'metas.visualizar',
+  'configuracoes.visualizar',
 ])
 
 // Helper: Valida JWT (mesmo cÃ³digo da get-user-v2)

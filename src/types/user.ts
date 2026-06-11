@@ -6,7 +6,7 @@ export interface Permissao {
   id: string;
   nome: string;
   descricao: string;
-  categoria: 'clientes' | 'vendas' | 'relatorios' | 'configuracoes' | 'usuarios' | 'contacorrente' | 'produtos' | 'comissoes';
+  categoria: 'clientes' | 'vendas' | 'relatorios' | 'configuracoes' | 'usuarios' | 'contacorrente' | 'produtos' | 'comissoes' | 'equipe' | 'metas';
 }
 
 export interface Usuario {
@@ -33,7 +33,8 @@ export const PERMISSOES_DISPONIVEIS: Permissao[] = [
   { id: 'clientes.editar', nome: 'Editar Clientes', descricao: 'Permite editar dados de clientes', categoria: 'clientes' },
   { id: 'clientes.excluir', nome: 'Excluir Clientes', descricao: 'Permite excluir clientes', categoria: 'clientes' },
   { id: 'clientes.todos', nome: 'Ver Todos os Clientes', descricao: 'Permite ver clientes de todos os vendedores (backoffice)', categoria: 'clientes' },
-  
+  { id: 'clientes.aprovar', nome: 'Aprovar Clientes', descricao: 'Permite aprovar/rejeitar cadastros de clientes pendentes', categoria: 'clientes' },
+
   // Vendas
   { id: 'vendas.visualizar', nome: 'Visualizar Vendas', descricao: 'Permite visualizar vendas', categoria: 'vendas' },
   { id: 'vendas.criar', nome: 'Criar Vendas', descricao: 'Permite criar novas vendas', categoria: 'vendas' },
@@ -44,8 +45,18 @@ export const PERMISSOES_DISPONIVEIS: Permissao[] = [
   // Relatórios
   { id: 'relatorios.visualizar', nome: 'Visualizar Relatórios', descricao: 'Permite acessar relatórios', categoria: 'relatorios' },
   { id: 'relatorios.todos', nome: 'Ver Todos os Relatórios', descricao: 'Permite ver relatórios de todos os vendedores (backoffice)', categoria: 'relatorios' },
-  
+
+  // Equipe
+  { id: 'equipe.visualizar', nome: 'Visualizar Equipe', descricao: 'Permite acessar a tela de gestão de equipe', categoria: 'equipe' },
+
+  // Metas
+  { id: 'metas.visualizar', nome: 'Visualizar Metas', descricao: 'Permite acessar a tela de metas', categoria: 'metas' },
+  { id: 'metas.criar', nome: 'Criar Metas', descricao: 'Permite criar metas', categoria: 'metas' },
+  { id: 'metas.editar', nome: 'Editar Metas', descricao: 'Permite editar metas', categoria: 'metas' },
+  { id: 'metas.excluir', nome: 'Excluir Metas', descricao: 'Permite excluir metas', categoria: 'metas' },
+
   // Configurações
+  { id: 'configuracoes.visualizar', nome: 'Acessar Configurações', descricao: 'Permite acessar a tela de configurações', categoria: 'configuracoes' },
   { id: 'config.minhas_empresas', nome: 'Gerenciar Minhas Empresas', descricao: 'Permite acessar e configurar empresas de faturamento', categoria: 'configuracoes' },
   { id: 'config.geral', nome: 'Configurações Gerais', descricao: 'Permite acessar configurações gerais do sistema', categoria: 'configuracoes' },
   
@@ -73,3 +84,6 @@ export const PERMISSOES_DISPONIVEIS: Permissao[] = [
   { id: 'comissoes.lancamentos.editar', nome: 'Editar Lançamentos de Comissão', descricao: 'Permite editar lançamentos de comissão', categoria: 'comissoes' },
   { id: 'comissoes.lancamentos.excluir', nome: 'Excluir Lançamentos de Comissão', descricao: 'Permite excluir lançamentos de comissão', categoria: 'comissoes' },
 ];
+
+// Catálogo completo de IDs de permissão (fonte única de verdade).
+export const ALL_PERMISSION_IDS: string[] = PERMISSOES_DISPONIVEIS.map((p) => p.id);
