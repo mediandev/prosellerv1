@@ -156,7 +156,7 @@ function SidebarUserInfo({
   onOpenChangelog: () => void;
 }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.51";
+  const systemVersion = "V 1.52";
   const ultimaVersao = CHANGELOG[0];
   
   if (!usuario) return null;
@@ -514,28 +514,24 @@ function AppContent() {
       return true;
     }
 
-    if (page === "tiny-erp") {
-      return usuario.tipo === "backoffice";
-    }
+    // Permissão aplicada a TODOS os tipos (backoffice e vendedor).
+    const has = (p: string) => usuario.permissoes?.includes(p) ?? false;
 
-    if (page === "clientes-pendentes") {
-      return usuario.tipo === "backoffice";
-    }
+    // Sinal de "admin legado": backoffice configurado antes das permissões valerem
+    // para backoffice têm `config.geral`. Eles mantêm acesso às telas que antes
+    // eram backoffice-only, evitando lockout até o cliente reconfigurar.
+    const isLegacyAdmin = has("config.geral");
 
-    if (page === "logistica") {
-      return FEATURE_LOG_CRM_ENABLED && usuario.tipo === "backoffice";
-    }
+    if (page === "tiny-erp") return has("configuracoes.visualizar") || isLegacyAdmin;
+    if (page === "clientes-pendentes") return has("clientes.aprovar") || isLegacyAdmin;
+    if (page === "logistica") return FEATURE_LOG_CRM_ENABLED && (has("configuracoes.visualizar") || isLegacyAdmin);
+    if (page === "equipe") return has("equipe.visualizar") || isLegacyAdmin;
+    if (page === "metas") return has("metas.visualizar") || isLegacyAdmin;
+    if (page === "configuracoes") return has("configuracoes.visualizar") || isLegacyAdmin;
 
-    const menuItem = menuItems.find((item) => item.id === page);
-    if (menuItem?.backofficeOnly && usuario.tipo !== "backoffice") {
-      return false;
-    }
-
-    if (usuario.tipo === "vendedor") {
-      const requiredPermission = PAGE_VIEW_PERMISSION[page];
-      if (requiredPermission) {
-        return usuario.permissoes?.includes(requiredPermission) ?? false;
-      }
+    const requiredPermission = PAGE_VIEW_PERMISSION[page];
+    if (requiredPermission) {
+      return has(requiredPermission);
     }
 
     return true;
@@ -620,7 +616,7 @@ function AppContent() {
       toast.error("Você não tem permissão para acessar pedidos.");
       return;
     }
-    if (usuario?.tipo === "vendedor" && !usuario.permissoes?.includes("vendas.criar")) {
+    if (!usuario?.permissoes?.includes("vendas.criar")) {
       toast.error("Você não tem permissão para criar pedidos.");
       return;
     }
@@ -661,7 +657,7 @@ function AppContent() {
       toast.error("Você não tem permissão para acessar pedidos.");
       return;
     }
-    if (usuario?.tipo === "vendedor" && !usuario.permissoes?.includes("vendas.editar")) {
+    if (!usuario?.permissoes?.includes("vendas.editar")) {
       toast.error("Você não tem permissão para editar pedidos.");
       return;
     }

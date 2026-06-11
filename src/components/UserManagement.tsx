@@ -12,6 +12,18 @@ import { Checkbox } from "./ui/checkbox";
 import { Separator } from "./ui/separator";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { Usuario, PERMISSOES_DISPONIVEIS, Permissao } from "../types/user";
+import { getSupportedPermissionIdsForTipo } from "../utils/sellerPermissions";
+
+// A tela só exibe permissões que o backend (update-user-v2) aceita salvar e que o
+// app efetivamente aplica. O conjunto suportado depende do TIPO do usuário:
+// backoffice recebe o catálogo de admin; vendedor recebe o subconjunto dele.
+function getPermissoesVisiveis(tipo: string): Permissao[] {
+  const set = new Set<string>(getSupportedPermissionIdsForTipo(tipo));
+  return PERMISSOES_DISPONIVEIS.filter((p) => set.has(p.id));
+}
+function getCategoriasVisiveis(tipo: string): string[] {
+  return Array.from(new Set(getPermissoesVisiveis(tipo).map((p) => p.categoria)));
+}
 import { toast } from "sonner@2.0.3";
 import { 
   Users, 
@@ -327,8 +339,14 @@ export function UserManagement() {
     }));
   };
 
+  // Tipo do usuário sendo editado no diálogo aberto (define quais permissões aparecem).
+  const getTipoEmEdicao = (): string =>
+    dialogPermissoesAberto
+      ? (usuarioPermissoes?.tipo ?? "vendedor")
+      : (usuarios.find((u) => u.id === usuarioEditando)?.tipo ?? "vendedor");
+
   const handleMarcarTodasCategoria = (categoria: string) => {
-    const permissoesDaCategoria = PERMISSOES_DISPONIVEIS
+    const permissoesDaCategoria = getPermissoesVisiveis(getTipoEmEdicao())
       .filter((p) => p.categoria === categoria)
       .map((p) => p.id);
 
@@ -363,18 +381,16 @@ export function UserManagement() {
       configuracoes: "Configurações",
       usuarios: "Usuários",
       contacorrente: "Conta Corrente",
+      produtos: "Produtos",
+      comissoes: "Comissões",
+      equipe: "Equipe",
+      metas: "Metas",
     };
     return nomes[categoria] || categoria;
   };
 
-  const categorias = [
-    "clientes",
-    "vendas",
-    "relatorios",
-    "configuracoes",
-    "usuarios",
-    "contacorrente",
-  ];
+  const categorias = getCategoriasVisiveis(getTipoEmEdicao());
+  const permissoesVisiveis = getPermissoesVisiveis(getTipoEmEdicao());
 
   return (
     <>
@@ -709,7 +725,7 @@ export function UserManagement() {
               <ScrollArea className="h-[300px] rounded-md border p-4">
                 <div className="space-y-6">
                   {categorias.map((categoria) => {
-                    const permissoesCategoria = PERMISSOES_DISPONIVEIS.filter(
+                    const permissoesCategoria = permissoesVisiveis.filter(
                       (p) => p.categoria === categoria
                     );
                     const todasMarcadas = permissoesCategoria.every((p) =>
@@ -800,7 +816,7 @@ export function UserManagement() {
             <ScrollArea className="h-[400px] rounded-md border p-4">
               <div className="space-y-6">
                 {categorias.map((categoria) => {
-                  const permissoesCategoria = PERMISSOES_DISPONIVEIS.filter(
+                  const permissoesCategoria = permissoesVisiveis.filter(
                     (p) => p.categoria === categoria
                   );
                   const todasMarcadas = permissoesCategoria.every((p) =>

@@ -36,4 +36,8 @@ export const SUPPORTED_BACKOFFICE_PERMISSION_IDS = new Set<string>([
   'usuarios.permissoes',
   'configuracoes.editar',
   'configuracoes.excluir',
+  // Gating de página (permissões valem para backoffice)
+  'equipe.visualizar',
+  'metas.visualizar',
+  'configuracoes.visualizar',
 ])
