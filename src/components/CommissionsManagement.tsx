@@ -75,10 +75,10 @@ export function CommissionsManagement({
   customDateRange = { from: undefined, to: undefined },
   onCustomDateRangeChange
 }: CommissionsManagementProps) {
-  const { temPermissao, ehBackoffice } = useAuth();
-  const canManageComissoes = ehBackoffice();
-  const canEditComissoes = ehBackoffice() && temPermissao('comissoes.lancamentos.editar');
-  const canDeleteComissoes = ehBackoffice() && temPermissao('comissoes.lancamentos.excluir');
+  const { temPermissao } = useAuth();
+  const canManageComissoes = temPermissao('comissoes.lancamentos.editar');
+  const canEditComissoes = temPermissao('comissoes.lancamentos.editar');
+  const canDeleteComissoes = temPermissao('comissoes.lancamentos.excluir');
   // Estados principais
   const [relatorios, setRelatorios] = useState<RelatorioPeriodoComissoes[]>([]);
   const [comissoesVendas, setComissoesVendas] = useState<ComissaoVenda[]>([]);

@@ -53,7 +53,7 @@ interface CommissionReportPageProps {
 }
 
 export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, onAtualizarRelatorio, onRecarregar }: CommissionReportPageProps) {
-  const { temPermissao, ehBackoffice } = useAuth();
+  const { temPermissao } = useAuth();
   const [dialogLancamento, setDialogLancamento] = useState(false);
   const [dialogPagamento, setDialogPagamento] = useState(false);
   const [dialogVenda, setDialogVenda] = useState(false);
@@ -129,10 +129,10 @@ export function CommissionReportPage({ relatorio, relatorioCompleto, onVoltar, o
     periodo: relatorio.periodo,
     observacoes: ""
   });
-  const canManageComissoes = ehBackoffice();
-  const canManageVendasComissao = ehBackoffice();
-  const canEditComissoes = ehBackoffice() && temPermissao('comissoes.lancamentos.editar');
-  const canDeleteComissoes = ehBackoffice() && temPermissao('comissoes.lancamentos.excluir');
+  const canManageComissoes = temPermissao('comissoes.lancamentos.editar');
+  const canManageVendasComissao = temPermissao('comissoes.lancamentos.editar');
+  const canEditComissoes = temPermissao('comissoes.lancamentos.editar');
+  const canDeleteComissoes = temPermissao('comissoes.lancamentos.excluir');
   const canSalvarLancamento = modoLancamento === 'novo' ? canManageComissoes : canEditComissoes;
   const canSalvarPagamento = modoPagamento === 'novo' ? canManageComissoes : canEditComissoes;
   const getStatusBadge = (status: string) => {

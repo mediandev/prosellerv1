@@ -287,12 +287,12 @@ export function SalesPage({
   customDateRange = { from: undefined, to: undefined },
   onCustomDateRangeChange
 }: SalesPageProps) {
-  const { usuario, temPermissao, ehBackoffice } = useAuth();
+  const { usuario, temPermissao } = useAuth();
   const ehVendedor = usuario?.tipo === 'vendedor';
-  const canVisualizarVendas = ehBackoffice() || temPermissao('vendas.visualizar');
-  const canCriarVendas = ehBackoffice() || temPermissao('vendas.criar');
-  const canEditarVendas = ehBackoffice() || temPermissao('vendas.editar');
-  const canExcluirVendas = ehBackoffice() || temPermissao('vendas.excluir');
+  const canVisualizarVendas = temPermissao('vendas.visualizar');
+  const canCriarVendas = temPermissao('vendas.criar');
+  const canEditarVendas = temPermissao('vendas.editar');
+  const canExcluirVendas = temPermissao('vendas.excluir');
   
   // Declarações de estado - TODAS ANTES DOS useEffect
   const [sales, setSales] = useState<Sale[]>([]);

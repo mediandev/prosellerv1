@@ -12,19 +12,19 @@ import { Checkbox } from "./ui/checkbox";
 import { Separator } from "./ui/separator";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { Usuario, PERMISSOES_DISPONIVEIS, Permissao } from "../types/user";
-import { SELLER_SUPPORTED_PERMISSION_IDS } from "../utils/sellerPermissions";
+import { getSupportedPermissionIdsForTipo } from "../utils/sellerPermissions";
 
-// A tela só pode exibir permissões que o backend (update-user-v2) aceita salvar e
-// que o app efetivamente aplica. Filtramos PERMISSOES_DISPONIVEIS pela mesma
-// allowlist da Edge Function para que "o que aparece" == "o que é concedido".
-const PERMISSOES_SUPORTADAS_SET = new Set<string>(SELLER_SUPPORTED_PERMISSION_IDS);
-const PERMISSOES_VISIVEIS: Permissao[] = PERMISSOES_DISPONIVEIS.filter((p) =>
-  PERMISSOES_SUPORTADAS_SET.has(p.id)
-);
+// A tela só exibe permissões que o backend (update-user-v2) aceita salvar e que o
+// app efetivamente aplica. O conjunto suportado depende do TIPO do usuário:
+// backoffice recebe o catálogo de admin; vendedor recebe o subconjunto dele.
+function getPermissoesVisiveis(tipo: string): Permissao[] {
+  const set = new Set<string>(getSupportedPermissionIdsForTipo(tipo));
+  return PERMISSOES_DISPONIVEIS.filter((p) => set.has(p.id));
+}
 // Categorias derivadas da lista filtrada, preservando a ordem de declaração.
-const CATEGORIAS_VISIVEIS: string[] = Array.from(
-  new Set(PERMISSOES_VISIVEIS.map((p) => p.categoria))
-);
+function getCategoriasVisiveis(tipo: string): string[] {
+  return Array.from(new Set(getPermissoesVisiveis(tipo).map((p) => p.categoria)));
+}
 import { toast } from "sonner@2.0.3";
 import { 
   Users, 
@@ -326,8 +326,14 @@ export function UserManagement() {
     }));
   };
 
+  // Tipo do usuário sendo editado no diálogo aberto (define quais permissões aparecem).
+  const getTipoEmEdicao = (): string =>
+    dialogPermissoesAberto
+      ? (usuarioPermissoes?.tipo ?? "vendedor")
+      : (usuarios.find((u) => u.id === usuarioEditando)?.tipo ?? "vendedor");
+
   const handleMarcarTodasCategoria = (categoria: string) => {
-    const permissoesDaCategoria = PERMISSOES_VISIVEIS
+    const permissoesDaCategoria = getPermissoesVisiveis(getTipoEmEdicao())
       .filter((p) => p.categoria === categoria)
       .map((p) => p.id);
 
@@ -362,11 +368,16 @@ export function UserManagement() {
       contacorrente: "Conta Corrente",
       produtos: "Produtos",
       comissoes: "Comissões",
+      equipe: "Equipe",
+      metas: "Metas",
+      configuracoes: "Configurações",
+      usuarios: "Usuários",
     };
     return nomes[categoria] || categoria;
   };
 
-  const categorias = CATEGORIAS_VISIVEIS;
+  const categorias = getCategoriasVisiveis(getTipoEmEdicao());
+  const permissoesVisiveis = getPermissoesVisiveis(getTipoEmEdicao());
 
   return (
     <>
@@ -701,7 +712,7 @@ export function UserManagement() {
               <ScrollArea className="h-[300px] rounded-md border p-4">
                 <div className="space-y-6">
                   {categorias.map((categoria) => {
-                    const permissoesCategoria = PERMISSOES_VISIVEIS.filter(
+                    const permissoesCategoria = permissoesVisiveis.filter(
                       (p) => p.categoria === categoria
                     );
                     const todasMarcadas = permissoesCategoria.every((p) =>
@@ -792,7 +803,7 @@ export function UserManagement() {
             <ScrollArea className="h-[400px] rounded-md border p-4">
               <div className="space-y-6">
                 {categorias.map((categoria) => {
-                  const permissoesCategoria = PERMISSOES_VISIVEIS.filter(
+                  const permissoesCategoria = permissoesVisiveis.filter(
                     (p) => p.categoria === categoria
                   );
                   const todasMarcadas = permissoesCategoria.every((p) =>

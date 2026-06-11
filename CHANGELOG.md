@@ -4,7 +4,10 @@
 
 ### Permissionamento
 
-- **Tela de gestão de usuários alinhada ao backend** — O diálogo "Gerenciar Permissões" exibia permissões que a edge function `update-user-v2` rejeita ao salvar (`usuarios.*`, `config.*`, `*.todos`/`*.todas`), fazendo o salvamento falhar, e escondia permissões válidas (`produtos.*`, `comissoes.*`). Agora a tela filtra pela mesma allowlist do backend (`SELLER_SUPPORTED_PERMISSION_IDS`), garantindo que o que aparece é exatamente o que é concedido. Categorias exibidas: Clientes, Vendas, Relatórios, Conta Corrente, Produtos, Comissões.
+- **Permissões agora valem também para usuários backoffice** — Antes, qualquer backoffice tinha acesso total e as permissões marcadas eram ignoradas. Agora o controle de acesso (páginas e ações) respeita as permissões cadastradas para **todos** os tipos de usuário. Salvaguarda: backoffice com `config.geral` (admins legados) mantém acesso total automaticamente, evitando lockout até a reconfiguração.
+- **Telas Equipe, Metas e Configurações sujeitas a permissão** — Deixam de ser "somente backoffice" fixo e passam a depender de `equipe.visualizar`, `metas.visualizar` e `configuracoes.visualizar` (com fallback de admin legado).
+- **Ações controladas por permissão** — Botões de criar/editar/excluir em Vendas, Produtos, Clientes, Conta Corrente e Comissões passam a respeitar as permissões (`*.criar`, `*.editar`, `*.excluir`), não só o tipo do usuário.
+- **Tela de gestão de usuários tipo-aware** — O diálogo "Gerenciar Permissões" mostra o catálogo de administração para backoffice e o subconjunto de vendedor para vendedores, exibindo apenas permissões que têm efeito real. `update-user-v2` teve a allowlist ampliada para aceitar as novas permissões de backoffice.
 - **Permissões reais na listagem de usuários** — A edge function `list-users-v2` retornava `permissoes: null`, fazendo a tela de gestão mostrar as permissões default em vez das reais (com risco de sobrescrevê-las ao salvar). Função redeployada em produção com o merge de permissões que já estava no repo.
 
 ---
