@@ -950,7 +950,9 @@ export const api = {
         if (filters?.ativo !== undefined) params.append('ativo', filters.ativo.toString());
         if (filters?.search) params.append('search', filters.search);
         if (filters?.page) params.append('page', filters.page.toString());
-        if (filters?.limit) params.append('limit', filters.limit.toString());
+        // Sem limit explícito a list-users-v2 pagina com default 10, truncando as
+        // telas que esperam a lista completa (Metas, Usuários). 100 é o teto da edge.
+        params.append('limit', (filters?.limit ?? 100).toString());
 
         const url = `${SUPABASE_URL}/functions/v1/list-users-v2${params.toString() ? `?${params.toString()}` : ''}`;
         const token = getAuthToken();
