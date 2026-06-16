@@ -1,23 +1,23 @@
 // FreteResumoCard — bloco compacto "Entrega" no detalhe do pedido (SalesPage).
-// F-LOG-CRM R-LOG-2. Busca frete pelo número da NFe; placeholder se não achar.
+// F-LOG-CRM R-LOG-2/R-LOG-4. Busca frete pelo número da NFe e exibe timeline SSW.
 
 import { useEffect, useState } from "react";
 import { Card } from "../ui/card";
-import { Button } from "../ui/button";
-import { Truck, ExternalLink } from "lucide-react";
-import { listFretes } from "../../services/logisticaService";
+import { Truck } from "lucide-react";
+import { listFretes, getFreteWithOcorrencias } from "../../services/logisticaService";
 import FreteStatusBadge from "./FreteStatusBadge";
-import type { FreteLogisticaEnriched } from "@shared/types/frete-logistica";
+import FreteOcorrenciaTimeline from "./FreteOcorrenciaTimeline";
+import type { FreteLogisticaEnriched, OcorrenciaSSW } from "@shared/types/frete-logistica";
 
 export default function FreteResumoCard({
   nfeNumero,
-  onOpenLogistica,
 }: {
   nfeNumero: string | number | null | undefined;
   onOpenLogistica?: (freteId: string) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [frete, setFrete] = useState<FreteLogisticaEnriched | null>(null);
+  const [ocorrencias, setOcorrencias] = useState<OcorrenciaSSW[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,10 +32,14 @@ export default function FreteResumoCard({
       try {
         const data = await listFretes({ nfeNumero: String(nfeNumero), limit: 1 });
         if (cancelled) return;
-        setFrete((data.fretes && data.fretes[0]) || null);
+        const found = (data.fretes && data.fretes[0]) || null;
+        setFrete(found);
+        if (found) {
+          const detail = await getFreteWithOcorrencias(found.id);
+          if (!cancelled) setOcorrencias(detail.ocorrencias || []);
+        }
       } catch (err) {
         if (cancelled) return;
-        // Erro silencioso para não poluir o detalhe do pedido — só log.
         console.warn("[FreteResumoCard] falha ao buscar frete:", err);
         setError(err instanceof Error ? err.message : "Falha ao consultar logística");
       } finally {
@@ -78,19 +82,7 @@ export default function FreteResumoCard({
           <div className="text-sm text-muted-foreground">
             Transportadora: <span className="font-medium text-foreground">{frete.transportadorRazaoSocial ?? "—"}</span>
           </div>
-          <div className="text-xs text-muted-foreground">
-            Sem atualizações do transportador (integração SSW chega em breve).
-          </div>
-          {onOpenLogistica && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onOpenLogistica(frete.id)}
-            >
-              <ExternalLink className="h-4 w-4 mr-1" />
-              Ver detalhe completo
-            </Button>
-          )}
+          <FreteOcorrenciaTimeline ocorrencias={ocorrencias} />
         </div>
       )}
     </Card>

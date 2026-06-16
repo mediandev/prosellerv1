@@ -8,6 +8,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.53',
+    items: [
+      'Logística > Novo Frete: busca de pedido por nome do cliente, número do pedido ou CNPJ — ao selecionar, empresa, cliente e valor são preenchidos automaticamente.',
+      'Logística > Novo Frete: campo de chave de acesso da NF-e (44 dígitos) com validação em tempo real.',
+      'Pedido > Detalhe: seção "Entrega" agora exibe a linha do tempo completa de ocorrências do transportador (SSW), não apenas o status resumido.',
+      'Comissões: usuários deletados não aparecem mais na listagem da tela de Gestão de Comissões.',
+    ],
+  },
+  {
     version: 'V 1.51',
     items: [
       'Dashboard: os cards (Vendas Totais, Ticket Médio, Produtos Vendidos, Positivação, Vendedores Ativos, Meta) não ficam mais presos em "Carregando..." e a "Carteira de Clientes" voltou a mostrar o total correto. A causa era o status do cliente gravado em maiúsculo ("ATIVO") não bater com a comparação interna ("Ativo"), zerando a carteira (ex.: "164 de 0 clientes") e travando todo o dashboard. Corrigida a comparação (sem diferenciar maiúsculas) e o dashboard agora carrega mesmo se a carteira vier vazia.',
