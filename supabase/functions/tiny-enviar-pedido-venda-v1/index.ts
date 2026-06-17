@@ -559,20 +559,31 @@ serve(async (req) => {
     const valorFinal = Math.max(0, valorTotal - descontoExtra1)
 
     let intervalos: number[] = []
+    let formaPagamentoNome: string | null = null
     if (idCondicao) {
       const { data: cond, error: condError } = await supabase
         .from('Condicao_De_Pagamento')
-        .select('intervalo_parcela')
+        .select('intervalo_parcela,forma_pagamento_id')
         .eq('Condição_ID', idCondicao)
         .maybeSingle()
       if (condError) {
         console.warn('[TINY] Condicao_De_Pagamento lookup failed:', { traceId, code: condError.code, message: condError.message })
-      } else if (cond?.intervalo_parcela) {
-        if (Array.isArray(cond.intervalo_parcela)) {
-          intervalos = cond.intervalo_parcela.map((x: any) => parseInt(String(x), 10)).filter((n: any) => Number.isFinite(n) && !isNaN(n) && n >= 0)
-        } else {
-          const n = parseInt(String(cond.intervalo_parcela), 10)
-          if (Number.isFinite(n) && !isNaN(n) && n >= 0) intervalos = [n]
+      } else if (cond) {
+        if (cond.intervalo_parcela) {
+          if (Array.isArray(cond.intervalo_parcela)) {
+            intervalos = cond.intervalo_parcela.map((x: any) => parseInt(String(x), 10)).filter((n: any) => Number.isFinite(n) && !isNaN(n) && n >= 0)
+          } else {
+            const n = parseInt(String(cond.intervalo_parcela), 10)
+            if (Number.isFinite(n) && !isNaN(n) && n >= 0) intervalos = [n]
+          }
+        }
+        if (cond.forma_pagamento_id) {
+          const { data: fp } = await supabase
+            .from('ref_forma_pagamento')
+            .select('nome')
+            .eq('id', cond.forma_pagamento_id)
+            .maybeSingle()
+          if (fp?.nome) formaPagamentoNome = String(fp.nome).trim()
         }
       }
     }
@@ -629,6 +640,7 @@ serve(async (req) => {
         obs_internas: String(pedido.observacao_interna || '').trim() || undefined,
         id_vendedor: tinyVendedorId,
         valor_desconto: descontoExtra.toFixed(2),
+        ...(formaPagamentoNome ? { forma_pagamento: formaPagamentoNome } : {}),
         parcelas: parcelasTiny,
         itens: itens.map((it: any) => ({
           item: {
