@@ -142,6 +142,7 @@ export async function listFretes(
       data_inicio: filters.dataInicio,
       data_fim: filters.dataFim,
       nfe_numero: filters.nfeNumero,
+      pedido_venda_id: filters.pedidoVendaId,
       limit: filters.limit,
       offset: filters.offset,
     },
@@ -180,6 +181,8 @@ export interface PedidoOption {
   empresaFaturamentoId: number;
   nomeEmpresaFaturamento: string;
   valorProdutos: number;
+  status?: string;
+  dataPedido?: string;
 }
 
 export async function searchPedidos(search: string): Promise<PedidoOption[]> {
@@ -194,5 +197,7 @@ export async function searchPedidos(search: string): Promise<PedidoOption[]> {
     empresaFaturamentoId: Number(p.empresaFaturamentoId),
     nomeEmpresaFaturamento: p.nomeEmpresaFaturamento || '',
     valorProdutos: Number(p.valorPedido || 0),
+    status: p.status || undefined,
+    dataPedido: p.dataPedido || undefined,
   }));
 }

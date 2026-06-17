@@ -196,13 +196,21 @@ export default function NovoFretePage() {
         <div className="sm:col-span-2">
           <Label>Buscar pedido</Label>
           {pedidoSelecionado ? (
-            <div className="flex items-center gap-2 mt-1 rounded-md border border-input bg-muted px-3 py-2 text-sm">
-              <span className="flex-1">
-                <span className="font-medium">#{pedidoSelecionado.numero}</span>
-                {" — "}{pedidoSelecionado.nomeCliente}
-                <span className="text-muted-foreground ml-2">{pedidoSelecionado.nomeEmpresaFaturamento}</span>
-              </span>
-              <button type="button" onClick={handleLimparPedido} className="text-muted-foreground hover:text-foreground">
+            <div className="flex items-start gap-2 mt-1 rounded-md border border-input bg-muted px-3 py-2 text-sm">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Pedido #{pedidoSelecionado.numero}</span>
+                  {pedidoSelecionado.dataPedido && (
+                    <span className="text-xs text-muted-foreground">{new Date(pedidoSelecionado.dataPedido).toLocaleDateString("pt-BR")}</span>
+                  )}
+                  {pedidoSelecionado.status && (
+                    <span className="text-xs bg-background border border-input rounded px-1">{pedidoSelecionado.status}</span>
+                  )}
+                </div>
+                <div className="text-muted-foreground truncate">{pedidoSelecionado.nomeCliente}</div>
+                <div className="text-xs text-muted-foreground">{pedidoSelecionado.nomeEmpresaFaturamento}</div>
+              </div>
+              <button type="button" onClick={handleLimparPedido} className="text-muted-foreground hover:text-foreground mt-0.5 shrink-0">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -220,7 +228,7 @@ export default function NovoFretePage() {
                 </Button>
               </div>
               {showDropdown && (
-                <div className="absolute z-10 w-full mt-1 rounded-md border border-input bg-background shadow-md">
+                <div className="absolute z-10 w-full mt-1 rounded-md border border-input bg-background shadow-md max-h-60 overflow-auto">
                   {buscando ? (
                     <div className="px-3 py-2 text-sm text-muted-foreground">Buscando...</div>
                   ) : resultados.length === 0 ? (
@@ -228,10 +236,24 @@ export default function NovoFretePage() {
                   ) : (
                     resultados.map((p) => (
                       <button key={p.id} type="button"
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-accent"
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-accent border-b border-input last:border-0"
                         onClick={() => handleSelecionarPedido(p)}>
-                        <span className="font-medium">#{p.numero}</span>{" — "}{p.nomeCliente}
-                        <span className="text-muted-foreground ml-2 text-xs">{p.nomeEmpresaFaturamento}</span>
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">#{p.numero}</span>
+                          {p.dataPedido && (
+                            <span className="text-xs text-muted-foreground">{new Date(p.dataPedido).toLocaleDateString("pt-BR")}</span>
+                          )}
+                        </div>
+                        <div className="text-muted-foreground truncate">{p.nomeCliente}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-muted-foreground">{p.nomeEmpresaFaturamento}</span>
+                          {p.status && (
+                            <span className="text-xs bg-muted rounded px-1">{p.status}</span>
+                          )}
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            {p.valorProdutos.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          </span>
+                        </div>
                       </button>
                     ))
                   )}
