@@ -10,8 +10,6 @@ import { Search, X } from "lucide-react";
 import {
   freteService,
   transportadorService,
-  regiaoDestinoService,
-  origemFreteService,
   searchPedidos,
   type PedidoOption,
 } from "../../services/logisticaService";
@@ -35,8 +33,6 @@ const statusOptions = [
 
 export default function NovoFretePage() {
   const [transportadores, setTransportadores] = useState<Option[]>([]);
-  const [regioes, setRegioes] = useState<Option[]>([]);
-  const [origens, setOrigens] = useState<Option[]>([]);
 
   const [busca, setBusca] = useState("");
   const [resultados, setResultados] = useState<PedidoOption[]>([]);
@@ -51,8 +47,6 @@ export default function NovoFretePage() {
   const [clienteId, setClienteId] = useState("");
   const [clienteNome, setClienteNome] = useState("");
   const [transportadorId, setTransportadorId] = useState("");
-  const [regiaoDestinoId, setRegiaoDestinoId] = useState("");
-  const [origemFreteId, setOrigemFreteId] = useState("");
   const [dataSaida, setDataSaida] = useState("");
   const [previsaoEntrega, setPrevisaoEntrega] = useState("");
   const [valorProdutos, setValorProdutos] = useState("0");
@@ -75,18 +69,6 @@ export default function NovoFretePage() {
         setTransportadores(
           (t?.transportadores || []).map((row) => ({ id: row.id, label: row.razaoSocial })),
         );
-      } catch {/* ignore */}
-      try {
-        const r = (await regiaoDestinoService.list({ apenasAtivos: true })) as {
-          regioes: { id: string; nome: string }[];
-        };
-        setRegioes((r?.regioes || []).map((row) => ({ id: row.id, label: row.nome })));
-      } catch {/* ignore */}
-      try {
-        const o = (await origemFreteService.list({ apenasAtivos: true })) as {
-          origens: { id: string; nome: string }[];
-        };
-        setOrigens((o?.origens || []).map((row) => ({ id: row.id, label: row.nome })));
       } catch {/* ignore */}
     })();
   }, []);
@@ -166,8 +148,6 @@ export default function NovoFretePage() {
       if (nfeChaveAcesso) payload.nfeChaveAcesso = nfeChaveAcesso;
       if (clienteId) payload.clienteId = Number(clienteId);
       if (transportadorId) payload.transportadorId = Number(transportadorId);
-      if (regiaoDestinoId) payload.regiaoDestinoId = Number(regiaoDestinoId);
-      if (origemFreteId) payload.origemFreteId = Number(origemFreteId);
       if (dataSaida) payload.dataSaida = dataSaida;
       if (previsaoEntrega) payload.previsaoEntrega = previsaoEntrega;
       if (valorCotacao) payload.valorCotacao = Number(valorCotacao);
@@ -177,8 +157,7 @@ export default function NovoFretePage() {
       const saved = (await freteService.create(payload)) as { id?: string };
       setMessage(saved?.id ? `Frete criado (id ${saved.id}).` : "Frete criado.");
       handleLimparPedido();
-      setNfeNumero(""); setNfeChaveAcesso(""); setTransportadorId("");
-      setRegiaoDestinoId(""); setOrigemFreteId(""); setDataSaida("");
+      setNfeNumero(""); setNfeChaveAcesso(""); setTransportadorId(""); setDataSaida("");
       setPrevisaoEntrega(""); setValorCotacao(""); setVolumes("");
       setObservacoes(""); setStatusEntrega("Em Separação");
     } catch (err) {
@@ -296,22 +275,6 @@ export default function NovoFretePage() {
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
             <option value="">— selecionar —</option>
             {transportadores.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-          </select>
-        </div>
-        <div>
-          <Label htmlFor="reg">Região destino</Label>
-          <select id="reg" value={regiaoDestinoId} onChange={(e) => setRegiaoDestinoId(e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-            <option value="">— selecionar —</option>
-            {regioes.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-          </select>
-        </div>
-        <div>
-          <Label htmlFor="ori">Origem</Label>
-          <select id="ori" value={origemFreteId} onChange={(e) => setOrigemFreteId(e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-            <option value="">— selecionar —</option>
-            {origens.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
         </div>
         <div>
