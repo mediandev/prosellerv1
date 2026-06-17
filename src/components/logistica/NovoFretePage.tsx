@@ -10,8 +10,6 @@ import { Search, X } from "lucide-react";
 import {
   freteService,
   transportadorService,
-  regiaoDestinoService,
-  origemFreteService,
   searchPedidos,
   type PedidoOption,
 } from "../../services/logisticaService";
@@ -35,8 +33,6 @@ const statusOptions = [
 
 export default function NovoFretePage() {
   const [transportadores, setTransportadores] = useState<Option[]>([]);
-  const [regioes, setRegioes] = useState<Option[]>([]);
-  const [origens, setOrigens] = useState<Option[]>([]);
 
   const [busca, setBusca] = useState("");
   const [resultados, setResultados] = useState<PedidoOption[]>([]);
@@ -51,8 +47,6 @@ export default function NovoFretePage() {
   const [clienteId, setClienteId] = useState("");
   const [clienteNome, setClienteNome] = useState("");
   const [transportadorId, setTransportadorId] = useState("");
-  const [regiaoDestinoId, setRegiaoDestinoId] = useState("");
-  const [origemFreteId, setOrigemFreteId] = useState("");
   const [dataSaida, setDataSaida] = useState("");
   const [previsaoEntrega, setPrevisaoEntrega] = useState("");
   const [valorProdutos, setValorProdutos] = useState("0");
@@ -75,18 +69,6 @@ export default function NovoFretePage() {
         setTransportadores(
           (t?.transportadores || []).map((row) => ({ id: row.id, label: row.razaoSocial })),
         );
-      } catch {/* ignore */}
-      try {
-        const r = (await regiaoDestinoService.list({ apenasAtivos: true })) as {
-          regioes: { id: string; nome: string }[];
-        };
-        setRegioes((r?.regioes || []).map((row) => ({ id: row.id, label: row.nome })));
-      } catch {/* ignore */}
-      try {
-        const o = (await origemFreteService.list({ apenasAtivos: true })) as {
-          origens: { id: string; nome: string }[];
-        };
-        setOrigens((o?.origens || []).map((row) => ({ id: row.id, label: row.nome })));
       } catch {/* ignore */}
     })();
   }, []);
@@ -166,8 +148,6 @@ export default function NovoFretePage() {
       if (nfeChaveAcesso) payload.nfeChaveAcesso = nfeChaveAcesso;
       if (clienteId) payload.clienteId = Number(clienteId);
       if (transportadorId) payload.transportadorId = Number(transportadorId);
-      if (regiaoDestinoId) payload.regiaoDestinoId = Number(regiaoDestinoId);
-      if (origemFreteId) payload.origemFreteId = Number(origemFreteId);
       if (dataSaida) payload.dataSaida = dataSaida;
       if (previsaoEntrega) payload.previsaoEntrega = previsaoEntrega;
       if (valorCotacao) payload.valorCotacao = Number(valorCotacao);
@@ -177,8 +157,7 @@ export default function NovoFretePage() {
       const saved = (await freteService.create(payload)) as { id?: string };
       setMessage(saved?.id ? `Frete criado (id ${saved.id}).` : "Frete criado.");
       handleLimparPedido();
-      setNfeNumero(""); setNfeChaveAcesso(""); setTransportadorId("");
-      setRegiaoDestinoId(""); setOrigemFreteId(""); setDataSaida("");
+      setNfeNumero(""); setNfeChaveAcesso(""); setTransportadorId(""); setDataSaida("");
       setPrevisaoEntrega(""); setValorCotacao(""); setVolumes("");
       setObservacoes(""); setStatusEntrega("Em Separação");
     } catch (err) {
@@ -196,13 +175,21 @@ export default function NovoFretePage() {
         <div className="sm:col-span-2">
           <Label>Buscar pedido</Label>
           {pedidoSelecionado ? (
-            <div className="flex items-center gap-2 mt-1 rounded-md border border-input bg-muted px-3 py-2 text-sm">
-              <span className="flex-1">
-                <span className="font-medium">#{pedidoSelecionado.numero}</span>
-                {" — "}{pedidoSelecionado.nomeCliente}
-                <span className="text-muted-foreground ml-2">{pedidoSelecionado.nomeEmpresaFaturamento}</span>
-              </span>
-              <button type="button" onClick={handleLimparPedido} className="text-muted-foreground hover:text-foreground">
+            <div className="flex items-start gap-2 mt-1 rounded-md border border-input bg-muted px-3 py-2 text-sm">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Pedido #{pedidoSelecionado.numero}</span>
+                  {pedidoSelecionado.dataPedido && (
+                    <span className="text-xs text-muted-foreground">{new Date(pedidoSelecionado.dataPedido).toLocaleDateString("pt-BR")}</span>
+                  )}
+                  {pedidoSelecionado.status && (
+                    <span className="text-xs bg-background border border-input rounded px-1">{pedidoSelecionado.status}</span>
+                  )}
+                </div>
+                <div className="text-muted-foreground truncate">{pedidoSelecionado.nomeCliente}</div>
+                <div className="text-xs text-muted-foreground">{pedidoSelecionado.nomeEmpresaFaturamento}</div>
+              </div>
+              <button type="button" onClick={handleLimparPedido} className="text-muted-foreground hover:text-foreground mt-0.5 shrink-0">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -220,7 +207,7 @@ export default function NovoFretePage() {
                 </Button>
               </div>
               {showDropdown && (
-                <div className="absolute z-10 w-full mt-1 rounded-md border border-input bg-background shadow-md">
+                <div className="absolute z-10 w-full mt-1 rounded-md border border-input bg-background shadow-md max-h-60 overflow-auto">
                   {buscando ? (
                     <div className="px-3 py-2 text-sm text-muted-foreground">Buscando...</div>
                   ) : resultados.length === 0 ? (
@@ -228,10 +215,24 @@ export default function NovoFretePage() {
                   ) : (
                     resultados.map((p) => (
                       <button key={p.id} type="button"
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-accent"
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-accent border-b border-input last:border-0"
                         onClick={() => handleSelecionarPedido(p)}>
-                        <span className="font-medium">#{p.numero}</span>{" — "}{p.nomeCliente}
-                        <span className="text-muted-foreground ml-2 text-xs">{p.nomeEmpresaFaturamento}</span>
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">#{p.numero}</span>
+                          {p.dataPedido && (
+                            <span className="text-xs text-muted-foreground">{new Date(p.dataPedido).toLocaleDateString("pt-BR")}</span>
+                          )}
+                        </div>
+                        <div className="text-muted-foreground truncate">{p.nomeCliente}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-muted-foreground">{p.nomeEmpresaFaturamento}</span>
+                          {p.status && (
+                            <span className="text-xs bg-muted rounded px-1">{p.status}</span>
+                          )}
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            {p.valorProdutos.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          </span>
+                        </div>
                       </button>
                     ))
                   )}
@@ -274,22 +275,6 @@ export default function NovoFretePage() {
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
             <option value="">— selecionar —</option>
             {transportadores.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-          </select>
-        </div>
-        <div>
-          <Label htmlFor="reg">Região destino</Label>
-          <select id="reg" value={regiaoDestinoId} onChange={(e) => setRegiaoDestinoId(e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-            <option value="">— selecionar —</option>
-            {regioes.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-          </select>
-        </div>
-        <div>
-          <Label htmlFor="ori">Origem</Label>
-          <select id="ori" value={origemFreteId} onChange={(e) => setOrigemFreteId(e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-            <option value="">— selecionar —</option>
-            {origens.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
         </div>
         <div>

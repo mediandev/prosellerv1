@@ -1,5 +1,5 @@
 // FreteResumoCard — bloco compacto "Entrega" no detalhe do pedido (SalesPage).
-// F-LOG-CRM R-LOG-2/R-LOG-4. Busca frete pelo número da NFe e exibe timeline SSW.
+// F-LOG-CRM R-LOG-2/R-LOG-4. Busca frete por pedido_venda_id (fallback: nfe_numero).
 
 import { useEffect, useState } from "react";
 import { Card } from "../ui/card";
@@ -10,9 +10,11 @@ import FreteOcorrenciaTimeline from "./FreteOcorrenciaTimeline";
 import type { FreteLogisticaEnriched, OcorrenciaSSW } from "@shared/types/frete-logistica";
 
 export default function FreteResumoCard({
+  pedidoVendaId,
   nfeNumero,
 }: {
-  nfeNumero: string | number | null | undefined;
+  pedidoVendaId?: number | null;
+  nfeNumero?: string | number | null;
   onOpenLogistica?: (freteId: string) => void;
 }) {
   const [loading, setLoading] = useState(true);
@@ -23,14 +25,18 @@ export default function FreteResumoCard({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!nfeNumero) {
+      const hasKey = pedidoVendaId != null || nfeNumero != null;
+      if (!hasKey) {
         setLoading(false);
         return;
       }
       setLoading(true);
       setError(null);
       try {
-        const data = await listFretes({ nfeNumero: String(nfeNumero), limit: 1 });
+        const filters = pedidoVendaId != null
+          ? { pedidoVendaId, limit: 1 }
+          : { nfeNumero: String(nfeNumero), limit: 1 };
+        const data = await listFretes(filters);
         if (cancelled) return;
         const found = (data.fretes && data.fretes[0]) || null;
         setFrete(found);
@@ -49,11 +55,7 @@ export default function FreteResumoCard({
     return () => {
       cancelled = true;
     };
-  }, [nfeNumero]);
-
-  if (!nfeNumero) {
-    return null;
-  }
+  }, [pedidoVendaId, nfeNumero]);
 
   return (
     <Card className="p-4 border-dashed">
@@ -67,7 +69,7 @@ export default function FreteResumoCard({
         <p className="text-sm text-amber-700">{error}</p>
       ) : !frete ? (
         <p className="text-sm text-muted-foreground">
-          Nenhum frete vinculado a esta NF ainda.
+          Nenhum frete vinculado a este pedido ainda.
         </p>
       ) : (
         <div className="space-y-2">

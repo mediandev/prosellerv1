@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.54',
+    items: [
+      'Logística > Kanban: nova aba com board de fretes organizado por status — arraste um card de uma coluna para outra para atualizar o status instantaneamente.',
+      'Logística > Comprovante de entrega: no detalhe do frete, botão "Tirar foto / Anexar" abre a câmera do celular ou permite anexar arquivo (imagem/PDF). Comprovante fica salvo e disponível para consulta.',
+    ],
+  },
+  {
     version: 'V 1.53',
     items: [
       'Logística > Novo Frete: busca de pedido por nome do cliente, número do pedido ou CNPJ — ao selecionar, empresa, cliente e valor são preenchidos automaticamente.',
