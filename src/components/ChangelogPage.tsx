@@ -8,6 +8,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.55',
+    items: [
+      'Logística > Comprovante público: motoristas de transportadoras parceiras agora podem confirmar entregas ou registrar agendamentos sem precisar de login. Basta acessar /entrega, escanear o código de barras da NF-e ou digitar a chave de acesso (44 dígitos), conferir os dados e tirar uma foto do comprovante — o status do frete é atualizado automaticamente para "Entregue".',
+      'Logística > Agendamento pelo motorista: ao invés de confirmar entrega, o motorista pode reportar agendamento informando data, hora e observações (ex.: "Ligar antes, portaria bloco B"). O status muda para "Agendado" e as informações ficam visíveis no detalhe do frete.',
+      'Logística > Detalhe do frete: ao anexar um comprovante de entrega, o status é automaticamente alterado para "Entregue" — não é mais necessário trocar o status manualmente.',
+      'Pedidos > Envio ao Tiny: campo "Forma de Pagamento" agora é enviado corretamente (ex.: Boleto, PIX) em vez de chegar sempre como "múltiplas" no Tiny.',
+      'Pedidos > Detalhe: seção "Entrega" aparece para qualquer pedido assim que a logística estiver habilitada — não depende mais de NF emitida para ser exibida.',
+    ],
+  },
+  {
     version: 'V 1.54',
     items: [
       'Logística > Kanban: nova aba com board de fretes organizado por status — arraste um card de uma coluna para outra para atualizar o status instantaneamente.',
