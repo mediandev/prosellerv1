@@ -18,6 +18,7 @@ import {
 import { format } from "date-fns@4.1.0";
 import { ptBR } from "date-fns@4.1.0/locale";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import EntregaPublicaPage from "./components/logistica/EntregaPublicaPage";
 import { LoginPage } from "./components/LoginPage";
 import { ForgotPasswordPage } from "./components/ForgotPasswordPage";
 import { SetPasswordPage } from "./components/SetPasswordPage";
@@ -1309,6 +1310,10 @@ function AppContent() {
 }
 
 export default function App() {
+  // Rota pública para motoristas — sem auth, sem sidebar.
+  if (window.location.pathname.startsWith("/entrega")) {
+    return <EntregaPublicaPage />;
+  }
   return (
     <ErrorBoundary>
       <AuthProvider>

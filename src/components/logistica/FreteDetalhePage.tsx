@@ -167,7 +167,14 @@ export default function FreteDetalhePage({
     setSaveMessage(null);
     try {
       const url = await handleUpload(file, "comprovanteEntregaUrl");
-      if (url) setForm((f) => ({ ...f, comprovanteEntregaUrl: url }));
+      if (url) {
+        setForm((f) => ({
+          ...f,
+          comprovanteEntregaUrl: url,
+          // Auto-atualiza status para Entregue ao salvar comprovante
+          statusEntrega: f.statusEntrega === "Entregue" ? f.statusEntrega : "Entregue",
+        }));
+      }
     } catch (err) {
       setSaveMessage(err instanceof Error ? err.message : "Falha no upload do comprovante");
     } finally {
