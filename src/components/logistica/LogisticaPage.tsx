@@ -15,8 +15,9 @@ import LogisticaDashboardPage from "./LogisticaDashboardPage";
 import LogisticaBuscaPage from "./LogisticaBuscaPage";
 import LogisticaKanbanPage from "./LogisticaKanbanPage";
 import FreteDetalhePage from "./FreteDetalhePage";
+import RomaneioPage from "./RomaneioPage";
 
-type View = "dashboard" | "kanban" | "busca" | "transportadores" | "novo-frete" | "detalhe";
+type View = "dashboard" | "kanban" | "busca" | "transportadores" | "novo-frete" | "detalhe" | "romaneios";
 
 export default function LogisticaPage() {
   const [view, setView] = useState<View>("dashboard");
@@ -73,6 +74,9 @@ export default function LogisticaPage() {
         <Button variant={view === "novo-frete" ? "default" : "outline"} onClick={() => setView("novo-frete")}>
           Novo Frete
         </Button>
+        <Button variant={view === "romaneios" ? "default" : "outline"} onClick={() => setView("romaneios")}>
+          Romaneio
+        </Button>
       </div>
 
       <div>
@@ -81,6 +85,7 @@ export default function LogisticaPage() {
         {view === "busca" && <LogisticaBuscaPage onOpenFrete={openDetalhe} />}
         {view === "transportadores" && <CadastroTransportadorPage />}
         {view === "novo-frete" && <NovoFretePage />}
+        {view === "romaneios" && <RomaneioPage />}
       </div>
     </div>
   );
