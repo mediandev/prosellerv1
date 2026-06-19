@@ -693,11 +693,11 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
   // Calculate metrics from filtered transactions with comparison to previous period
   useEffect(() => {
     async function calculateMetrics() {
-      if (serverSnapshot?.summary?.cards) {
-        setMetrics(serverSnapshot.summary.cards);
-        return;
-      }
-
+      // FASE 1: fonte ÚNICA dos cards de venda = cálculo LOCAL (valor do pedido, estável).
+      // Antes, quando o snapshot da edge carregava, ele sobrescrevia TODOS os cards com um
+      // número calculado de forma diferente (≈650k da edge vs ≈441k local) → era a origem do
+      // flash/oscilação do "Vendas Totais". A positivação continua vindo do snapshot (cálculo
+      // de carteira do servidor) logo abaixo; a meta vem do snapshot no efeito de carregar meta.
       if (loading || allTransactions.length === 0) {
         setMetrics({
           vendasTotais: 0,
@@ -733,9 +733,23 @@ export function DashboardMetrics({ period, onPeriodChange, onCustomDateRangeChan
         vendedorNome
       );
       
-      setMetrics(calculatedMetrics);
+      // Vendas/ticket/produtos sempre do cálculo local (valor do pedido, estável).
+      // Positivação preferida do snapshot (carteira calculada no servidor); cai pro
+      // local se o snapshot não tiver carregado.
+      if (serverSnapshot?.summary?.cards) {
+        const s = serverSnapshot.summary.cards;
+        setMetrics({
+          ...calculatedMetrics,
+          positivacao: s.positivacao,
+          positivacaoChange: s.positivacaoChange,
+          positivacaoCount: s.positivacaoCount,
+          positivacaoTotal: s.positivacaoTotal,
+        });
+      } else {
+        setMetrics(calculatedMetrics);
+      }
     }
-    
+
     calculateMetrics();
   }, [loading, allTransactions, period, selectedVendedor, selectedNatureza, selectedSegmento, selectedStatusCliente, selectedUF, ehVendedor, usuario, metaMensal, selectedStatusVendas, selectedCurvaABC, serverSnapshot]);
   const [segmentoPopoverOpen, setSegmentoPopoverOpen] = useState(false);

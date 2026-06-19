@@ -106,8 +106,11 @@ export async function carregarDadosDashboard(): Promise<Transaction[]> {
         const diaDoMes = dataVenda.getDate();
         const semanaDoMes = Math.ceil(diaDoMes / 7);
         
-        // Usar valor faturado se disponível, senão usar valor do pedido (provisório)
-        const valorFinal = toSafeNumber(venda.valorFaturado ?? venda.valorPedido, 0);
+        // FASE 1: usar SEMPRE o valor do pedido (estável). O "valor faturado" não é
+        // persistido no banco hoje (só vivia na memória do browser via sync do Tiny) e
+        // era a causa do total oscilar/cair durante o dia. Quando houver coluna real de
+        // valor faturado (Fase 2), ele entra como indicador SEPARADO, não misturado aqui.
+        const valorFinal = toSafeNumber(venda.valorPedido, 0);
         const segmentoNome = venda.segmentoMercado
           || 'Não Classificado';
         
