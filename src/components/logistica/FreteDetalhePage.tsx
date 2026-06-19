@@ -51,6 +51,7 @@ interface FormState {
   transportadorId: string;
   valorCotacao: string;
   volumes: string;
+  pesoBruto: string;
   observacoes: string;
   dacteUrl: string;
   comprovanteEntregaUrl: string;
@@ -81,6 +82,7 @@ export default function FreteDetalhePage({
     transportadorId: "",
     valorCotacao: "",
     volumes: "",
+    pesoBruto: "",
     observacoes: "",
     dacteUrl: "",
     comprovanteEntregaUrl: "",
@@ -108,6 +110,7 @@ export default function FreteDetalhePage({
           transportadorId: data.frete.transportadorId != null ? String(data.frete.transportadorId) : "",
           valorCotacao: data.frete.valorCotacao != null ? String(data.frete.valorCotacao) : "",
           volumes: data.frete.volumes != null ? String(data.frete.volumes) : "",
+          pesoBruto: (data.frete as { pesoBruto?: number | null }).pesoBruto != null ? String((data.frete as { pesoBruto?: number | null }).pesoBruto) : "",
           observacoes: data.frete.observacoes ?? "",
           dacteUrl: data.frete.dacteUrl ?? "",
           comprovanteEntregaUrl: data.frete.comprovanteEntregaUrl ?? "",
@@ -212,6 +215,7 @@ export default function FreteDetalhePage({
         transportadorId: form.transportadorId ? Number(form.transportadorId) : null,
         valorCotacao: form.valorCotacao !== "" ? Number(form.valorCotacao) : null,
         volumes: form.volumes !== "" ? Number(form.volumes) : null,
+        pesoBruto: form.pesoBruto !== "" ? Number(form.pesoBruto) : null,
         observacoes: form.observacoes || null,
         dacteUrl: form.dacteUrl || null,
         comprovanteEntregaUrl: form.comprovanteEntregaUrl || null,
@@ -408,6 +412,10 @@ export default function FreteDetalhePage({
                 <Label htmlFor="vol">Volumes</Label>
                 <Input id="vol" type="number" value={form.volumes} onChange={(e) => setForm({ ...form, volumes: e.target.value })} />
               </div>
+              <div>
+                <Label htmlFor="pb">Peso Bruto (kg)</Label>
+                <Input id="pb" type="number" step="0.001" value={form.pesoBruto} onChange={(e) => setForm({ ...form, pesoBruto: e.target.value })} />
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 text-sm">
@@ -424,6 +432,14 @@ export default function FreteDetalhePage({
               <div>
                 <Label className="text-muted-foreground">Volumes</Label>
                 <p className="font-medium">{frete.volumes ?? "—"}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Peso Bruto (kg)</Label>
+                <p className="font-medium">
+                  {(frete as { pesoBruto?: number | null }).pesoBruto != null
+                    ? Number((frete as { pesoBruto?: number | null }).pesoBruto).toLocaleString("pt-BR", { minimumFractionDigits: 3 })
+                    : "—"}
+                </p>
               </div>
             </div>
           )}

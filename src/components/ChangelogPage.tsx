@@ -8,6 +8,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.56',
+    items: [
+      'Logística > Romaneio de Expedição: nova aba "Romaneio" no módulo de logística. Permite criar um manifesto de saída agrupando múltiplas NFs por transportadora e data, com geração automática de PDF (A4 paisagem) ao confirmar. O PDF inclui dados do remetente, transportador, tabela de NFs com volumes, peso e valor, linhas de assinatura e número sequencial por empresa.',
+      'Logística > Frete: novo campo "Peso Bruto (kg)" editável no detalhe do frete (seção Valores). O peso é usado para calcular o total de peso no romaneio.',
+      'Logística > Status: removido status "Em Trânsito - Reentrega" (não utilizado na operação). Adicionado status "Aguardando Agendamento" — aparece no Kanban, na lista de status do detalhe do frete e no badge de status.',
+    ],
+  },
+  {
     version: 'V 1.55',
     items: [
       'Logística > Comprovante público: motoristas de transportadoras parceiras agora podem confirmar entregas ou registrar agendamentos sem precisar de login. Basta acessar /entrega, escanear o código de barras da NF-e ou digitar a chave de acesso (44 dígitos), conferir os dados e tirar uma foto do comprovante — o status do frete é atualizado automaticamente para "Entregue".',
