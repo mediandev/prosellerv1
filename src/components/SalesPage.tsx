@@ -2021,9 +2021,10 @@ export function SalesPage({
                   </div>
                 )}
 
-                {FEATURE_LOG_CRM_ENABLED && selectedSale.integracaoERP?.notaFiscalNumero && (
+                {FEATURE_LOG_CRM_ENABLED && (
                   <FreteResumoCard
-                    nfeNumero={selectedSale.integracaoERP.notaFiscalNumero}
+                    pedidoVendaId={selectedSale.id ? Number(selectedSale.id) : null}
+                    nfeNumero={selectedSale.integracaoERP?.notaFiscalNumero}
                     onOpenLogistica={onAbrirLogistica ? () => onAbrirLogistica() : undefined}
                   />
                 )}

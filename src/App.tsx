@@ -56,6 +56,7 @@ import { AnaliseCurvaABCPage } from "./components/AnaliseCurvaABCPage";
 import { SolicitadoFaturadoReportPage } from "./components/SolicitadoFaturadoReportPage";
 import { TinyERPPedidosPage } from "./components/TinyERPPedidosPage";
 import LogisticaPage from "./components/logistica/LogisticaPage";
+import EntregaPublicaPage from "./components/logistica/EntregaPublicaPage";
 import { TinyERPModeIndicator } from "./components/TinyERPModeIndicator";
 import { ChangelogPage, CHANGELOG } from "./components/ChangelogPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -156,7 +157,7 @@ function SidebarUserInfo({
   onOpenChangelog: () => void;
 }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.52";
+  const systemVersion = "V 1.55";
   const ultimaVersao = CHANGELOG[0];
   
   if (!usuario) return null;
@@ -1309,6 +1310,9 @@ function AppContent() {
 }
 
 export default function App() {
+  if (window.location.pathname.startsWith("/entrega")) {
+    return <EntregaPublicaPage />;
+  }
   return (
     <ErrorBoundary>
       <AuthProvider>

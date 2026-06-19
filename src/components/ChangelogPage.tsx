@@ -8,6 +8,32 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.55',
+    items: [
+      'Logística > Comprovante público: motoristas acessam a URL /entrega (sem login) para confirmar a entrega — escaneiam o código de barras da NF-e ou digitam a chave de 44 dígitos, tiram foto do comprovante assinado e enviam. Status atualizado automaticamente para "Entregue".',
+      'Logística > Agendamento pelo motorista: pela mesma página /entrega, o motorista pode registrar uma nova tentativa com data, horário e observações — status muda para "Aguardando Agendamento".',
+      'Logística > Status "Em Trânsito - Reentrega" removido; novo status "Aguardando Agendamento" adicionado ao kanban e aos selects de status.',
+      'Logística > Novo Frete: campos "Região Destino" e "Origem" removidos da tela (não utilizados no fluxo atual).',
+      'Pedidos > Integração Tiny: campo "Forma de Pagamento" agora é enviado corretamente ao Tiny (antes chegava sempre como "múltiplas formas").',
+    ],
+  },
+  {
+    version: 'V 1.54',
+    items: [
+      'Logística > Kanban: nova aba com board de fretes organizado por status — arraste um card de uma coluna para outra para atualizar o status instantaneamente.',
+      'Logística > Comprovante de entrega: no detalhe do frete, botão "Tirar foto / Anexar" abre a câmera do celular ou permite anexar arquivo (imagem/PDF). Comprovante fica salvo e disponível para consulta.',
+    ],
+  },
+  {
+    version: 'V 1.53',
+    items: [
+      'Logística > Novo Frete: busca de pedido por nome do cliente, número do pedido ou CNPJ — ao selecionar, empresa, cliente e valor são preenchidos automaticamente.',
+      'Logística > Novo Frete: campo de chave de acesso da NF-e (44 dígitos) com validação em tempo real.',
+      'Pedido > Detalhe: seção "Entrega" agora exibe a linha do tempo completa de ocorrências do transportador (SSW), não apenas o status resumido.',
+      'Comissões: usuários deletados não aparecem mais na listagem da tela de Gestão de Comissões.',
+    ],
+  },
+  {
     version: 'V 1.51',
     items: [
       'Dashboard: os cards (Vendas Totais, Ticket Médio, Produtos Vendidos, Positivação, Vendedores Ativos, Meta) não ficam mais presos em "Carregando..." e a "Carteira de Clientes" voltou a mostrar o total correto. A causa era o status do cliente gravado em maiúsculo ("ATIVO") não bater com a comparação interna ("Ativo"), zerando a carteira (ex.: "164 de 0 clientes") e travando todo o dashboard. Corrigida a comparação (sem diferenciar maiúsculas) e o dashboard agora carrega mesmo se a carteira vier vazia.',

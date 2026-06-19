@@ -334,6 +334,7 @@ serve(async (req) => {
       const dataInicio = url.searchParams.get('data_inicio')
       const dataFim = url.searchParams.get('data_fim')
       const nfeNumero = url.searchParams.get('nfe_numero')
+      const pedidoVendaId = url.searchParams.get('pedido_venda_id')
       const limit = clampLimit(url.searchParams.get('limit'))
       const offset = clampOffset(url.searchParams.get('offset'))
 
@@ -352,9 +353,10 @@ serve(async (req) => {
       if (dataInicio) query = query.gte('data_emissao', dataInicio)
       if (dataFim) query = query.lte('data_emissao', dataFim)
       if (nfeNumero) {
-        // Cast numero NFE para texto e aplica ILIKE (números são bigint na tabela).
-        // Postgrest: filter avançado via .filter() com operador casting.
         query = query.filter('nfe_numero::text', 'ilike', `%${nfeNumero}%`)
+      }
+      if (pedidoVendaId) {
+        query = query.eq('pedido_venda_id', parseInt(pedidoVendaId, 10))
       }
 
       const { data, error, count } = await query

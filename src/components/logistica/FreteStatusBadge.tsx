@@ -9,7 +9,7 @@ type Tone = "green" | "blue" | "yellow" | "red" | "gray" | "purple" | "orange";
 const STATUS_TONE: Record<string, Tone> = {
   "Entregue": "green",
   "Em Trânsito": "blue",
-  "Em Trânsito - Reentrega": "purple",
+  "Aguardando Agendamento": "purple",
   "Aguardando Coleta": "orange",
   "Em Separação": "gray",
   "Agendado": "yellow",

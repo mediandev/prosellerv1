@@ -419,7 +419,7 @@ export function calculateTopSellers(transactions: Transaction[]): TopSeller[] {
  */
 export async function calculatePositivation(transactions: Transaction[], vendedorNome?: string) {
   // Clientes únicos que compraram no período
-  const uniqueCustomers = new Set(transactions.map(t => t.cliente));
+  const uniqueCustomers = new Set(transactions.map(t => t.clienteId || t.cliente));
   const positivatedCount = uniqueCustomers.size;
   
   // Buscar total REAL de clientes cadastrados no Supabase
@@ -537,7 +537,7 @@ export async function calculateMetricsWithComparison(
   const vendedoresAtivos = vendedoresUnicos.size;
   
   // Clientes únicos que compraram no período
-  const clientesUnicos = new Set(transacoesValidas.map(t => t.cliente));
+  const clientesUnicos = new Set(transacoesValidas.map(t => t.clienteId || t.cliente));
   const positivacaoCount = clientesUnicos.size;
   
   // Buscar total REAL de clientes cadastrados no sistema
@@ -570,7 +570,7 @@ export async function calculateMetricsWithComparison(
   const vendedoresUnicosAnterior = new Set(transacoesValidasAnterior.map(t => t.vendedor));
   const vendedoresAtivosAnterior = vendedoresUnicosAnterior.size;
   
-  const clientesUnicosAnterior = new Set(transacoesValidasAnterior.map(t => t.cliente));
+  const clientesUnicosAnterior = new Set(transacoesValidasAnterior.map(t => t.clienteId || t.cliente));
   const positivacaoCountAnterior = clientesUnicosAnterior.size;
   const positivacaoAnterior = positivacaoTotal > 0 
     ? (positivacaoCountAnterior / positivacaoTotal) * 100 

@@ -142,6 +142,8 @@ export interface ListFretesFilters {
   dataFim?: string;
   /** Substring LIKE no número da NFe (cast para texto). */
   nfeNumero?: string;
+  /** Filtro exato por pedido de venda vinculado. */
+  pedidoVendaId?: number;
   /** 1..100 (default 20). */
   limit?: number;
   offset?: number;

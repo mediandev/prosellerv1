@@ -21,7 +21,8 @@ async function call(
     | 'transportador-logistica-v1'
     | 'regiao-destino-v1'
     | 'origem-frete-v1'
-    | 'frete-logistica-v1',
+    | 'frete-logistica-v1'
+    | 'pedido-venda-v2',
   method: Method,
   options: {
     id?: string;
@@ -141,6 +142,7 @@ export async function listFretes(
       data_inicio: filters.dataInicio,
       data_fim: filters.dataFim,
       nfe_numero: filters.nfeNumero,
+      pedido_venda_id: filters.pedidoVendaId,
       limit: filters.limit,
       offset: filters.offset,
     },
@@ -169,4 +171,33 @@ export async function getFreteWithOcorrencias(
     query: { action: 'get_with_ocorrencias', id: String(id) },
   })) as { frete: FreteLogisticaEnriched; ocorrencias: OcorrenciaSSW[] };
   return data;
+}
+
+export interface PedidoOption {
+  id: string;
+  numero: string;
+  clienteId: number;
+  nomeCliente: string;
+  empresaFaturamentoId: number;
+  nomeEmpresaFaturamento: string;
+  valorProdutos: number;
+  status?: string;
+  dataPedido?: string;
+}
+
+export async function searchPedidos(search: string): Promise<PedidoOption[]> {
+  const data = (await call('pedido-venda-v2', 'GET', {
+    query: { search, limit: '10', page: '1' },
+  })) as { pedidos?: any[] };
+  return (data?.pedidos || []).map((p: any) => ({
+    id: String(p.id),
+    numero: p.numero || String(p.id),
+    clienteId: Number(p.clienteId),
+    nomeCliente: p.nomeCliente || '',
+    empresaFaturamentoId: Number(p.empresaFaturamentoId),
+    nomeEmpresaFaturamento: p.nomeEmpresaFaturamento || '',
+    valorProdutos: Number(p.valorPedido || 0),
+    status: p.status || undefined,
+    dataPedido: p.dataPedido || undefined,
+  }));
 }
