@@ -81,7 +81,7 @@ serve(async (req: Request) => {
           valor_produtos,
           valor_cotacao,
           transportador_id,
-          cliente:cliente_id ( cliente_id, nome_razao_social ),
+          cliente:cliente_id ( cliente_id, nome ),
           transportador:transportador_id ( id, razao_social, nome_fantasia )
         `)
         .eq('empresa_id', empresaId)
@@ -103,7 +103,7 @@ serve(async (req: Request) => {
 
       // Enriquecer com endereço do cliente
       const enriched = await Promise.all((data ?? []).map(async (f: Record<string, unknown>) => {
-        const clienteObj = f.cliente as { cliente_id?: number; nome_razao_social?: string } | null
+        const clienteObj = f.cliente as { cliente_id?: number; nome?: string } | null
         let cidade: string | null = null
         let uf: string | null = null
         let cep: string | null = null
@@ -123,7 +123,7 @@ serve(async (req: Request) => {
           nfeNumero: f.nfe_numero ?? null,
           nfeChaveAcesso: f.nfe_chave_acesso ?? null,
           pedidoVendaId: f.pedido_venda_id ?? null,
-          clienteNome: clienteObj?.nome_razao_social ?? null,
+          clienteNome: clienteObj?.nome ?? null,
           clienteCidade: cidade,
           clienteUf: uf,
           clienteCep: cep,
@@ -173,13 +173,13 @@ serve(async (req: Request) => {
             peso_bruto,
             valor_produtos,
             valor_cotacao,
-            cliente:cliente_id ( cliente_id, nome_razao_social )
+            cliente:cliente_id ( cliente_id, nome )
           `)
           .in('id', freteIds)
           .is('deleted_at', null)
 
         fretes = await Promise.all((fretesData ?? []).map(async (f: Record<string, unknown>) => {
-          const clienteObj = f.cliente as { cliente_id?: number; nome_razao_social?: string } | null
+          const clienteObj = f.cliente as { cliente_id?: number; nome?: string } | null
           let cidade: string | null = null; let uf: string | null = null; let cep: string | null = null
           if (clienteObj?.cliente_id) {
             const { data: end } = await admin.from('cliente_endereço').select('cidade, uf, cep').eq('cliente_id', clienteObj.cliente_id).single()
@@ -189,7 +189,7 @@ serve(async (req: Request) => {
             freteId: String(f.id),
             nfeNumero: f.nfe_numero ?? null,
             pedidoVendaId: f.pedido_venda_id ?? null,
-            clienteNome: clienteObj?.nome_razao_social ?? null,
+            clienteNome: clienteObj?.nome ?? null,
             clienteCidade: cidade, clienteUf: uf, clienteCep: cep,
             volumes: f.volumes ?? null,
             pesoBruto: f.peso_bruto ?? null,
