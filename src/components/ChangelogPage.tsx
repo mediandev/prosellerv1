@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.61',
+    items: [
+      'Conta Corrente > Arquivos: visualizar e baixar arquivos anexos agora funcionam corretamente (botões antes exibiam apenas mensagem de log).',
+      'Conta Corrente > Arquivos: nome do arquivo é extraído corretamente da URL quando armazenado como texto simples no banco.',
+    ],
+  },
+  {
     version: 'V 1.60',
     items: [
       'Clientes > Aba Mix: produtos agora carregam corretamente (filtro por ativo/disponível); status do mix por cliente persistido no banco via tabela status_mix.',
