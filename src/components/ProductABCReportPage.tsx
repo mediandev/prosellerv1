@@ -11,6 +11,7 @@ import { companyService } from "../services/companyService";
 import { Badge } from "./ui/badge";
 import { Combobox } from "./ui/combobox";
 import { api } from "../services/api";
+import { getSupabaseClient } from "../services/supabase";
 import { isStatusConcluido } from "../utils/statusVendaUtils";
 
 interface ProductABCFilters {
@@ -54,15 +55,49 @@ export function ProductABCReportPage({ onBack }: ProductABCReportPageProps) {
     try {
       console.log('[ABC-PRODUTOS-PAGE] Carregando dados da API...');
       const [vendasAPI, clientesAPI, vendedoresAPI] = await Promise.all([
-        api.get('vendas', { params: { include_itens: true } }),
+        api.get('vendas'),
         api.get('clientes'),
         api.get('vendedores'),
       ]);
-      
-      setVendas(Array.isArray(vendasAPI) ? vendasAPI : []);
+
+      const vendasCarregadas: any[] = Array.isArray(vendasAPI) ? vendasAPI : [];
+
+      // Buscar itens diretamente da tabela pedido_venda_produtos em lotes de 200
+      const supabase = getSupabaseClient();
+      const vendaIds = vendasCarregadas.map((v: any) => Number(v.id)).filter(Boolean);
+      const allItens: any[] = [];
+      for (let i = 0; i < vendaIds.length; i += 200) {
+        const batch = vendaIds.slice(i, i + 200);
+        const { data } = await supabase
+          .from('pedido_venda_produtos')
+          .select('pedido_venda_id, produto_id, descricao, codigo_sku, quantidade, subtotal')
+          .in('pedido_venda_id', batch);
+        if (data) allItens.push(...data);
+      }
+
+      const itensPorVenda = new Map<number, any[]>();
+      allItens.forEach((item: any) => {
+        const arr = itensPorVenda.get(item.pedido_venda_id) || [];
+        arr.push({
+          id: String(item.produto_id),
+          produtoId: String(item.produto_id),
+          descricaoProduto: item.descricao || '',
+          codigoSku: item.codigo_sku || '',
+          quantidade: Number(item.quantidade ?? 0),
+          subtotal: Number(item.subtotal ?? 0),
+        });
+        itensPorVenda.set(item.pedido_venda_id, arr);
+      });
+
+      const vendasComItens = vendasCarregadas.map((v: any) => ({
+        ...v,
+        itens: itensPorVenda.get(Number(v.id)) || [],
+      }));
+
+      console.log(`[ABC-PRODUTOS-PAGE] Dados carregados: ${vendasComItens.length} vendas, ${allItens.length} itens`);
+      setVendas(vendasComItens);
       setClientes(Array.isArray(clientesAPI) ? clientesAPI : []);
       setVendedores(Array.isArray(vendedoresAPI) ? vendedoresAPI : []);
-      console.log('[ABC-PRODUTOS-PAGE] Dados carregados');
     } catch (error) {
       console.error('[ABC-PRODUTOS-PAGE] Erro ao carregar dados:', error);
       setVendas([]);
@@ -151,7 +186,7 @@ export function ProductABCReportPage({ onBack }: ProductABCReportPageProps) {
     }>();
 
     filteredSales.forEach((venda) => {
-      venda.itens.forEach((item) => {
+      (venda.itens || []).forEach((item: any) => {
         const current = productMap.get(item.produtoId) || { 
           codigoSku: item.codigoSku,
           descricao: item.descricaoProduto,

@@ -53,7 +53,7 @@ interface ROIStats {
 }
 
 export function RelatorioROICliente({ onNavigateBack }: RelatorioROIClienteProps) {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [clientes, setClientes] = useState<ClienteROI[]>([]);
   const [allClientes, setAllClientes] = useState<Array<{ id: string; nomeFantasia: string; codigo: string; cpfCnpj: string }>>([]);
   const [clienteSelecionado, setClienteSelecionado] = useState<{ id: string; nomeFantasia: string; codigo: string; cpfCnpj: string } | null>(null);
@@ -101,24 +101,65 @@ export function RelatorioROICliente({ onNavigateBack }: RelatorioROIClienteProps
     } catch (error) {
       console.error("Erro ao carregar dados iniciais:", error);
       toast.error("Erro ao carregar dados iniciais");
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadRelatorioData = async () => {
     if (!clienteSelecionado) return;
-    
+
     setLoading(true);
     try {
-      const params: any = {
-        clienteId: clienteSelecionado.id,
-        periodo: '365', // Últimos 365 dias por padrão
+      console.log("[ROI] Carregando vendas para cliente:", clienteSelecionado.id);
+
+      // Calcular data de início (últimos 365 dias)
+      const dataInicio = new Date();
+      dataInicio.setDate(dataInicio.getDate() - 365);
+
+      const todasVendas = await api.get("vendas", { params: { clienteId: clienteSelecionado.id } });
+      const vendasCliente = (Array.isArray(todasVendas) ? todasVendas : []).filter((v: any) =>
+        new Date(v.dataPedido) >= dataInicio
+      );
+
+      console.log("[ROI] Vendas do cliente no período:", vendasCliente.length);
+
+      if (vendasCliente.length === 0) {
+        setClientes([]);
+        return;
+      }
+
+      // Calcular métricas a partir das vendas
+      const totalVendas = vendasCliente.reduce((s: number, v: any) => s + Number(v.valorPedido || 0), 0);
+      const quantidadePedidos = vendasCliente.length;
+      const ticketMedio = quantidadePedidos > 0 ? totalVendas / quantidadePedidos : 0;
+
+      const datas = vendasCliente.map((v: any) => new Date(v.dataPedido)).sort((a: Date, b: Date) => a.getTime() - b.getTime());
+      const primeiroPedido = datas[0]?.toISOString().split('T')[0] || '';
+      const ultimoPedido = datas[datas.length - 1]?.toISOString().split('T')[0] || '';
+      const diasAtivo = primeiroPedido && ultimoPedido
+        ? Math.max(1, Math.round((new Date(ultimoPedido).getTime() - new Date(primeiroPedido).getTime()) / 86400000))
+        : 0;
+      const frequenciaCompra = quantidadePedidos > 1 ? diasAtivo / (quantidadePedidos - 1) : diasAtivo;
+
+      const roiData: ClienteROI = {
+        clienteId: String(clienteSelecionado.id),
+        clienteNome: clienteSelecionado.nomeFantasia,
+        vendedorNome: vendasCliente[0]?.nomeVendedor || '',
+        totalVendas,
+        quantidadePedidos,
+        ticketMedio,
+        margemLucro: 0,
+        roi: 0,
+        primeiroPedido,
+        ultimoPedido,
+        diasAtivo,
+        frequenciaCompra: Math.round(frequenciaCompra),
+        valorMedio: ticketMedio,
       };
 
-      console.log("[ROI] Carregando relatório com params:", params);
-      const response = await api.get("relatorios/roi-clientes", { params });
-      console.log("[ROI] Resposta recebida:", response);
-      console.log("[ROI] Número de clientes:", response.clientes?.length || 0);
-      setClientes(response.clientes || []);
+      setClientes([roiData]);
+      console.log("[ROI] Dados calculados:", roiData);
     } catch (error) {
       console.error("Erro ao carregar relatório de ROI:", error);
       toast.error("Erro ao carregar relatório de ROI");

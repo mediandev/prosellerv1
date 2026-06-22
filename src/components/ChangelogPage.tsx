@@ -8,6 +8,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.62',
+    items: [
+      'Relatórios > Curva ABC de Produtos: dados agora carregam corretamente — client Supabase injeta token JWT, respeitando RLS.',
+      'Relatórios > Mix de Produtos por Cliente: itens agora carregam via query direta na tabela pedido_venda_produtos (autenticada).',
+      'Relatórios > ROI por Cliente: corrigido loading infinito; métricas calculadas a partir das vendas reais do cliente.',
+      'Relatório de Vendas: agrupamento por Grupo/Rede e campo CNPJ/UF passam a usar campos diretos da venda.',
+    ],
+  },
+  {
     version: 'V 1.61',
     items: [
       'Conta Corrente > Arquivos: visualizar e baixar arquivos anexos agora funcionam corretamente (botões antes exibiam apenas mensagem de log).',

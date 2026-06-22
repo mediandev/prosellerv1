@@ -57,6 +57,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { api } from "../services/api";
+import { getSupabaseClient } from "../services/supabase";
 import { Venda } from "../types/venda";
 import { Cliente } from "../types/customer";
 import { Produto } from "../types/produto";
@@ -182,11 +183,9 @@ export function RelatorioMixCliente({ onNavigateBack }: RelatorioMixClienteProps
 
       console.log("[RELATORIO-MIX] Período:", { dataInicial, dataFinal });
 
-      // Buscar vendas do cliente no período
-      const todasVendas = await api.get("vendas", { params: { include_itens: true } });
-      const vendasCliente = todasVendas.filter((venda: Venda) => {
-        if (String(venda.clienteId) !== String(clienteSelecionado.id)) return false;
-
+      // Buscar vendas do cliente no período (headers apenas, filtrando por clienteId no servidor)
+      const todasVendas = await api.get("vendas", { params: { clienteId: clienteSelecionado.id } });
+      const vendasCliente: Venda[] = (Array.isArray(todasVendas) ? todasVendas : []).filter((venda: Venda) => {
         const dataVenda = new Date(venda.dataPedido);
         return dataVenda >= dataInicial && dataVenda <= dataFinal;
       });
@@ -200,22 +199,39 @@ export function RelatorioMixCliente({ onNavigateBack }: RelatorioMixClienteProps
         return;
       }
 
+      // Buscar itens diretamente de pedido_venda_produtos (auth via localStorage)
+      const supabase = getSupabaseClient();
+      const vendaIds = vendasCliente.map((v) => Number(v.id)).filter(Boolean);
+      const allItens: any[] = [];
+      for (let i = 0; i < vendaIds.length; i += 200) {
+        const batch = vendaIds.slice(i, i + 200);
+        const { data } = await supabase
+          .from('pedido_venda_produtos')
+          .select('pedido_venda_id, produto_id, descricao, codigo_sku, codigo_ean, unidade, quantidade')
+          .in('pedido_venda_id', batch);
+        if (data) allItens.push(...data);
+      }
+      console.log("[RELATORIO-MIX] Itens encontrados:", allItens.length);
+
+      // Mapear dataPedido por id de venda para o agrupamento
+      const dataPorVenda = new Map<number, string>();
+      vendasCliente.forEach((v) => dataPorVenda.set(Number(v.id), String(v.dataPedido)));
+
       // Buscar status mix do cliente específico
       let statusMixCliente = [];
       try {
         statusMixCliente = await api.get(`status-mix/${clienteSelecionado.id}`);
         console.log("[RELATORIO-MIX] Status mix encontrados:", statusMixCliente.length);
       } catch (error: any) {
-        // Se não houver status mix cadastrado para o cliente, continua normalmente
-        if (error.message.includes("404")) {
+        if (error.message?.includes("404")) {
           console.log("[RELATORIO-MIX] Cliente sem status mix cadastrado");
           statusMixCliente = [];
         } else {
-          throw error; // Repassar outros erros
+          throw error;
         }
       }
 
-      // Agrupar produtos por ID
+      // Agrupar produtos por produto_id
       const mapaProdutos = new Map<string, {
         produtoId: string;
         descricao: string;
@@ -227,33 +243,28 @@ export function RelatorioMixCliente({ onNavigateBack }: RelatorioMixClienteProps
         numeroPedidos: number;
       }>();
 
-      vendasCliente.forEach((venda: Venda) => {
-        venda.itens.forEach((item) => {
-          const existing = mapaProdutos.get(item.produtoId);
-          
-          if (existing) {
-            existing.quantidadeTotal += item.quantidade;
-            existing.numeroPedidos += 1;
-            
-            // Atualizar data do último pedido se for mais recente
-            const dataVendaAtual = new Date(venda.dataPedido);
-            const dataUltimoPedidoExisting = new Date(existing.dataUltimoPedido);
-            if (dataVendaAtual > dataUltimoPedidoExisting) {
-              existing.dataUltimoPedido = venda.dataPedido;
-            }
-          } else {
-            mapaProdutos.set(item.produtoId, {
-              produtoId: item.produtoId,
-              descricao: item.descricaoProduto,
-              codigoSku: item.codigoSku,
-              codigoEan: item.codigoEan,
-              unidade: item.unidade,
-              quantidadeTotal: item.quantidade,
-              dataUltimoPedido: venda.dataPedido,
-              numeroPedidos: 1,
-            });
+      allItens.forEach((item: any) => {
+        const produtoId = String(item.produto_id);
+        const dataVenda = dataPorVenda.get(item.pedido_venda_id) || '';
+        const existing = mapaProdutos.get(produtoId);
+        if (existing) {
+          existing.quantidadeTotal += Number(item.quantidade ?? 0);
+          existing.numeroPedidos += 1;
+          if (dataVenda && new Date(dataVenda) > new Date(existing.dataUltimoPedido)) {
+            existing.dataUltimoPedido = dataVenda;
           }
-        });
+        } else {
+          mapaProdutos.set(produtoId, {
+            produtoId,
+            descricao: item.descricao || '',
+            codigoSku: item.codigo_sku || '',
+            codigoEan: item.codigo_ean || undefined,
+            unidade: item.unidade || '',
+            quantidadeTotal: Number(item.quantidade ?? 0),
+            dataUltimoPedido: dataVenda,
+            numeroPedidos: 1,
+          });
+        }
       });
 
       // Adicionar status do mix e código SKU cliente

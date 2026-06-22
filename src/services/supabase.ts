@@ -1,6 +1,8 @@
-// supabase.ts — singleton minimalista do supabase-js para uso em Storage uploads.
+// supabase.ts — singleton minimalista do supabase-js para uso em Storage uploads e queries diretas.
 // O resto do app continua chamando Edge Functions via `services/api.ts`.
 // F-LOG-CRM R-LOG-2: precisamos do client para upload em `logistica-comprovantes`.
+// Nota: o app usa auth customizado (jwt em localStorage['auth_token']), não Supabase Auth nativo.
+// Por isso, injetamos o token manualmente para que RLS funcione corretamente.
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
@@ -15,7 +17,21 @@ let _client: SupabaseClient | null = null;
 export function getSupabaseClient(): SupabaseClient {
   if (_client) return _client;
   _client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: true, autoRefreshToken: true },
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      headers: {},
+      fetch: (url, options = {}) => {
+        const accessToken = typeof localStorage !== 'undefined'
+          ? localStorage.getItem('auth_token')
+          : null;
+        if (accessToken) {
+          const headers = new Headers((options as RequestInit).headers);
+          headers.set('Authorization', `Bearer ${accessToken}`);
+          return fetch(url, { ...options, headers });
+        }
+        return fetch(url, options);
+      },
+    },
   });
   return _client;
 }
