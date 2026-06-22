@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.57',
+    items: [
+      'Relatórios > Curva ABC de Produtos: corrigido — os produtos agora aparecem corretamente com quantidades e valores reais. A API agora carrega os itens de cada pedido junto com a listagem, eliminando o erro que exibia "0 produtos".',
+    ],
+  },
+  {
     version: 'V 1.56',
     items: [
       'Logística > Romaneio de Expedição: nova aba "Romaneio" no módulo de logística. Permite criar um manifesto de saída agrupando múltiplas NFs por transportadora e data, com geração automática de PDF (A4 paisagem) ao confirmar. O PDF inclui dados do remetente, transportador, tabela de NFs com volumes, peso e valor, linhas de assinatura e número sequencial por empresa.',

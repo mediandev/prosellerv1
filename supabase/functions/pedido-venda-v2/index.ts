@@ -284,6 +284,40 @@ serve(async (req) => {
           throw new Error('No data returned from database')
         }
 
+        // Se include_itens=true, buscar itens de cada pedido em lotes
+        const includeItens = url.searchParams.get('include_itens') === 'true'
+        if (includeItens && Array.isArray(rpcData.pedidos) && rpcData.pedidos.length > 0) {
+          const pedidoIds = rpcData.pedidos
+            .map((p: any) => parseInt(p.id, 10))
+            .filter((id: number) => !isNaN(id))
+          const allItems: any[] = []
+          // Lotes de 200 para não ultrapassar limite de URL do PostgREST
+          for (let i = 0; i < pedidoIds.length; i += 200) {
+            const batch = pedidoIds.slice(i, i + 200)
+            const { data: batchItems } = await supabase
+              .from('pedido_venda_produtos')
+              .select('pedido_venda_id, produto_id, descricao, codigo_sku, quantidade, subtotal')
+              .in('pedido_venda_id', batch)
+            if (batchItems) allItems.push(...batchItems)
+          }
+          const itemsByPedido = new Map<number, any[]>()
+          allItems.forEach((item: any) => {
+            const arr = itemsByPedido.get(item.pedido_venda_id) || []
+            arr.push({
+              produtoId: String(item.produto_id),
+              descricaoProduto: item.descricao || '',
+              codigoSku: item.codigo_sku || '',
+              quantidade: Number(item.quantidade ?? 0),
+              subtotal: Number(item.subtotal ?? 0),
+            })
+            itemsByPedido.set(item.pedido_venda_id, arr)
+          })
+          rpcData.pedidos = rpcData.pedidos.map((p: any) => ({
+            ...p,
+            produtos: itemsByPedido.get(parseInt(p.id, 10)) || [],
+          }))
+        }
+
         const duration = Date.now() - startTime
         console.log('[PEDIDO-VENDA-V2] Returning response:', {
           pedidos: rpcData.pedidos ? (Array.isArray(rpcData.pedidos) ? rpcData.pedidos.length : 'not array') : 'no pedidos',
