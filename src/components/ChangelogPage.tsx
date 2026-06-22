@@ -12,6 +12,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     items: [
       'Relatórios > Solicitado vs Faturado: corrigido — produtos agora carregam corretamente (itens de cada pedido incluídos na listagem).',
       'Relatórios > Mix de Produtos por Cliente: corrigido — produtos do período agora são carregados corretamente.',
+      'Configurações > Usuários: tipo de usuário (Backoffice / Vendedor) agora exibido como badge abaixo do nome na lista.',
     ],
   },
   {
