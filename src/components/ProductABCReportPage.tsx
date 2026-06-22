@@ -54,7 +54,7 @@ export function ProductABCReportPage({ onBack }: ProductABCReportPageProps) {
     try {
       console.log('[ABC-PRODUTOS-PAGE] Carregando dados da API...');
       const [vendasAPI, clientesAPI, vendedoresAPI] = await Promise.all([
-        api.get('vendas'),
+        api.get('vendas', { params: { include_itens: true } }),
         api.get('clientes'),
         api.get('vendedores'),
       ]);

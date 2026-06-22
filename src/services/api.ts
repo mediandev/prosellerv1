@@ -1926,6 +1926,9 @@ export const api = {
             const dataFim = new Date(options.params.dataFim);
             baseParams.dataFim = dataFim.toISOString().split('T')[0];
           }
+          if (options.params.include_itens) {
+            baseParams.include_itens = 'true';
+          }
         }
 
         // A edge function pedido-venda-v2 limita a 100 itens por página: pedir
@@ -1995,7 +1998,14 @@ export const api = {
               tentativasSincronizacao: 0,
             }
             : undefined,
-          itens: [], // Produtos serão carregados separadamente se necessário
+          itens: Array.isArray(p.produtos) ? p.produtos.map((item: any) => ({
+            id: String(item.produtoId ?? item.produto_id ?? ''),
+            produtoId: String(item.produtoId ?? item.produto_id ?? ''),
+            descricaoProduto: item.descricaoProduto ?? item.descricao ?? '',
+            codigoSku: item.codigoSku ?? item.codigo_sku ?? '',
+            quantidade: Number(item.quantidade ?? 0),
+            subtotal: Number(item.subtotal ?? 0),
+          })) : [],
           geraReceita: p.geraReceita,
         }));
       } catch (error) {
@@ -3866,7 +3876,14 @@ export const api = {
               tentativasSincronizacao: 0,
             }
             : undefined,
-          itens: [], // Produtos serão carregados separadamente se necessário
+          itens: Array.isArray(p.produtos) ? p.produtos.map((item: any) => ({
+            id: String(item.produtoId ?? item.produto_id ?? ''),
+            produtoId: String(item.produtoId ?? item.produto_id ?? ''),
+            descricaoProduto: item.descricaoProduto ?? item.descricao ?? '',
+            codigoSku: item.codigoSku ?? item.codigo_sku ?? '',
+            quantidade: Number(item.quantidade ?? 0),
+            subtotal: Number(item.subtotal ?? 0),
+          })) : [],
           geraReceita: p.geraReceita,
         }));
 

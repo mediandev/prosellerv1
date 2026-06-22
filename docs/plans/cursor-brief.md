@@ -1235,6 +1235,76 @@ npx supabase functions deploy tiny-enviar-pedido-venda-v1 --project-ref xxoiqfra
 
 ---
 
+## Tarefa 12 — Fix ABC Produtos · Redeploy `pedido-venda-v2` com `include_itens`
+
+**Feature associada:** fix/abc-produtos-include-itens  
+**Origem:** Relatório "Curva ABC de Produtos" mostrava 0 produtos — `venda.itens = []` em todas as listagens.  
+**Cenário:** B (edge function existente, mudança backward-compatible, flag nasce como opt-in).  
+
+### Objetivo
+
+Fazer redeploy de `pedido-venda-v2` com a modificação que adiciona suporte ao query param `include_itens=true`. Quando ativado, a edge function faz uma segunda query em `pedido_venda_produtos` (lotes de 200 IDs) e retorna os itens de cada pedido junto. Sem esse param, comportamento idêntico ao atual — zero regressão.
+
+### Pré-condições
+
+- [ ] PR `fix/abc-produtos-include-itens` mergeado em `main`.
+- [ ] SHA de `main` local verificado: `git log --oneline -1` aponta para o commit do merge.
+- [ ] Nenhuma outra edição pendente em `supabase/functions/pedido-venda-v2/index.ts` que não esteja no PR.
+
+### Operação (CLI local — ADR-005, MCP PROIBIDO)
+
+```bash
+git checkout main && git pull
+git log --oneline -1  # anotar SHA
+npx supabase functions deploy pedido-venda-v2 --project-ref xxoiqfraeolsqsmsheue
+```
+
+Esperado: `Deployed Function pedido-venda-v2 on project xxoiqfraeolsqsmsheue` + exit 0.
+
+### Smoke pós-deploy
+
+```bash
+# 1) Preflight CORS — deve retornar 200
+curl -s -o /dev/null -w "%{http_code}" -X OPTIONS \
+  https://xxoiqfraeolsqsmsheue.supabase.co/functions/v1/pedido-venda-v2
+# Esperado: 200
+
+# 2) Listagem sem include_itens — comportamento idêntico ao atual
+curl -s -H "Authorization: Bearer <TOKEN>" \
+  "https://xxoiqfraeolsqsmsheue.supabase.co/functions/v1/pedido-venda-v2?limit=2" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); p=d.get('pedidos',[]); print(len(p), 'pedidos,', 'produtos' in (p[0] if p else {}), 'produtos')"
+# Esperado: "2 pedidos, False produtos" (sem campo produtos quando flag ausente)
+
+# 3) Listagem com include_itens=true — deve retornar campo produtos
+curl -s -H "Authorization: Bearer <TOKEN>" \
+  "https://xxoiqfraeolsqsmsheue.supabase.co/functions/v1/pedido-venda-v2?limit=2&include_itens=true" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); p=d.get('pedidos',[]); print(len(p), 'pedidos,', 'produtos' in (p[0] if p else {}), 'com campo produtos')"
+# Esperado: "2 pedidos, True com campo produtos"
+```
+
+Na UI: Relatórios → Curva ABC de Produtos → a tabela deve mostrar produtos com quantidades e valores reais (não mais "0 produtos").
+
+### Rollback (Cenário B — simples redeploy da versão anterior)
+
+Se a nova versão quebrar a listagem normal de pedidos:
+
+```bash
+git log --oneline supabase/functions/pedido-venda-v2/index.ts  # localizar SHA pré-fix
+git checkout <SHA-ANTERIOR> -- supabase/functions/pedido-venda-v2/index.ts
+npx supabase functions deploy pedido-venda-v2 --project-ref xxoiqfraeolsqsmsheue
+```
+
+### Critério de aceite da Tarefa 12
+
+- [ ] Deploy retornou exit 0.
+- [ ] Smoke 1 (OPTIONS): HTTP 200.
+- [ ] Smoke 2 (sem flag): listagem normal funciona, sem campo `produtos`.
+- [ ] Smoke 3 (com flag): campo `produtos` presente e com itens.
+- [ ] UI: Relatórios → ABC Produtos → produtos aparecem com quantidades e valores.
+- [ ] `TODO.md` / `docs/wiki/log.md` atualizado com SHA e PR.
+
+---
+
 ## Regras deste arquivo
 
 - **Uma seção = uma operação atômica.** Combinar "migration + deploy" em uma seção só é permitido quando a janela operacional é a mesma e o rollback é igualmente unificado (Etapas A + B); a Tarefa 8 é exceção justificada porque migration sem deploy das funções não traz valor algum (tabelas viram peso morto até o deploy) e o cliente paga o custo da janela uma vez.
