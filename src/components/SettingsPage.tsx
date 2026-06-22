@@ -1057,22 +1057,13 @@ export function SettingsPage({
                           </select>
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="condicao-prazo">
-                            Prazo de Pagamento
-                            <span className="text-xs text-muted-foreground ml-2">
-                              (Ex: 10/20/30/40)
-                            </span>
-                          </Label>
+                          <Label htmlFor="condicao-prazo">Prazo de Pagamento</Label>
                           <Input
                             id="condicao-prazo"
                             value={newCondicaoPagamento.prazoPagamento}
                             onChange={(e) => {
-                              // Remove tudo que não é dígito
                               const numbers = e.target.value.replace(/\D/g, '');
-                              
-                              // Formata automaticamente com "/" a cada 2 dígitos
                               const formatted = formatarPrazoInput(numbers);
-                              
                               setNewCondicaoPagamento({
                                 ...newCondicaoPagamento,
                                 prazoPagamento: formatted,
@@ -1080,6 +1071,7 @@ export function SettingsPage({
                             }}
                             placeholder="10/20/30/40"
                           />
+                          <p className="text-xs text-muted-foreground">Ex: 10/20/30/40 — use / para separar parcelas</p>
                         </div>
                       </div>
 
@@ -1129,12 +1121,12 @@ export function SettingsPage({
                         </div>
                       </div>
 
-                      {newCondicaoPagamento.nome && (
-                        <div className="p-3 bg-muted rounded-lg">
-                          <Label className="text-sm text-muted-foreground">Nome Gerado:</Label>
-                          <p className="font-medium mt-1">{newCondicaoPagamento.nome}</p>
-                        </div>
-                      )}
+                      <div className="p-3 bg-muted rounded-lg">
+                        <Label className="text-sm text-muted-foreground">Nome Gerado:</Label>
+                        <p className="font-medium mt-1 text-sm">
+                          {newCondicaoPagamento.nome || <span className="text-muted-foreground italic">Preencha os campos acima para gerar o nome</span>}
+                        </p>
+                      </div>
                     </div>
                     <DialogFooter>
                       <Button
@@ -1555,12 +1547,7 @@ export function SettingsPage({
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-condicao-prazo">
-                    Prazo de Pagamento
-                    <span className="text-xs text-muted-foreground ml-2">
-                      (Ex: 10/20/30/40)
-                    </span>
-                  </Label>
+                  <Label htmlFor="edit-condicao-prazo">Prazo de Pagamento</Label>
                   <Input
                     id="edit-condicao-prazo"
                     value={editingCondicaoPagamento.prazoPagamento}
@@ -1574,6 +1561,7 @@ export function SettingsPage({
                     }}
                     placeholder="10/20/30/40"
                   />
+                  <p className="text-xs text-muted-foreground">Ex: 10/20/30/40 — use / para separar parcelas</p>
                 </div>
               </div>
 
@@ -1616,22 +1604,16 @@ export function SettingsPage({
                 </div>
               </div>
 
-              {gerarNomeCondicaoPagamento(
-                editingCondicaoPagamento.formaPagamentoId,
-                editingCondicaoPagamento.prazoPagamento,
-                editingCondicaoPagamento.descontoExtra
-              ) && (
-                <div className="p-3 bg-muted rounded-lg">
-                  <Label className="text-sm text-muted-foreground">Nome Gerado:</Label>
-                  <p className="font-medium mt-1">
-                    {gerarNomeCondicaoPagamento(
-                      editingCondicaoPagamento.formaPagamentoId,
-                      editingCondicaoPagamento.prazoPagamento,
-                      editingCondicaoPagamento.descontoExtra
-                    )}
-                  </p>
-                </div>
-              )}
+              <div className="p-3 bg-muted rounded-lg">
+                <Label className="text-sm text-muted-foreground">Nome Gerado:</Label>
+                <p className="font-medium mt-1 text-sm">
+                  {gerarNomeCondicaoPagamento(
+                    editingCondicaoPagamento.formaPagamentoId,
+                    editingCondicaoPagamento.prazoPagamento,
+                    editingCondicaoPagamento.descontoExtra
+                  ) || <span className="text-muted-foreground italic">Preencha os campos acima para gerar o nome</span>}
+                </p>
+              </div>
             </div>
           )}
           <DialogFooter>

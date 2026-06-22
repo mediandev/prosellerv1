@@ -8,6 +8,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.64',
+    items: [
+      'Configurações > Condições de Pagamento: layout do modal de nova condição melhorado — dica de prazo movida para baixo do campo, "Nome Gerado" sempre visível.',
+      'Relatórios > Curva ABC de Clientes: agrupamento por Grupo/Rede funciona corretamente; pluralização "1 cliente" vs "2+ clientes" corrigida.',
+      'Clientes > Aba Conta Corrente: botões "Novo Compromisso" e "Registrar Pagamento" agora visíveis também no modo Visualizar.',
+      'Conta Corrente: largura dos campos de data ajustada para evitar espaço sobrando após ícone de calendário.',
+    ],
+  },
+  {
     version: 'V 1.63',
     items: [
       'Clientes > Aba Mix: produtos carregados via query direta Supabase (contorna edge function status-mix-v2 não deployada); auto-ativação por vendas históricas.',

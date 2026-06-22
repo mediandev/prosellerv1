@@ -670,7 +670,7 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
                         return (
                           <TableRow key={`group-${index}`} className="bg-muted/50">
                             <TableCell colSpan={6} className="font-medium">
-                              {item.groupName} ({item.clientes.length} clientes)
+                              {item.groupName} ({item.clientes.length} {item.clientes.length === 1 ? 'cliente' : 'clientes'})
                             </TableCell>
                             <TableCell colSpan={3} className="text-right font-medium">
                               R$ {groupTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

@@ -874,7 +874,7 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
                 <TabsContent value="conta-corrente" className="space-y-6 mt-6">
                   <CustomerFormContaCorrente
                     formData={formData}
-                    readOnly={readOnly}
+                    readOnly={false}
                   />
                 </TabsContent>
 

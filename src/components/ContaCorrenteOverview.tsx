@@ -786,7 +786,7 @@ export function ContaCorrenteOverview() {
                 <Input
                   id="periodo-inicio"
                   type="date"
-                  className="w-[140px]"
+                  className="w-[160px]"
                   value={filtroPeriodoInicio}
                   onChange={(e) => setFiltroPeriodoInicio(e.target.value)}
                 />
@@ -796,7 +796,7 @@ export function ContaCorrenteOverview() {
                 <Input
                   id="periodo-fim"
                   type="date"
-                  className="w-[140px]"
+                  className="w-[160px]"
                   value={filtroPeriodoFim}
                   onChange={(e) => setFiltroPeriodoFim(e.target.value)}
                 />
@@ -932,9 +932,9 @@ export function ContaCorrenteOverview() {
                     <TableHead className="w-[100px]">Data</TableHead>
                     <TableHead className="w-[200px]">Cliente</TableHead>
                     <TableHead>Título</TableHead>
-                    <TableHead className="w-[140px]">Categoria</TableHead>
+                    <TableHead className="w-[160px]">Categoria</TableHead>
                     <TableHead className="text-right w-[140px]">Valor</TableHead>
-                    <TableHead className="w-[140px]">Status</TableHead>
+                    <TableHead className="w-[160px]">Status</TableHead>
                     <TableHead className="w-[60px]"></TableHead>
                   </TableRow>
                 </TableHeader>
