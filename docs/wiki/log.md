@@ -4,6 +4,10 @@
 > Formato: `YYYY-MM-DD · [TAG] · descrição curta · SHA/PR/feature`.
 > Tags: `INGEST`, `RELEASE`, `BUGFIX`, `MIGRATION`, `ADR`, `RUNBOOK`, `VALIDATION`, `BLOCKED`, `MVP`.
 
+## 2026-06-22
+
+- 2026-06-22 · [BUGFIX] · fix/abc-clientes-paginacao (V 1.59) — Curva ABC de Clientes, Mix por Cliente e ROI por Cliente agora carregam todos os clientes via paginação completa (antes: apenas 10 de 960). Filtro Grupo/Rede: corrigido exibição de UUID no lugar do nome do grupo (workaround client-side em mapClienteFromApi). Filtro Natureza de Operação: exibe apenas naturezas presentes nas vendas do período.
+
 ## 2026-05-26
 
 - 2026-05-26 · [INGEST] · F-LOG-CRM R-LOG-4 implementada (SSW Tracking on-demand com cache 30 min). Migration 120 (ALTER TYPE `Entrega` + 3 ADD COLUMN). Nova Edge Function `ssw-tracking-v1` + `frete-logistica-v1` estendida com polling SSW. Mapper SSW → status_entrega automático. ADR-008 documentado. Feature flag `FEATURE_LOG_CRM_SSW` separada (nasce OFF). V 1.39. Branch `feat/log-crm-R-LOG-4`.
@@ -25,3 +29,7 @@
 ## 2026-05-19
 
 - 2026-05-19 · [INGEST] · Bootstrap Harness v3.2 — Project Wiki criada, AGENTS/CLAUDE migrados para v3.2, `CURRENT_REALITY.md` gerado a partir do TODO + SPEC + ADRs + estado de produção (branch `chore/harness-v3.2-reorg`).
+
+## 2026-06-22
+
+- 2026-06-22 · [BUGFIX] · `fix/relatorios-include-itens` (PR #64 / V 1.58) — Relatórios SolicitadoFaturado e MixCliente agora passam `include_itens=true` para carregar produtos. Badge Backoffice/Vendedor adicionado na lista de Usuários. SHA `59e2724`.

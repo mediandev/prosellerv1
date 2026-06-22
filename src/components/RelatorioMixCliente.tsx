@@ -115,21 +115,20 @@ export function RelatorioMixCliente({ onNavigateBack }: RelatorioMixClienteProps
 
   const carregarDados = async () => {
     try {
-      // Carregar clientes
+      // Carregar todos os clientes paginando
       console.log('[RELATORIO-MIX] Iniciando carregamento de clientes...');
-      console.log('[RELATORIO-MIX] AuthToken:', localStorage.getItem('auth_token')?.substring(0, 30));
-      const clientesAPI = await api.get("clientes");
-      console.log('[RELATORIO-MIX] Clientes recebidos da API:', {
-        quantidade: clientesAPI?.length || 0,
-        clientes: clientesAPI,
-      });
-      
-      if (!clientesAPI || clientesAPI.length === 0) {
-        console.warn('[RELATORIO-MIX] ⚠️ Nenhum cliente retornado pela API!');
-        console.warn('[RELATORIO-MIX] ⚠️ Verifique se você está autenticado e se há clientes cadastrados');
-      }
-      
-      setClientes(clientesAPI);
+      let todosClientes: any[] = [];
+      let pagina = 1;
+      let totalPaginas = 1;
+      do {
+        const resp = await api.get('clientes', { params: { page: pagina, limit: 100 } }).catch(() => ({ clientes: [], pagination: { total_pages: 1 } }));
+        const arr = resp?.clientes ?? (Array.isArray(resp) ? resp : []);
+        todosClientes = todosClientes.concat(arr);
+        totalPaginas = resp?.pagination?.total_pages ?? 1;
+        pagina++;
+      } while (pagina <= totalPaginas);
+      console.log(`[RELATORIO-MIX] ${todosClientes.length} clientes carregados`);
+      setClientes(todosClientes);
 
       // Nota: O valor padrão de dias (30) já está definido no useState
       // Quando houver uma rota de configurações no backend, podemos buscar aqui:

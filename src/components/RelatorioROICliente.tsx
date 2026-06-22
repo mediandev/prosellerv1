@@ -86,9 +86,18 @@ export function RelatorioROICliente({ onNavigateBack }: RelatorioROIClienteProps
 
   const loadInitialData = async () => {
     try {
-      const clientesRes = await api.get("clientes");
-      console.log('[ROI] Clientes recebidos:', clientesRes);
-      setAllClientes(clientesRes || []);
+      let todosClientes: any[] = [];
+      let pagina = 1;
+      let totalPaginas = 1;
+      do {
+        const resp = await api.get('clientes', { params: { page: pagina, limit: 100 } }).catch(() => ({ clientes: [], pagination: { total_pages: 1 } }));
+        const arr = resp?.clientes ?? (Array.isArray(resp) ? resp : []);
+        todosClientes = todosClientes.concat(arr);
+        totalPaginas = resp?.pagination?.total_pages ?? 1;
+        pagina++;
+      } while (pagina <= totalPaginas);
+      console.log(`[ROI] ${todosClientes.length} clientes carregados`);
+      setAllClientes(todosClientes);
     } catch (error) {
       console.error("Erro ao carregar dados iniciais:", error);
       toast.error("Erro ao carregar dados iniciais");
