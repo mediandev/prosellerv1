@@ -36,7 +36,7 @@ function obterVendasPorClientePeriodo(
   const vendasPeriodo = vendas.filter(venda => {
     const dataVenda = new Date(venda.dataEmissao || venda.dataPedido);
     return (
-      venda.clienteId === clienteId &&
+      String(venda.clienteId) === String(clienteId) &&
       dataVenda >= dataInicio &&
       dataVenda <= dataFim &&
       venda.status !== 'cancelado'
@@ -52,7 +52,7 @@ function obterVendasPorClientePeriodo(
 // Obter última compra do cliente
 function obterUltimaCompraCliente(vendas: Venda[], clienteId: string): { data: string | null; valor: number } {
   const vendasCliente = vendas
-    .filter(v => v.clienteId === clienteId && v.status !== 'cancelado')
+    .filter(v => String(v.clienteId) === String(clienteId) && v.status !== 'cancelado')
     .sort((a, b) => {
       const dataA = new Date(a.dataEmissao || a.dataPedido);
       const dataB = new Date(b.dataEmissao || b.dataPedido);
@@ -73,7 +73,7 @@ function obterUltimaCompraCliente(vendas: Venda[], clienteId: string): { data: s
 // Obter LTV total do cliente
 function obterLTVCliente(vendas: Venda[], clienteId: string): number {
   return vendas
-    .filter(v => v.clienteId === clienteId && v.status !== 'cancelado')
+    .filter(v => String(v.clienteId) === String(clienteId) && v.status !== 'cancelado')
     .reduce((sum, v) => sum + (v.valorTotal || v.valorPedido || 0), 0);
 }
 

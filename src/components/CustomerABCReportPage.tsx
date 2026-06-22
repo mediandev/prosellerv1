@@ -68,9 +68,9 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
         api.get('vendas'),
         api.get('clientes'),
         api.get('vendedores'),
-        api.get('naturezas-operacao'),
+        api.naturezasOperacao.list().catch(() => []),
       ]);
-      
+
       setVendas(Array.isArray(vendasAPI) ? vendasAPI : []);
       setClientes(Array.isArray(clientesData) ? clientesData : []);
       setVendedores(Array.isArray(vendedoresData) ? vendedoresData : []);
@@ -208,19 +208,19 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
 
       // Filtro de grupo/rede
       if (filters.grupoRede && filters.grupoRede !== "all") {
-        const cliente = clientes.find(c => c.id === venda.clienteId);
-        if (cliente?.grupoRede !== filters.grupoRede) return false;
+        const grupoVenda = venda.clienteGrupoRede || clientes.find(c => String(c.id) === String(venda.clienteId))?.grupoRede;
+        if (grupoVenda !== filters.grupoRede) return false;
       }
 
       // Filtro de natureza de operação
-      if (filters.naturezaOperacaoId && filters.naturezaOperacaoId !== "all" && venda.naturezaOperacaoId !== filters.naturezaOperacaoId) {
+      if (filters.naturezaOperacaoId && filters.naturezaOperacaoId !== "all" && String(venda.naturezaOperacaoId) !== String(filters.naturezaOperacaoId)) {
         return false;
       }
 
       // Filtro de UF
       if (filters.uf && filters.uf !== "all") {
-        const cliente = clientes.find(c => c.id === venda.clienteId);
-        if (cliente?.uf !== filters.uf) return false;
+        const ufVenda = venda.clienteUf || clientes.find(c => String(c.id) === String(venda.clienteId))?.uf;
+        if (ufVenda !== filters.uf) return false;
       }
 
       // Filtro de Empresa Emitente
@@ -242,13 +242,18 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
   // Calcular Curva ABC de Clientes
   const abcData = useMemo(() => {
     // Agrupar vendas por cliente
-    const clientMap = new Map<string, { valor: number; vendedorId: string }>();
+    const clientMap = new Map<string, { valor: number; vendedorId: string; nomeCliente: string; grupoRede: string; uf: string; cnpj: string }>();
 
     filteredSales.forEach((venda) => {
-      const current = clientMap.get(venda.clienteId) || { valor: 0, vendedorId: venda.vendedorId };
-      clientMap.set(venda.clienteId, {
+      const key = String(venda.clienteId);
+      const current = clientMap.get(key) || { valor: 0, vendedorId: venda.vendedorId, nomeCliente: venda.nomeCliente || "", grupoRede: venda.clienteGrupoRede || "", uf: venda.clienteUf || "", cnpj: venda.cnpjCliente || "" };
+      clientMap.set(key, {
         valor: current.valor + venda.valorPedido,
-        vendedorId: venda.vendedorId, // 🆕 Armazenar ID do vendedor
+        vendedorId: venda.vendedorId,
+        nomeCliente: current.nomeCliente || venda.nomeCliente || "",
+        grupoRede: current.grupoRede || venda.clienteGrupoRede || "",
+        uf: current.uf || venda.clienteUf || "",
+        cnpj: current.cnpj || venda.cnpjCliente || "",
       });
     });
 
@@ -257,15 +262,14 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
 
     // Criar array de clientes com dados
     const clientesData: CustomerABCData[] = Array.from(clientMap.entries()).map(([clienteId, data]) => {
-      const cliente = clientes.find(c => c.id === clienteId);
-      // 🆕 Buscar nome do vendedor pelo ID
+      const cliente = clientes.find(c => String(c.id) === clienteId);
       const vendedor = vendedores.find(v => v.id === data.vendedorId);
       return {
         clienteId,
-        grupoRede: cliente?.grupoRede || "-",
-        nomeCliente: cliente?.razaoSocial || "Cliente Desconhecido",
-        cnpj: cliente?.cpfCnpj || "-",
-        uf: cliente?.uf || "-",
+        grupoRede: cliente?.grupoRede || data.grupoRede || "-",
+        nomeCliente: cliente?.razaoSocial || data.nomeCliente || "Cliente Desconhecido",
+        cnpj: cliente?.cpfCnpj || data.cnpj || "-",
+        uf: cliente?.uf || data.uf || "-",
         vendedor: vendedor?.nome || "Vendedor Desconhecido",
         valorTotal: data.valor,
         percentual: totalVendas > 0 ? (data.valor / totalVendas) * 100 : 0,
@@ -350,11 +354,10 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
   // Obter grupos/redes únicos
   const gruposRedes = useMemo(() => {
     const grupos = new Set<string>();
-    clientes.forEach(c => {
-      if (c.grupoRede) grupos.add(c.grupoRede);
-    });
-    return Array.from(grupos);
-  }, [clientes]);
+    clientes.forEach(c => { if (c.grupoRede) grupos.add(c.grupoRede); });
+    vendas.forEach(v => { if ((v as any).clienteGrupoRede) grupos.add((v as any).clienteGrupoRede); });
+    return Array.from(grupos).sort();
+  }, [clientes, vendas]);
 
   // Limpar filtros
   const clearFilters = () => {
