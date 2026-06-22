@@ -120,8 +120,8 @@ function mapClienteListItem(row) {
     situacao,
     segmentoId: row.segmento_id != null ? String(row.segmento_id) : undefined,
     segmentoMercado: row.segmento_nome ?? row.tipo_segmento ?? row.segmentoMercado ?? '',
-    grupoRede: row.grupo_id ?? row.grupo_rede_nome ?? row.grupo_rede ?? row.grupoRede ?? '',
-    grupoId: row.grupo_id ?? row.grupoRede ?? undefined,
+    grupoRede: row.grupo_rede_nome ?? row.grupo_rede ?? row.grupoRede ?? '',
+    grupoId: row.grupo_id ?? undefined,
     createdAt: row.created_at ?? row.createdAt,
     updatedAt: row.updated_at ?? row.updatedAt
   };
@@ -184,8 +184,8 @@ function mapClienteCompleto(rpc) {
     situacao,
     segmentoId: c.segmento_id != null ? String(c.segmento_id) : undefined,
     segmentoMercado: c.segmento_nome ?? c.tipo_segmento ?? c.segmentoMercado ?? '',
-    grupoRede: c.grupo_id ?? c.grupo_rede_nome ?? c.grupo_rede ?? c.grupoRede ?? '',
-    grupoId: c.grupo_id ?? c.grupoRede ?? undefined,
+    grupoRede: c.grupo_rede_nome ?? c.grupo_rede ?? c.grupoRede ?? '',
+    grupoId: c.grupo_id ?? undefined,
     observacoesInternas: c.observacao_interna ?? c.observacoesInternas ?? '',
     listaPrecos: c.lista_de_preco != null ? String(c.lista_de_preco) : c.listaPrecos ?? '',
     descontoPadrao: Number(c.desconto ?? c.descontoPadrao ?? 0),
