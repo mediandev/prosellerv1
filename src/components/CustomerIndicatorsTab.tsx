@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { TrendingUp, TrendingDown, Minus, Loader2, DollarSign, Package, Calendar } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Loader2, DollarSign } from 'lucide-react';
 import { api } from '../services/api';
 import { CustomerIndicators } from '../types/customerIndicators';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
@@ -12,61 +12,11 @@ interface CustomerIndicatorsTabProps {
 
 const createEmptyIndicators = (clienteId: string): CustomerIndicators => ({
   clienteId,
-  roi: {
-    investimento: 0,
-    receita: 0,
-    percentual: 0,
-  },
-  mix: {
-    totalDisponivel: 0,
-    totalAtivo: 0,
-    percentual: 0,
-    variacaoMesAnterior: 0,
-  },
-  ltv: {
-    totalReceita: 0,
-    totalPedidos: 0,
-  },
-  performance: {
-    monthlyData: [],
-    quarterlyData: [],
-    averageLast12Months: 0,
-  },
+  roi: { investimento: 0, receita: 0, percentual: 0 },
+  mix: { totalDisponivel: 0, totalAtivo: 0, percentual: 0, variacaoMesAnterior: 0 },
+  ltv: { totalReceita: 0, totalPedidos: 0 },
+  performance: { monthlyData: [], quarterlyData: [], averageLast12Months: 0 },
 });
-
-const normalizeIndicators = (payload: any, clienteId: string): CustomerIndicators => {
-  const base = createEmptyIndicators(clienteId);
-
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return base;
-  }
-
-  return {
-    clienteId: String(payload.clienteId || clienteId),
-    roi: {
-      investimento: Number(payload?.roi?.investimento || 0),
-      receita: Number(payload?.roi?.receita || 0),
-      percentual: Number(payload?.roi?.percentual || 0),
-    },
-    mix: {
-      totalDisponivel: Number(payload?.mix?.totalDisponivel || 0),
-      totalAtivo: Number(payload?.mix?.totalAtivo || 0),
-      percentual: Number(payload?.mix?.percentual || 0),
-      variacaoMesAnterior: Number(payload?.mix?.variacaoMesAnterior || 0),
-    },
-    ltv: {
-      totalReceita: Number(payload?.ltv?.totalReceita || 0),
-      totalPedidos: Number(payload?.ltv?.totalPedidos || 0),
-      primeiroPedido: payload?.ltv?.primeiroPedido,
-      ultimoPedido: payload?.ltv?.ultimoPedido,
-    },
-    performance: {
-      monthlyData: Array.isArray(payload?.performance?.monthlyData) ? payload.performance.monthlyData : [],
-      quarterlyData: Array.isArray(payload?.performance?.quarterlyData) ? payload.performance.quarterlyData : [],
-      averageLast12Months: Number(payload?.performance?.averageLast12Months || 0),
-    },
-  };
-};
 
 export function CustomerIndicatorsTab({ clienteId }: CustomerIndicatorsTabProps) {
   const [indicators, setIndicators] = useState<CustomerIndicators | null>(null);
@@ -79,99 +29,78 @@ export function CustomerIndicatorsTab({ clienteId }: CustomerIndicatorsTabProps)
   const loadIndicators = async () => {
     setLoading(true);
     try {
-      console.log('[INDICADORES] 🔍 Iniciando carregamento de indicadores para cliente:', clienteId);
-      const data = await api.getCustom(`indicadores/${clienteId}`);
-      console.log('[INDICADORES] ✅ Indicadores recebidos do backend:', {
-        clienteId: data?.clienteId,
-        roi: data?.roi,
-        mix: data?.mix,
-        ltv: data?.ltv,
-        performanceMonths: data?.performance?.monthlyData?.length,
-        performanceQuarters: data?.performance?.quarterlyData?.length
+      // Computa indicadores client-side a partir das vendas do cliente
+      const vendasData = await api.get('vendas');
+      const todasVendas = Array.isArray(vendasData) ? vendasData : [];
+      const vendasCliente = todasVendas.filter((v: any) => String(v.clienteId) === String(clienteId));
+
+      if (vendasCliente.length === 0) {
+        setIndicators(createEmptyIndicators(clienteId));
+        return;
+      }
+
+      // LTV
+      const totalReceita = vendasCliente.reduce((acc: number, v: any) => acc + Number(v.valorTotal ?? 0), 0);
+      const totalPedidos = vendasCliente.length;
+      const datasOrdenadas = vendasCliente
+        .map((v: any) => v.dataEmissao ?? v.dataCriacao ?? v.createdAt)
+        .filter(Boolean)
+        .sort();
+      const primeiroPedido = datasOrdenadas[0];
+      const ultimoPedido = datasOrdenadas[datasOrdenadas.length - 1];
+
+      // Performance mensal — últimos 12 meses
+      const agora = new Date();
+      const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+      const monthlyMap: Record<string, number> = {};
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        monthlyMap[key] = 0;
+      }
+      vendasCliente.forEach((v: any) => {
+        const raw = v.dataEmissao ?? v.dataCriacao ?? v.createdAt;
+        if (!raw) return;
+        const d = new Date(raw);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (key in monthlyMap) monthlyMap[key] += Number(v.valorTotal ?? 0);
       });
-      
-      // Log detalhado do ROI
-      if (data?.roi) {
-        console.log('[INDICADORES-ROI] 💰 Dados de ROI:', {
-          investimento: data.roi.investimento,
-          receita: data.roi.receita,
-          percentual: data.roi.percentual
-        });
-      }
-      
-      // Log detalhado do MIX
-      if (data?.mix) {
-        console.log('[INDICADORES-MIX] 📦 Dados de MIX:', {
-          totalDisponivel: data.mix.totalDisponivel,
-          totalAtivo: data.mix.totalAtivo,
-          percentual: data.mix.percentual,
-          variacaoMesAnterior: data.mix.variacaoMesAnterior
-        });
-      }
-      
-      // Log detalhado do LTV
-      if (data?.ltv) {
-        console.log('[INDICADORES-LTV] 📈 Dados de LTV:', {
-          totalReceita: data.ltv.totalReceita,
-          totalPedidos: data.ltv.totalPedidos,
-          primeiroPedido: data.ltv.primeiroPedido,
-          ultimoPedido: data.ltv.ultimoPedido
-        });
-      }
-      
-      // Log detalhado da Performance
-      if (data?.performance) {
-        console.log('[INDICADORES-PERFORMANCE] 📊 Dados de Performance:', {
-          totalMeses: data.performance.monthlyData?.length || 0,
-          totalTrimestres: data.performance.quarterlyData?.length || 0,
-          mediaUltimos12Meses: data.performance.averageLast12Months
-        });
-        
-        // Log COMPLETO de todos os dados mensais
-        if (data.performance.monthlyData?.length > 0) {
-          console.log('[INDICADORES-PERFORMANCE] 📋 TODOS OS DADOS MENSAIS:', 
-            data.performance.monthlyData.map((m: any) => ({
-              mes: m.monthName,
-              ano: m.year,
-              receita: m.revenue,
-              trimestre: m.quarter,
-              mesAtual: m.isCurrentMonth,
-              projecao: m.projection
-            }))
-          );
-        }
-        
-        // Log dos primeiros 3 meses para verificar dados
-        if (data.performance.monthlyData?.length > 0) {
-          console.log('[INDICADORES-PERFORMANCE] 📋 Primeiros 3 meses:', 
-            data.performance.monthlyData.slice(0, 3).map((m: any) => ({
-              mes: m.monthName,
-              ano: m.year,
-              receita: m.revenue,
-              trimestre: m.quarter
-            }))
-          );
-        }
-        
-        // Log dos meses com receita > 0
-        const mesesComReceita = data.performance.monthlyData?.filter((m: any) => m.revenue > 0) || [];
-        console.log('[INDICADORES-PERFORMANCE] 💰 Meses com receita > 0:', mesesComReceita.length, 'de', data.performance.monthlyData?.length || 0);
-        
-        if (mesesComReceita.length > 0) {
-          console.log('[INDICADORES-PERFORMANCE] 📋 Meses com receita:', 
-            mesesComReceita.map((m: any) => ({
-              mes: m.monthName,
-              receita: m.revenue
-            }))
-          );
-        }
-      }
-      
-      const normalizedData = normalizeIndicators(data, clienteId);
-      setIndicators(normalizedData);
-      console.log('[INDICADORES] ✅ Estado atualizado com sucesso');
+
+      const monthlyData = Object.entries(monthlyMap).map(([key, revenue]) => {
+        const [year, monthNum] = key.split('-');
+        const m = parseInt(monthNum) - 1;
+        const q = Math.floor(m / 3) + 1;
+        const isCurrentMonth = key === `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
+        return {
+          year: parseInt(year),
+          month: m + 1,
+          monthName: MONTH_NAMES[m],
+          quarter: q,
+          revenue,
+          isCurrentMonth,
+          projection: isCurrentMonth && revenue > 0
+            ? revenue * (agora.getDate() > 0 ? new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate() / agora.getDate() : 1)
+            : undefined,
+        };
+      });
+
+      const quarterMap: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+      const QUARTER_NAMES: Record<number, string> = { 1: '1º Trim.', 2: '2º Trim.', 3: '3º Trim.', 4: '4º Trim.' };
+      monthlyData.forEach(m => { quarterMap[m.quarter] += m.revenue; });
+      const quarterlyData = [1, 2, 3, 4].map(q => ({ year: agora.getFullYear(), quarter: q, quarterName: QUARTER_NAMES[q], revenue: quarterMap[q] }));
+
+      const avg = monthlyData.reduce((s, m) => s + m.revenue, 0) / 12;
+
+      setIndicators({
+        clienteId,
+        roi: { investimento: 0, receita: totalReceita, percentual: 0 },
+        mix: { totalDisponivel: 0, totalAtivo: 0, percentual: 0, variacaoMesAnterior: 0 },
+        ltv: { totalReceita, totalPedidos, primeiroPedido: primeiroPedido as unknown as Date, ultimoPedido: ultimoPedido as unknown as Date },
+        performance: { monthlyData, quarterlyData, averageLast12Months: avg },
+      });
     } catch (error) {
-      console.error('[INDICADORES] ❌ Erro ao carregar indicadores:', error);
+      console.error('[INDICADORES] Erro ao carregar indicadores:', error);
+      setIndicators(createEmptyIndicators(clienteId));
     } finally {
       setLoading(false);
     }

@@ -31,19 +31,29 @@ export function CustomerMixTab({ clienteId, readonly = false }: CustomerMixTabPr
   const carregarDados = async () => {
     setLoading(true);
     try {
-      const [produtosData, statusMixData] = await Promise.all([
-        api.get('produtos'),
-        api.getCustom(`status-mix/${clienteId}`),
-      ]);
-
-      setProdutos(produtosData.filter((p: Produto) => p.ativo !== false));
-      setStatusMix(statusMixData);
+      const produtosData = await api.get('produtos');
+      const vistos = new Set<string>();
+      const produtosFiltrados = (Array.isArray(produtosData) ? produtosData : [])
+        .filter((p: Produto) => {
+          if (vistos.has(p.id)) return false;
+          vistos.add(p.id);
+          return p.ativo !== false && p.disponivel !== false;
+        });
+      setProdutos(produtosFiltrados);
     } catch (error) {
-      console.error('[MIX] Erro ao carregar dados:', error);
-      toast.error('Erro ao carregar dados do mix');
-    } finally {
-      setLoading(false);
+      console.error('[MIX] Erro ao carregar produtos:', error);
+      toast.error('Erro ao carregar produtos');
     }
+
+    try {
+      const statusMixData = await api.getCustom(`status-mix/${clienteId}`);
+      setStatusMix(Array.isArray(statusMixData) ? statusMixData : []);
+    } catch {
+      // status-mix pode não estar deployado ainda; continua com lista vazia
+      setStatusMix([]);
+    }
+
+    setLoading(false);
   };
 
   const getStatusProduto = (produtoId: string): 'ativo' | 'inativo' => {
