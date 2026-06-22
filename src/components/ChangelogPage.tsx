@@ -8,6 +8,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.60',
+    items: [
+      'Clientes > Aba Mix: produtos agora carregam corretamente (filtro por ativo/disponível); status do mix por cliente persistido no banco via tabela status_mix.',
+      'Clientes > Aba Mix: carregamento de produtos não é mais bloqueado por falha no status-mix, evitando tela em branco.',
+      'Clientes > Aba Indicadores: LTV, performance mensal e trimestral agora calculados a partir das vendas reais do cliente.',
+    ],
+  },
+  {
     version: 'V 1.59',
     items: [
       'Relatórios > Curva ABC de Clientes: corrigido — todos os clientes agora são carregados corretamente (paginação completa, antes carregava apenas 10 de 960).',

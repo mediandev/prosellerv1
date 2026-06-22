@@ -4466,17 +4466,31 @@ export const api = {
   },
 
   getCustom: async (endpoint: string) => {
-    console.log('[API] getCustom (mockado):', endpoint);
+    // status-mix/{clienteId}
+    const statusMixMatch = endpoint.match(/^status-mix\/(\d+)$/);
+    if (statusMixMatch) {
+      return callEdgeFunction('status-mix-v2', 'GET', undefined, undefined, { cliente_id: statusMixMatch[1] });
+    }
+    console.warn('[API] getCustom sem rota real:', endpoint);
     return [];
   },
 
   updateCustom: async (endpoint: string, data: any) => {
-    console.log('[API] updateCustom (mockado):', endpoint);
+    // status-mix/{clienteId}/{produtoId}
+    const statusMixMatch = endpoint.match(/^status-mix\/(\d+)\/(\d+)$/);
+    if (statusMixMatch) {
+      return callEdgeFunction('status-mix-v2', 'PUT', {
+        clienteId: statusMixMatch[1],
+        produtoId: statusMixMatch[2],
+        ...data,
+      });
+    }
+    console.warn('[API] updateCustom sem rota real:', endpoint);
     return { success: true };
   },
 
   postCustom: async (endpoint: string, data: any) => {
-    console.log('[API] postCustom (mockado):', endpoint);
+    console.warn('[API] postCustom sem rota real:', endpoint);
     return { success: true };
   },
   importLogs: {
