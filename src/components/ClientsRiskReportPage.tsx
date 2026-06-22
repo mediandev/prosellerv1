@@ -82,17 +82,29 @@ export function ClientsRiskReportPage({ onNavigateBack }: ClientsRiskReportPageP
   const carregarDados = async () => {
     try {
       console.log('[CLIENTS-RISK] Carregando dados da API...');
-      const [clientesAPI, vendasAPI, vendedoresAPI] = await Promise.all([
-        api.get('clientes').catch(() => []),
+
+      // Busca todos os clientes paginando (edge function limita a 100/página)
+      const todosClientes: any[] = [];
+      let pagina = 1;
+      let totalPaginas = 1;
+      do {
+        const resp = await api.get('clientes', { params: { page: pagina, limit: 100 } }).catch(() => ({ clientes: [], pagination: { total_pages: 1 } }));
+        const arr = resp?.clientes ?? (Array.isArray(resp) ? resp : []);
+        todosClientes.push(...arr);
+        totalPaginas = resp?.pagination?.total_pages ?? 1;
+        pagina++;
+      } while (pagina <= totalPaginas);
+
+      const [vendasAPI, vendedoresAPI] = await Promise.all([
         api.get('vendas').catch(() => []),
         api.get('vendedores').catch(() => []),
       ]);
-      
-      setClientes(clientesAPI);
+
+      setClientes(todosClientes);
       setVendas(vendasAPI);
       setVendedores(vendedoresAPI);
       console.log('[CLIENTS-RISK] Dados carregados:', {
-        clientes: clientesAPI.length,
+        clientes: todosClientes.length,
         vendas: vendasAPI.length,
         vendedores: vendedoresAPI.length
       });
