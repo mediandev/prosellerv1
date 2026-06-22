@@ -6,6 +6,7 @@
 
 ## 2026-06-22
 
+- 2026-06-22 · [BUGFIX] · feat/revisao-geral (V 1.63) — CustomerMixTab reescrito para Supabase direto (contorna status-mix-v2 não deployada); ABC Clientes: Grupo/Rede → combobox pesquisável, status "Pendentes", fallback "Cliente #ID". Migration 137 pendente aplicação em prod. SHA 1392ff9.
 - 2026-06-22 · [BUGFIX] · fix/conta-corrente-arquivos (V 1.61) — Conta Corrente: handlers de visualizar/baixar arquivo agora abrem URL real; mapper de arquivosAnexos string[] corrigido no detail fetch (CompromissoDialogDetalhes via handleVisualizarCompromisso) e no list fetch.
 - 2026-06-22 · [BUGFIX] · fix/mix-indicadores-v160 (V 1.60) — Aba Mix: produtos carregam filtrando por ativo/disponivel; fetch separado para não bloquear por falha no status-mix. Aba Indicadores: LTV e performance calculados de vendas reais. Backend: edge function status-mix-v2 + migration 137 (status_mix table). PR #67.
 - 2026-06-22 · [BUGFIX] · fix/abc-clientes-paginacao (V 1.59) — Curva ABC de Clientes, Mix por Cliente e ROI por Cliente agora carregam todos os clientes via paginação completa (antes: apenas 10 de 960). Filtro Grupo/Rede: corrigido exibição de UUID no lugar do nome do grupo (workaround client-side em mapClienteFromApi). Filtro Natureza de Operação: exibe apenas naturezas presentes nas vendas do período.
