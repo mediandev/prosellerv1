@@ -8,6 +8,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.63',
+    items: [
+      'Clientes > Aba Mix: produtos carregados via query direta Supabase (contorna edge function status-mix-v2 não deployada); auto-ativação por vendas históricas.',
+      'Relatórios > Curva ABC de Clientes: filtro Grupo/Rede convertido para combobox pesquisável (151+ grupos).',
+      'Relatórios > Curva ABC de Clientes: opção "Pendentes" adicionada ao filtro Status das Vendas.',
+      'Relatórios > Curva ABC de Clientes: fallback "Cliente Desconhecido" substituído por "Cliente #ID" quando nome não disponível.',
+    ],
+  },
+  {
     version: 'V 1.62',
     items: [
       'Relatórios > Curva ABC de Produtos: dados agora carregam corretamente — client Supabase injeta token JWT, respeitando RLS.',

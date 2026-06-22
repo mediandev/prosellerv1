@@ -31,6 +31,7 @@
 - [Tarefa 9 — F-LOG-CRM R-LOG-2 · Bucket Storage `logistica-comprovantes`](#tarefa-9--f-log-crm-r-log-2--bucket-storage-logistica-comprovantes)
 - [Tarefa 10 — F-LOG-CRM R-LOG-4 · Migration 120 + deploy ssw-tracking-v1 + frete-logistica-v1](#tarefa-10--f-log-crm-r-log-4--migration-120--deploy-ssw-tracking-v1--frete-logistica-v1)
 - [Tarefa 11 — F-LOG-CRM R-LOG-3 · Migration 121 + deploy tiny-enviar-pedido-venda-v1 + secret AUTO_FRETE](#tarefa-11--f-log-crm-r-log-3--migration-121--deploy-tiny-enviar-pedido-venda-v1--secret-auto_frete)
+- [Tarefa 12 — Migration 137 · tabela `status_mix` (Aba MIX de Produtos)](#tarefa-12--migration-137--tabela-status_mix-aba-mix-de-produtos)
 
 ---
 
@@ -1312,3 +1313,79 @@ npx supabase functions deploy pedido-venda-v2 --project-ref xxoiqfraeolsqsmsheue
 - **Tipos Zod são fonte de verdade.** Toda migration cita o arquivo `packages/shared/types/` correspondente.
 - **Sem segredos em texto claro.** Usar placeholders `<valor>`; Cursor Agent lê do `.env.local` do Cursor.
 - **DDL sempre via `apply_migration`, NUNCA `execute_sql`** (runbook v3.2). Deploy de Edge Function sempre via CLI local (`npx supabase functions deploy`), NUNCA via MCP (ADR-005, INC-001).
+
+---
+
+## Tarefa 12 — Migration 137 · tabela `status_mix` (Aba MIX de Produtos)
+
+**Feature associada:** Revisão Geral 2026-06-18 — Aba MIX de Produtos por cliente
+**MCP:** Supabase MCP (projeto `xxoiqfraeolsqsmsheue`) via `apply_migration`
+**Arquivo:** `supabase/migrations/137_status_mix_table.sql`
+**Prioridade:** Alta — a aba MIX retorna 404 sem esta tabela (edge function `status-mix-v2` também não está deployada)
+
+### Objetivo
+
+Criar a tabela `status_mix` que armazena o status de cada produto (ativo/inativo) no mix de cada cliente. Sem ela, todas as leituras e gravações do componente `CustomerMixTab` retornam 404.
+
+### Pré-condições
+
+1. **Sem backup necessário** — DDL puro (`CREATE TABLE`), sem dados afetados.
+2. **Sem janela especial** — operação `CREATE TABLE IF NOT EXISTS` + RLS não trava tabelas existentes.
+3. **Não há staging** — plano Free, aplicar direto em produção conforme DECISIONS_LOG.
+
+### SQL (já em `supabase/migrations/137_status_mix_table.sql`)
+
+```sql
+CREATE TABLE IF NOT EXISTS public.status_mix (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  cliente_id bigint NOT NULL,
+  produto_id bigint NOT NULL,
+  status text NOT NULL DEFAULT 'inativo' CHECK (status IN ('ativo', 'inativo')),
+  ativado_manualmente boolean NOT NULL DEFAULT false,
+  codigo_sku_cliente text,
+  data_ultimo_pedido timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (cliente_id, produto_id)
+);
+
+ALTER TABLE public.status_mix ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "authenticated_manage_status_mix" ON public.status_mix
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE OR REPLACE FUNCTION public.update_status_mix_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
+
+CREATE TRIGGER status_mix_updated_at
+  BEFORE UPDATE ON public.status_mix
+  FOR EACH ROW EXECUTE FUNCTION public.update_status_mix_updated_at();
+```
+
+### Operação (cole no Cursor Agent)
+
+```
+Usando Supabase MCP (projeto xxoiqfraeolsqsmsheue), aplique a migration
+137_status_mix_table.sql em produção via apply_migration.
+
+SQL: (copie o bloco acima)
+```
+
+### Smoke test pós-aplicação
+
+```sql
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public' AND table_name = 'status_mix';
+-- Deve retornar 1 linha
+
+SELECT COUNT(*) FROM pg_policies WHERE tablename = 'status_mix';
+-- Deve retornar 1
+```
+
+### Rollback
+
+```sql
+DROP TABLE IF EXISTS public.status_mix;
+DROP FUNCTION IF EXISTS public.update_status_mix_updated_at();
+```

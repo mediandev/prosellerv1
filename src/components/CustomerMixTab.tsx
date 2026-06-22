@@ -7,6 +7,7 @@ import { Input } from './ui/input';
 import { Package, Search, CheckCircle2, XCircle, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { api } from '../services/api';
+import { getSupabaseClient } from '../services/supabase';
 import { Produto } from '../types/produto';
 import { StatusMix } from '../types/statusMix';
 
@@ -30,29 +31,151 @@ export function CustomerMixTab({ clienteId, readonly = false }: CustomerMixTabPr
 
   const carregarDados = async () => {
     setLoading(true);
+    const supabase = getSupabaseClient();
+
+    // 1. Carregar produtos (apenas situacao Ativo, sem duplicatas, sem promocionais)
+    let produtosList: Produto[] = [];
     try {
       const produtosData = await api.get('produtos');
       const vistos = new Set<string>();
-      const produtosFiltrados = (Array.isArray(produtosData) ? produtosData : [])
+      produtosList = (Array.isArray(produtosData) ? produtosData : [])
         .filter((p: Produto) => {
           if (vistos.has(p.id)) return false;
           vistos.add(p.id);
-          return p.ativo !== false && p.disponivel !== false;
+          // Apenas situacao Ativo e tipo revenda (excluir promocionais/brindes)
+          const tipoNome = (p.nomeTipoProduto || '').toLowerCase();
+          const isRevenda = !tipoNome || tipoNome.includes('revenda') || (!tipoNome.includes('promo') && !tipoNome.includes('brinde'));
+          return p.situacao === 'Ativo' && isRevenda;
         });
-      setProdutos(produtosFiltrados);
+      setProdutos(produtosList);
     } catch (error) {
       console.error('[MIX] Erro ao carregar produtos:', error);
       toast.error('Erro ao carregar produtos');
     }
 
+    // 2. Carregar status_mix atual via query direta (a edge function status-mix-v2 pode não estar deployada)
+    let statusMixAtual: StatusMix[] = [];
     try {
-      const statusMixData = await api.getCustom(`status-mix/${clienteId}`);
-      setStatusMix(Array.isArray(statusMixData) ? statusMixData : []);
-    } catch {
-      // status-mix pode não estar deployado ainda; continua com lista vazia
-      setStatusMix([]);
+      const { data, error } = await supabase
+        .from('status_mix')
+        .select('*')
+        .eq('cliente_id', Number(clienteId));
+      if (!error && data) {
+        statusMixAtual = data.map((row: any) => ({
+          id: String(row.id),
+          clienteId: String(row.cliente_id),
+          produtoId: String(row.produto_id),
+          status: row.status as 'ativo' | 'inativo',
+          ativadoManualmente: row.ativado_manualmente,
+          codigoSkuCliente: row.codigo_sku_cliente ?? undefined,
+          dataUltimoPedido: row.data_ultimo_pedido ?? undefined,
+          dataCriacao: row.created_at,
+          dataAtualizacao: row.updated_at,
+        }));
+      }
+    } catch (err) {
+      console.warn('[MIX] status_mix query failed:', err);
     }
 
+    // 3. Auto-ativar produtos que aparecem em pedidos deste cliente
+    try {
+      const todasVendas = await api.get('vendas', { params: { clienteId } });
+      const vendaIds = (Array.isArray(todasVendas) ? todasVendas : []).map((v: any) => Number(v.id)).filter(Boolean);
+
+      if (vendaIds.length > 0) {
+        // Buscar todos os itens dos pedidos deste cliente
+        const allItens: any[] = [];
+        for (let i = 0; i < vendaIds.length; i += 200) {
+          const batch = vendaIds.slice(i, i + 200);
+          const { data } = await supabase
+            .from('pedido_venda_produtos')
+            .select('pedido_venda_id, produto_id')
+            .in('pedido_venda_id', batch);
+          if (data) allItens.push(...data);
+        }
+
+        // Mapear produto_id → data do último pedido
+        const vendaDataMap = new Map<number, string>();
+        (Array.isArray(todasVendas) ? todasVendas : []).forEach((v: any) => {
+          vendaDataMap.set(Number(v.id), String(v.dataPedido));
+        });
+
+        const produtoUltimoPedido = new Map<number, string>();
+        allItens.forEach((item: any) => {
+          const dataVenda = vendaDataMap.get(item.pedido_venda_id);
+          if (dataVenda) {
+            const atual = produtoUltimoPedido.get(item.produto_id);
+            if (!atual || dataVenda > atual) {
+              produtoUltimoPedido.set(item.produto_id, dataVenda);
+            }
+          }
+        });
+
+        // Para cada produto com venda, auto-ativar se não foi manualmente desativado
+        const manualmenteDesativados = new Set(
+          statusMixAtual.filter(sm => !sm.ativadoManualmente && sm.status === 'inativo').map(sm => Number(sm.produtoId))
+        );
+        const jaAtivos = new Set(
+          statusMixAtual.filter(sm => sm.status === 'ativo').map(sm => Number(sm.produtoId))
+        );
+
+        const upserts: any[] = [];
+        produtoUltimoPedido.forEach((dataUltimoPedido, produtoId) => {
+          // Ativar se tem venda E não foi manualmente desativado E ainda não está ativo
+          const foiManualmenteDesativado = statusMixAtual.find(
+            sm => Number(sm.produtoId) === produtoId && !sm.ativadoManualmente && sm.status === 'inativo'
+          );
+          if (!foiManualmenteDesativado) {
+            upserts.push({
+              cliente_id: Number(clienteId),
+              produto_id: produtoId,
+              status: 'ativo',
+              ativado_manualmente: false,
+              data_ultimo_pedido: dataUltimoPedido,
+            });
+          } else if (jaAtivos.has(produtoId)) {
+            // Já ativo, apenas atualizar data_ultimo_pedido
+            upserts.push({
+              cliente_id: Number(clienteId),
+              produto_id: produtoId,
+              status: 'ativo',
+              ativado_manualmente: false,
+              data_ultimo_pedido: dataUltimoPedido,
+            });
+          }
+        });
+
+        if (upserts.length > 0) {
+          const { data: upsertData } = await supabase
+            .from('status_mix')
+            .upsert(upserts, { onConflict: 'cliente_id,produto_id', ignoreDuplicates: false })
+            .select();
+          if (upsertData) {
+            const novosStatus: StatusMix[] = upsertData.map((row: any) => ({
+              id: String(row.id),
+              clienteId: String(row.cliente_id),
+              produtoId: String(row.produto_id),
+              status: row.status as 'ativo' | 'inativo',
+              ativadoManualmente: row.ativado_manualmente,
+              codigoSkuCliente: row.codigo_sku_cliente ?? undefined,
+              dataUltimoPedido: row.data_ultimo_pedido ?? undefined,
+              dataCriacao: row.created_at,
+              dataAtualizacao: row.updated_at,
+            }));
+            // Merge: manter os que não foram upsertados + adicionar/substituir os novos
+            const novosIds = new Set(novosStatus.map(s => s.produtoId));
+            statusMixAtual = [
+              ...statusMixAtual.filter(s => !novosIds.has(s.produtoId)),
+              ...novosStatus,
+            ];
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[MIX] Auto-ativação de vendas falhou:', err);
+    }
+
+    setStatusMix(statusMixAtual);
     setLoading(false);
   };
 
@@ -70,27 +193,45 @@ export function CustomerMixTab({ clienteId, readonly = false }: CustomerMixTabPr
 
     setSalvando(produtoId);
     try {
-      const response = await api.updateCustom(
-        `status-mix/${clienteId}/${produtoId}`,
-        {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('status_mix')
+        .upsert({
+          cliente_id: Number(clienteId),
+          produto_id: Number(produtoId),
           status: novoStatus,
-          ativadoManualmente: novoStatus === 'ativo', // Se ativar manualmente, marca como tal
-        }
-      );
+          // Se desativar manualmente, marca para não ser reativado automaticamente
+          ativado_manualmente: novoStatus === 'inativo',
+        }, { onConflict: 'cliente_id,produto_id' })
+        .select()
+        .single();
 
-      // Atualizar estado local
+      if (error) throw error;
+
+      const mapped: StatusMix = {
+        id: String(data.id),
+        clienteId: String(data.cliente_id),
+        produtoId: String(data.produto_id),
+        status: data.status,
+        ativadoManualmente: data.ativado_manualmente,
+        codigoSkuCliente: data.codigo_sku_cliente ?? undefined,
+        dataUltimoPedido: data.data_ultimo_pedido ?? undefined,
+        dataCriacao: data.created_at,
+        dataAtualizacao: data.updated_at,
+      };
+
       const index = statusMix.findIndex(sm => sm.produtoId === produtoId);
       if (index >= 0) {
         const newStatusMix = [...statusMix];
-        newStatusMix[index] = response;
+        newStatusMix[index] = mapped;
         setStatusMix(newStatusMix);
       } else {
-        setStatusMix([...statusMix, response]);
+        setStatusMix([...statusMix, mapped]);
       }
 
       toast.success(
-        novoStatus === 'ativo' 
-          ? 'Produto adicionado ao mix' 
+        novoStatus === 'ativo'
+          ? 'Produto adicionado ao mix'
           : 'Produto removido do mix'
       );
     } catch (error) {
@@ -109,22 +250,41 @@ export function CustomerMixTab({ clienteId, readonly = false }: CustomerMixTabPr
       const statusItem = getStatusMixItem(produtoId);
       const status = statusItem?.status || 'inativo';
 
-      const response = await api.updateCustom(
-        `status-mix/${clienteId}/${produtoId}`,
-        {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('status_mix')
+        .upsert({
+          cliente_id: Number(clienteId),
+          produto_id: Number(produtoId),
           status,
-          codigoSkuCliente: codigoSkuCliente.trim() || undefined,
-        }
-      );
+          ativado_manualmente: statusItem?.ativadoManualmente ?? false,
+          codigo_sku_cliente: codigoSkuCliente.trim() || null,
+        }, { onConflict: 'cliente_id,produto_id' })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const mapped: StatusMix = {
+        id: String(data.id),
+        clienteId: String(data.cliente_id),
+        produtoId: String(data.produto_id),
+        status: data.status,
+        ativadoManualmente: data.ativado_manualmente,
+        codigoSkuCliente: data.codigo_sku_cliente ?? undefined,
+        dataUltimoPedido: data.data_ultimo_pedido ?? undefined,
+        dataCriacao: data.created_at,
+        dataAtualizacao: data.updated_at,
+      };
 
       // Atualizar estado local
       const index = statusMix.findIndex(sm => sm.produtoId === produtoId);
       if (index >= 0) {
         const newStatusMix = [...statusMix];
-        newStatusMix[index] = response;
+        newStatusMix[index] = mapped;
         setStatusMix(newStatusMix);
       } else {
-        setStatusMix([...statusMix, response]);
+        setStatusMix([...statusMix, mapped]);
       }
 
       toast.success('Código SKU Cliente salvo com sucesso');

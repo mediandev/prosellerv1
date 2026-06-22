@@ -35,3 +35,4 @@
 ## 2026-06-22
 
 - 2026-06-22 · [BUGFIX] · `fix/relatorios-include-itens` (PR #64 / V 1.58) — Relatórios SolicitadoFaturado e MixCliente agora passam `include_itens=true` para carregar produtos. Badge Backoffice/Vendedor adicionado na lista de Usuários. SHA `59e2724`.
+2026-06-22 · [FIX] · Relatórios ABC Produtos/Mix/ROI: auth Supabase corrigida (JWT inject), loading infinito ROI, include_itens → query direta · PR #69 (V 1.62)

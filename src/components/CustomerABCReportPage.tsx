@@ -11,7 +11,7 @@ import { Badge } from "./ui/badge";
 import { Combobox } from "./ui/combobox";
 import { api } from "../services/api";
 import { toast } from "sonner@2.0.3";
-import { isStatusConcluido } from "../utils/statusVendaUtils";
+import { isStatusConcluido, isStatusPendente } from "../utils/statusVendaUtils";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
 import { ptBR } from "date-fns/locale";
@@ -28,7 +28,7 @@ interface CustomerABCFilters {
   uf: string;
   empresaEmitenteId: string;
   groupBy: GroupBy;
-  statusVendas: "concluidas" | "todas"; // NOVO: Filtro de status
+  statusVendas: "concluidas" | "todas" | "pendentes";
 }
 
 interface CustomerABCData {
@@ -109,7 +109,7 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
     uf: "all",
     empresaEmitenteId: "all",
     groupBy: "none",
-    statusVendas: "todas", // NOVO: Inicializar com "todas"
+    statusVendas: "todas",
   });
 
   // Estados para controle de período
@@ -240,11 +240,10 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
         return false;
       }
 
-      // CORRIGIDO: Filtro de status - aceitar todas as variações de status concluído
       if (filters.statusVendas === "concluidas") {
-        if (!isStatusConcluido(venda.status || '')) {
-          return false;
-        }
+        if (!isStatusConcluido(venda.status || '')) return false;
+      } else if (filters.statusVendas === "pendentes") {
+        if (!isStatusPendente(venda.status || '')) return false;
       }
 
       return true;
@@ -279,7 +278,7 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
       return {
         clienteId,
         grupoRede: cliente?.grupoRede || data.grupoRede || "-",
-        nomeCliente: cliente?.razaoSocial || data.nomeCliente || "Cliente Desconhecido",
+        nomeCliente: cliente?.razaoSocial || data.nomeCliente || `Cliente #${clienteId}`,
         cnpj: cliente?.cpfCnpj || data.cnpj || "-",
         uf: cliente?.uf || data.uf || "-",
         vendedor: vendedor?.nome || "Vendedor Desconhecido",
@@ -389,7 +388,7 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
       uf: "all",
       empresaEmitenteId: "all",
       groupBy: "none",
-      statusVendas: "todas", // NOVO: Resetar status
+      statusVendas: "todas",
     });
   };
 
@@ -549,19 +548,17 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
                 <div className="space-y-2 lg:col-span-3">
                   <Label>Grupo/Rede</Label>
-                  <Select value={filters.grupoRede} onValueChange={(value) => setFilters({ ...filters, grupoRede: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todos os grupos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem key="grp-all" value="all">Todos os grupos</SelectItem>
-                      {gruposRedes.map((grupo) => (
-                        <SelectItem key={grupo} value={grupo}>
-                          {grupo}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    options={[
+                      { value: "all", label: "Todos os grupos" },
+                      ...gruposRedes.map((grupo) => ({ value: grupo, label: grupo })),
+                    ]}
+                    value={filters.grupoRede}
+                    onValueChange={(value) => setFilters({ ...filters, grupoRede: value || "all" })}
+                    placeholder="Todos os grupos"
+                    searchPlaceholder="Pesquisar grupo/rede..."
+                    emptyText="Nenhum grupo encontrado."
+                  />
                 </div>
 
                 <div className="space-y-2 lg:col-span-3">
@@ -615,13 +612,14 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
 
                 <div className="space-y-2 lg:col-span-3">
                   <Label>Status das Vendas</Label>
-                  <Select value={filters.statusVendas} onValueChange={(value: "concluidas" | "todas") => setFilters({ ...filters, statusVendas: value })}>
+                  <Select value={filters.statusVendas} onValueChange={(value: "concluidas" | "todas" | "pendentes") => setFilters({ ...filters, statusVendas: value })}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem key="status-todas" value="todas">Todas</SelectItem>
                       <SelectItem key="status-concluidas" value="concluidas">Concluídas</SelectItem>
+                      <SelectItem key="status-pendentes" value="pendentes">Pendentes</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
