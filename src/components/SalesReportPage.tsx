@@ -210,8 +210,7 @@ export function SalesReportPage({ onBack }: SalesReportPageProps) {
           groupKey = venda.nomeCliente;
           break;
         case "grupo":
-          const cliente = clientes.find(c => c.id === venda.clienteId);
-          groupKey = cliente?.grupoRede || "Sem Grupo";
+          groupKey = venda.clienteGrupoRede || clientes.find(c => String(c.id) === String(venda.clienteId))?.grupoRede || "Sem Grupo";
           break;
         case "vendedor":
           // 🆕 CORRIGIDO: Buscar vendedor por ID, não por nome
@@ -266,15 +265,15 @@ export function SalesReportPage({ onBack }: SalesReportPageProps) {
   const exportToExcel = () => {
     const headers = ["Data", "ID da Venda", "OC Cliente", "Grupo/Rede", "Cliente", "CNPJ", "UF", "Empresa Emitente", "Natureza Operação", "Valor Total"];
     const rows = filteredSales.map((venda) => {
-      const cliente = clientes.find(c => c.id === venda.clienteId);
+      const cliente = clientes.find(c => String(c.id) === String(venda.clienteId));
       return [
         venda.dataPedido.toLocaleDateString('pt-BR'),
         venda.id,
         venda.ordemCompraCliente || "-",
-        cliente?.grupoRede || "-",
+        venda.clienteGrupoRede || cliente?.grupoRede || "-",
         venda.nomeCliente,
-        cliente?.cpfCnpj || "-",
-        cliente?.uf || "-",
+        venda.cnpjCliente || cliente?.cpfCnpj || "-",
+        venda.clienteUf || cliente?.uf || "-",
         venda.nomeEmpresaFaturamento,
         venda.nomeNaturezaOperacao,
         `R$ ${venda.valorPedido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -517,7 +516,7 @@ export function SalesReportPage({ onBack }: SalesReportPageProps) {
                         }
 
                         const venda = item;
-                        const cliente = clientes.find(c => c.id === venda.clienteId);
+                        const cliente = clientes.find(c => String(c.id) === String(venda.clienteId));
                         const vendaData = new Date(venda.dataPedido);
 
                         return (
@@ -525,10 +524,10 @@ export function SalesReportPage({ onBack }: SalesReportPageProps) {
                             <TableCell>{vendaData.toLocaleDateString('pt-BR')}</TableCell>
                             <TableCell className="font-mono text-sm">{venda.id}</TableCell>
                             <TableCell>{venda.ordemCompraCliente || "-"}</TableCell>
-                            <TableCell>{cliente?.grupoRede || "-"}</TableCell>
+                            <TableCell>{venda.clienteGrupoRede || cliente?.grupoRede || "-"}</TableCell>
                             <TableCell>{venda.nomeCliente}</TableCell>
-                            <TableCell className="font-mono text-sm">{cliente?.cpfCnpj || "-"}</TableCell>
-                            <TableCell>{cliente?.uf || "-"}</TableCell>
+                            <TableCell className="font-mono text-sm">{venda.cnpjCliente || cliente?.cpfCnpj || "-"}</TableCell>
+                            <TableCell>{venda.clienteUf || cliente?.uf || "-"}</TableCell>
                             <TableCell>{venda.nomeEmpresaFaturamento}</TableCell>
                             <TableCell>
                               <Badge variant="outline">{venda.nomeNaturezaOperacao}</Badge>
