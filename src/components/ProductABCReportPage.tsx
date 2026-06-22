@@ -110,8 +110,8 @@ export function ProductABCReportPage({ onBack }: ProductABCReportPageProps) {
 
       // Filtro de UF
       if (filters.uf && filters.uf !== "all") {
-        const cliente = clientes.find(c => c.id === venda.clienteId);
-        if (cliente?.uf !== filters.uf) return false;
+        const ufVenda = venda.clienteUf || clientes.find(c => String(c.id) === String(venda.clienteId))?.uf;
+        if (ufVenda !== filters.uf) return false;
       }
 
       // Filtro de Empresa Emitente

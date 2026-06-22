@@ -186,7 +186,7 @@ export function RelatorioMixCliente({ onNavigateBack }: RelatorioMixClienteProps
       // Buscar vendas do cliente no período
       const todasVendas = await api.get("vendas");
       const vendasCliente = todasVendas.filter((venda: Venda) => {
-        if (venda.clienteId !== clienteSelecionado.id) return false;
+        if (String(venda.clienteId) !== String(clienteSelecionado.id)) return false;
 
         const dataVenda = new Date(venda.dataPedido);
         return dataVenda >= dataInicial && dataVenda <= dataFinal;
