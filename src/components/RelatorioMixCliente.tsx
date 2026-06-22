@@ -184,7 +184,7 @@ export function RelatorioMixCliente({ onNavigateBack }: RelatorioMixClienteProps
       console.log("[RELATORIO-MIX] Período:", { dataInicial, dataFinal });
 
       // Buscar vendas do cliente no período
-      const todasVendas = await api.get("vendas");
+      const todasVendas = await api.get("vendas", { params: { include_itens: true } });
       const vendasCliente = todasVendas.filter((venda: Venda) => {
         if (String(venda.clienteId) !== String(clienteSelecionado.id)) return false;
 

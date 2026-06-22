@@ -67,7 +67,7 @@ export function SolicitadoFaturadoReportPage({ onBack }: SolicitadoFaturadoRepor
     try {
       console.log('[SOLICITADO-FATURADO] Carregando dados da API...');
       const [vendasAPI, clientesData, vendedoresData, naturezasData] = await Promise.all([
-        api.get('vendas'),
+        api.get('vendas', { params: { include_itens: true } }),
         api.get('clientes'),
         api.get('vendedores'),
         api.get('naturezas-operacao'),
