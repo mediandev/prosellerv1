@@ -8,6 +8,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.59',
+    items: [
+      'Relatórios > Curva ABC de Clientes: corrigido — todos os clientes agora são carregados corretamente (paginação completa, antes carregava apenas 10 de 960).',
+      'Relatórios > Mix de Produtos por Cliente: corrigido — todos os clientes agora são carregados com paginação completa.',
+      'Relatórios > ROI por Cliente: corrigido — todos os clientes agora são carregados com paginação completa.',
+      'Relatórios > Curva ABC de Clientes: filtro Grupo/Rede agora exibe nomes corretos (corrigido exibição de UUID no lugar do nome do grupo).',
+      'Relatórios > Curva ABC de Clientes: filtro Natureza de Operação agora exibe apenas as naturezas presentes nos dados do período selecionado.',
+    ],
+  },
+  {
     version: 'V 1.58',
     items: [
       'Relatórios > Solicitado vs Faturado: corrigido — produtos agora carregam corretamente (itens de cada pedido incluídos na listagem).',

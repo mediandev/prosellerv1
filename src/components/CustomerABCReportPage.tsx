@@ -64,18 +64,30 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
   const carregarDados = async () => {
     try {
       console.log('[ABC-CLIENTES-PAGE] Carregando dados da API...');
-      const [vendasAPI, clientesData, vendedoresData, naturezasData] = await Promise.all([
+
+      // Carregar todos os clientes paginando (edge function limita por página)
+      let todosClientes: any[] = [];
+      let pagina = 1;
+      let totalPaginas = 1;
+      do {
+        const resp = await api.get('clientes', { params: { page: pagina, limit: 100 } }).catch(() => ({ clientes: [], pagination: { total_pages: 1 } }));
+        const arr = resp?.clientes ?? (Array.isArray(resp) ? resp : []);
+        todosClientes = todosClientes.concat(arr);
+        totalPaginas = resp?.pagination?.total_pages ?? 1;
+        pagina++;
+      } while (pagina <= totalPaginas);
+
+      const [vendasAPI, vendedoresData, naturezasData] = await Promise.all([
         api.get('vendas'),
-        api.get('clientes'),
         api.get('vendedores'),
         api.naturezasOperacao.list().catch(() => []),
       ]);
 
       setVendas(Array.isArray(vendasAPI) ? vendasAPI : []);
-      setClientes(Array.isArray(clientesData) ? clientesData : []);
+      setClientes(todosClientes);
       setVendedores(Array.isArray(vendedoresData) ? vendedoresData : []);
       setNaturezas(Array.isArray(naturezasData) ? naturezasData : []);
-      console.log('[ABC-CLIENTES-PAGE] Dados carregados');
+      console.log(`[ABC-CLIENTES-PAGE] Dados carregados: ${todosClientes.length} clientes`);
     } catch (error) {
       console.error('[ABC-CLIENTES-PAGE] Erro ao carregar dados:', error);
       setVendas([]);
@@ -351,13 +363,18 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
     );
   }, [abcData]);
 
-  // Obter grupos/redes únicos
+  // Obter grupos/redes únicos (apenas de clientes — vendas podem ter IDs em vez de nomes)
   const gruposRedes = useMemo(() => {
     const grupos = new Set<string>();
     clientes.forEach(c => { if (c.grupoRede) grupos.add(c.grupoRede); });
-    vendas.forEach(v => { if ((v as any).clienteGrupoRede) grupos.add((v as any).clienteGrupoRede); });
     return Array.from(grupos).sort();
-  }, [clientes, vendas]);
+  }, [clientes]);
+
+  // Naturezas que aparecem nas vendas carregadas
+  const naturezasUsadas = useMemo(() => {
+    const idsUsados = new Set(vendas.map(v => String(v.naturezaOperacaoId)).filter(Boolean));
+    return naturezas.filter(n => idsUsados.has(String(n.id)));
+  }, [naturezas, vendas]);
 
   // Limpar filtros
   const clearFilters = () => {
@@ -555,8 +572,8 @@ export function CustomerABCReportPage({ onBack }: CustomerABCReportPageProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem key="nat-all" value="all">Todas as naturezas</SelectItem>
-                      {naturezas.map((natureza) => (
-                        <SelectItem key={natureza.id} value={natureza.id}>
+                      {naturezasUsadas.map((natureza) => (
+                        <SelectItem key={natureza.id} value={String(natureza.id)}>
                           {natureza.nome}
                         </SelectItem>
                       ))}

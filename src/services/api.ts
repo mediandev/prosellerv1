@@ -624,7 +624,9 @@ function mapClienteFromApi(item: any): any {
     segmentoId:
       item.segmentoId ??
       (item.segmento_id != null ? String(item.segmento_id) : undefined),
-    grupoRede: item.grupoRede ?? item.grupo_id ?? item.grupo_rede_nome ?? item.grupo_rede ?? '',
+    grupoRede: (item.grupoRede && !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(item.grupoRede))
+      ? item.grupoRede
+      : (item.grupo_rede_nome ?? item.grupo_rede ?? ''),
     grupoId: item.grupoId ?? item.grupo_id ?? item.grupoRede ?? undefined,
     cep: item.cep ?? item.endereco?.cep ?? '',
     logradouro: item.logradouro ?? item.endereco?.logradouro ?? '',
