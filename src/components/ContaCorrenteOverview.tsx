@@ -153,16 +153,12 @@ export function ContaCorrenteOverview() {
         tipoCompromisso: comp.tipoCompromisso === 'Investimento' ? 'Investimento' : 'Ressarcimento',
         categoriaId: comp.categoriaId ? String(comp.categoriaId) : undefined,
         categoriaNome: comp.categoria || comp.categoriaNome,
-        arquivos: Array.isArray(comp.arquivosAnexos) ? comp.arquivosAnexos.map((arq: any) => ({
-          id: String(arq.id || ''),
-          nomeArquivo: arq.nomeArquivo || arq.nome || '',
-          tamanho: Number(arq.tamanho || 0),
-          tipoArquivoId: String(arq.tipoArquivoId || ''),
-          tipoArquivoNome: arq.tipoArquivoNome || arq.tipo || '',
-          url: arq.url || '',
-          dataUpload: arq.dataUpload || arq.data || '',
-          uploadedBy: arq.uploadedBy || arq.criadoPor || '',
-        })) : [],
+        arquivos: Array.isArray(comp.arquivosAnexos) ? comp.arquivosAnexos.map((arq: any) => {
+          if (typeof arq === 'string') {
+            return { id: '', nomeArquivo: arq.split('/').pop() || arq, tamanho: 0, tipoArquivoId: '', tipoArquivoNome: '', url: arq, dataUpload: '', uploadedBy: '' };
+          }
+          return { id: String(arq.id || ''), nomeArquivo: arq.nomeArquivo || arq.nome || '', tamanho: Number(arq.tamanho || 0), tipoArquivoId: String(arq.tipoArquivoId || ''), tipoArquivoNome: arq.tipoArquivoNome || arq.tipo || '', url: arq.url || '', dataUpload: arq.dataUpload || arq.data || '', uploadedBy: arq.uploadedBy || arq.criadoPor || '' };
+        }) : [],
         status: comp.status === 'Pendente' ? 'Pendente' : 
                 comp.status === 'Pago Parcialmente' ? 'Pago Parcialmente' : 
                 comp.status === 'Pago Integralmente' ? 'Pago Integralmente' : 
@@ -454,16 +450,12 @@ export function ContaCorrenteOverview() {
           tipoCompromisso: comp.tipoCompromisso === 'Investimento' ? 'Investimento' : 'Ressarcimento',
           categoriaId: comp.categoriaId ? String(comp.categoriaId) : undefined,
           categoriaNome: comp.categoriaNome,
-          arquivos: Array.isArray(comp.arquivosAnexos) ? comp.arquivosAnexos.map((arq: any) => ({
-            id: String(arq.id || ''),
-            nomeArquivo: arq.nomeArquivo || arq.nome || '',
-            tamanho: Number(arq.tamanho || 0),
-            tipoArquivoId: String(arq.tipoArquivoId || ''),
-            tipoArquivoNome: arq.tipoArquivoNome || arq.tipo || '',
-            url: arq.url || '',
-            dataUpload: arq.dataUpload || arq.data || '',
-            uploadedBy: arq.uploadedBy || arq.criadoPor || '',
-          })) : [],
+          arquivos: Array.isArray(comp.arquivosAnexos) ? comp.arquivosAnexos.map((arq: any) => {
+            if (typeof arq === 'string') {
+              return { id: '', nomeArquivo: arq.split('/').pop() || arq, tamanho: 0, tipoArquivoId: '', tipoArquivoNome: '', url: arq, dataUpload: '', uploadedBy: '' };
+            }
+            return { id: String(arq.id || ''), nomeArquivo: arq.nomeArquivo || arq.nome || '', tamanho: Number(arq.tamanho || 0), tipoArquivoId: String(arq.tipoArquivoId || ''), tipoArquivoNome: arq.tipoArquivoNome || arq.tipo || '', url: arq.url || '', dataUpload: arq.dataUpload || arq.data || '', uploadedBy: arq.uploadedBy || arq.criadoPor || '' };
+          }) : [],
           status: comp.status === 'Pendente' ? 'Pendente' : 
                   comp.status === 'Pago Parcialmente' ? 'Pago Parcialmente' : 
                   comp.status === 'Pago Integralmente' ? 'Pago Integralmente' : 
@@ -496,16 +488,14 @@ export function ContaCorrenteOverview() {
             formaPagamento: pag.formaPagamento || pag.forma_pagamento || '',
             categoriaId: pag.categoriaId ? String(pag.categoriaId) : undefined,
             categoriaNome: pag.categoria || pag.categoriaNome,
-            comprovanteAnexo: pag.arquivoComprovante ? {
-              id: String(pag.arquivoComprovante.id || ''),
-              nomeArquivo: pag.arquivoComprovante.nomeArquivo || pag.arquivoComprovante.nome || '',
-              tamanho: Number(pag.arquivoComprovante.tamanho || 0),
-              tipoArquivoId: String(pag.arquivoComprovante.tipoArquivoId || ''),
-              tipoArquivoNome: pag.arquivoComprovante.tipoArquivoNome || pag.arquivoComprovante.tipo || '',
-              url: pag.arquivoComprovante.url || '',
-              dataUpload: pag.arquivoComprovante.dataUpload || pag.arquivoComprovante.data || '',
-              uploadedBy: pag.arquivoComprovante.uploadedBy || pag.arquivoComprovante.criadoPor || '',
-            } : undefined,
+            comprovanteAnexo: (() => {
+              const ac = pag.arquivoComprovante;
+              if (!ac) return undefined;
+              if (typeof ac === 'string') {
+                return { id: '', nomeArquivo: ac.split('/').pop() || ac, tamanho: 0, tipoArquivoId: '', tipoArquivoNome: '', url: ac, dataUpload: '', uploadedBy: '' };
+              }
+              return { id: String(ac.id || ''), nomeArquivo: ac.nomeArquivo || ac.nome || '', tamanho: Number(ac.tamanho || 0), tipoArquivoId: String(ac.tipoArquivoId || ''), tipoArquivoNome: ac.tipoArquivoNome || ac.tipo || '', url: ac.url || '', dataUpload: ac.dataUpload || ac.data || '', uploadedBy: ac.uploadedBy || ac.criadoPor || '' };
+            })(),
             observacoes: pag.observacoes,
             dataCriacao: pag.dataCriacao || new Date().toISOString(),
             criadoPor: pag.criadoPor || 'Sistema',
@@ -601,13 +591,20 @@ export function ContaCorrenteOverview() {
   };
 
   const handleBaixarArquivo = (nomeArquivo: string, url: string) => {
-    toast.success(`Download iniciado: ${nomeArquivo}`);
-    console.log('Download arquivo:', { nomeArquivo, url });
+    if (!url) { toast.error('URL do arquivo não disponível'); return; }
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomeArquivo || 'arquivo';
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
-  const handleVisualizarArquivo = (nomeArquivo: string, url: string) => {
-    toast.success(`Abrindo visualização: ${nomeArquivo}`);
-    console.log('Visualizar arquivo:', { nomeArquivo, url });
+  const handleVisualizarArquivo = (_nomeArquivo: string, url: string) => {
+    if (!url) { toast.error('URL do arquivo não disponível'); return; }
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const handleSalvarNovoCompromisso = async (compromisso: {
