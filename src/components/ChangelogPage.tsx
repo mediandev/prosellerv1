@@ -8,6 +8,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.58',
+    items: [
+      'Relatórios > Solicitado vs Faturado: corrigido — produtos agora carregam corretamente (itens de cada pedido incluídos na listagem).',
+      'Relatórios > Mix de Produtos por Cliente: corrigido — produtos do período agora são carregados corretamente.',
+      'Configurações > Usuários: tipo de usuário (Backoffice / Vendedor) agora exibido como badge abaixo do nome na lista.',
+    ],
+  },
+  {
     version: 'V 1.57',
     items: [
       'Relatórios > Curva ABC de Produtos: corrigido — os produtos agora aparecem corretamente com quantidades e valores reais. A API agora carrega os itens de cada pedido junto com a listagem, eliminando o erro que exibia "0 produtos".',

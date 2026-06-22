@@ -543,7 +543,15 @@ export function UserManagement() {
                                 .substring(0, 2)}
                             </span>
                           </div>
-                          <span>{usuario.nome}</span>
+                          <div className="flex flex-col gap-0.5">
+                            <span>{usuario.nome}</span>
+                            <Badge
+                              variant={usuario.tipo === 'backoffice' ? 'default' : 'outline'}
+                              className="text-[10px] px-1.5 py-0 h-4 w-fit"
+                            >
+                              {usuario.tipo === 'backoffice' ? 'Backoffice' : 'Vendedor'}
+                            </Badge>
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
