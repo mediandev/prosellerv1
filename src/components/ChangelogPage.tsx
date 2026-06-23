@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.65',
+    items: [
+      'Produtos: as imagens voltaram a aparecer na listagem, agora carregadas sob demanda (lazy-load) conforme a rolagem — sem travar o carregamento da página.',
+    ],
+  },
+  {
     version: 'V 1.64',
     items: [
       'Configurações > Condições de Pagamento: layout do modal de nova condição melhorado — dica de prazo movida para baixo do campo, "Nome Gerado" sempre visível.',
