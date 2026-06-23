@@ -122,96 +122,29 @@ async function handlePedido(
 }
 
 // ─────────────────────────────────────────────────────────
-// Resolver vínculo da NFe quando idPedidoEcommerce não vem no payload.
-//
-// Pedidos enviados pela nossa integração ao Tiny NÃO possuem id de ecommerce,
-// então o webhook de nota chega com `idPedidoEcommerce` vazio. Nesse caso
-// buscamos a nota no Tiny por `idNotaFiscalTiny` e usamos o campo `id_venda`
-// (que é exatamente o nosso `id_tiny`). Testamos a chave da empresa do CNPJ do
-// payload primeiro e, em fallback, as demais chaves (são poucas empresas).
-// Retorna o id_venda + a nota completa (reaproveitada no enriquecimento).
-// ─────────────────────────────────────────────────────────
-async function resolveVinculoViaNota(
-  supabase: SupabaseClient,
-  idNotaFiscalTiny: unknown,
-  payloadCnpj: string,
-  traceId: string
-): Promise<{ idVenda: string; nota: any } | null> {
-  const cnpjDigits = String(payloadCnpj ?? "").replace(/\D/g, "");
-
-  const { data: empresas } = await supabase
-    .from("ref_empresas_subsidiarias")
-    .select("id, cnpj, chave_api")
-    .not("chave_api", "is", null);
-
-  const lista = (empresas ?? []) as Array<{ id: number; cnpj: string | null; chave_api: string }>;
-  // Empresa cujo CNPJ casa com o do payload vem primeiro.
-  lista.sort((a, b) => {
-    const am = cnpjDigits && String(a.cnpj ?? "").replace(/\D/g, "") === cnpjDigits ? 0 : 1;
-    const bm = cnpjDigits && String(b.cnpj ?? "").replace(/\D/g, "") === cnpjDigits ? 0 : 1;
-    return am - bm;
-  });
-
-  for (const emp of lista) {
-    try {
-      const urlNota = `https://api.tiny.com.br/api2/nota.fiscal.obter.php?token=${emp.chave_api}&id=${idNotaFiscalTiny}&formato=json`;
-      const res = await withTimeout(fetch(urlNota), `Resolver nota (empresa ${emp.id})`, 20000);
-      if (!res.ok) continue;
-      const json = await res.json();
-      if (json?.retorno?.status !== "OK") continue; // token de outra empresa → ignora
-      const nota = json?.retorno?.nota_fiscal;
-      const idVenda = nota?.id_venda ? String(nota.id_venda) : "";
-      if (idVenda) {
-        console.log(`[${traceId}] NFe ${idNotaFiscalTiny} resolvida via empresa ${emp.id}: id_venda=${idVenda}`);
-        return { idVenda, nota };
-      }
-    } catch (e) {
-      console.warn(`[${traceId}] Falha ao resolver nota na empresa ${emp.id}:`, e);
-    }
-  }
-  console.warn(`[${traceId}] Não foi possível resolver id_venda da NFe ${idNotaFiscalTiny}`);
-  return null;
-}
-
-// ─────────────────────────────────────────────────────────
 // Handler: NFe (nota fiscal autorizada pelo Tiny)
 // ─────────────────────────────────────────────────────────
 async function handleNfe(
   supabase: SupabaseClient,
   dados: Record<string, unknown>,
-  traceId: string,
-  payloadCnpj: string = ""
+  traceId: string
 ): Promise<Record<string, unknown>> {
   const chaveAcesso = String(dados.chaveAcesso ?? "").trim();
   const numero = String(dados.numero ?? "").trim();
-  // idPedidoEcommerce = id do pedido no ecommerce. Vem vazio para pedidos
-  // criados pela nossa integração (não-ecommerce) — ver resolveVinculoViaNota.
+  // idPedidoEcommerce = id_tiny do pedido_venda no nosso banco
   const idPedidoEcommerce = String(dados.idPedidoEcommerce ?? dados.idPedidoVenda ?? "").trim();
   const idNotaFiscalTiny = dados.idNotaFiscalTiny ?? dados.id;
 
-  // Resolver o id do pedido no Tiny (== nosso id_tiny).
-  let idTinyPedido = idPedidoEcommerce;
-  // Nota já carregada do Tiny — reaproveitada no enriquecimento (evita 2ª chamada).
-  let notaPreloaded: any = null;
-
-  if (!idTinyPedido && idNotaFiscalTiny) {
-    const resolved = await resolveVinculoViaNota(supabase, idNotaFiscalTiny, payloadCnpj, traceId);
-    if (resolved) {
-      idTinyPedido = resolved.idVenda;
-      notaPreloaded = resolved.nota;
-    }
-  }
-
-  if (!idTinyPedido) {
-    console.warn(`[${traceId}] NFe sem vínculo de pedido (idPedidoEcommerce vazio e id_venda não resolvido) — ignorando`);
-    return { success: true, message: "NFe sem vínculo de pedido, ignorada" };
+  if (!idPedidoEcommerce) {
+    console.warn(`[${traceId}] NFe sem idPedidoEcommerce — ignorando`);
+    return { success: true, message: "NFe sem idPedidoEcommerce, ignorado" };
   }
 
   // 1. Achar pedido_venda pelo id_tiny
   const { data: pedido, error: pedidoErr } = await supabase
     .from("pedido_venda")
     .select("pedido_venda_ID, empresa_faturamento_id")
-    .eq("id_tiny", idTinyPedido)
+    .eq("id_tiny", idPedidoEcommerce)
     .maybeSingle();
 
   if (pedidoErr) {
@@ -220,7 +153,7 @@ async function handleNfe(
   }
 
   if (!pedido) {
-    console.warn(`[${traceId}] Pedido não encontrado para id_tiny=${idTinyPedido}`);
+    console.warn(`[${traceId}] Pedido não encontrado para idPedidoEcommerce=${idPedidoEcommerce}`);
     return { success: true, message: "Pedido não encontrado, NFe ignorada" };
   }
 
@@ -259,13 +192,9 @@ async function handleNfe(
 
   console.log(`[${traceId}] ✅ NFe nº${numero} vinculada ao frete ${freteId}`);
 
-  // 4. Enriquecer (peso, volumes, transportador) — não-fatal.
-  // Reaproveita a nota já carregada em resolveVinculoViaNota; só busca de novo
-  // se viemos pelo caminho legado (idPedidoEcommerce preenchido).
-  try {
-    let nota: any = notaPreloaded;
-
-    if (!nota && idNotaFiscalTiny && empresaFaturamentoId) {
+  // 4. Enriquecer com nota.fiscal.obter.php (peso, volumes, transportador) — não-fatal
+  if (idNotaFiscalTiny && empresaFaturamentoId) {
+    try {
       const { data: empresa } = await supabase
         .from("ref_empresas_subsidiarias")
         .select("chave_api")
@@ -279,43 +208,40 @@ async function handleNfe(
         const notaRes = await withTimeout(fetch(urlNota), "Fetch NFe detalhe", 20000);
         if (notaRes.ok) {
           const notaData = await notaRes.json();
-          nota = notaData?.retorno?.nota_fiscal ?? null;
+          const nota = notaData?.retorno?.nota_fiscal;
+
+          if (nota) {
+            const extra: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+            const pesoBruto = parseFloat(String(nota.peso_bruto ?? ""));
+            if (!isNaN(pesoBruto) && pesoBruto > 0) extra.peso_bruto = pesoBruto;
+
+            const volumes = parseInt(String(nota.volumes ?? nota.qtd_volumes ?? ""), 10);
+            if (!isNaN(volumes) && volumes > 0) extra.volumes = volumes;
+
+            // Tentar casar transportador pelo CNPJ
+            const cnpjRaw = nota.transportador?.cpf_cnpj ?? nota.transportador?.cnpj ?? "";
+            if (cnpjRaw) {
+              const cnpj = String(cnpjRaw).replace(/\D/g, "");
+              const { data: transp } = await supabase
+                .from("transportador_logistica")
+                .select("id")
+                .or(`cnpj.eq.${cnpj},cpf.eq.${cnpj}`)
+                .maybeSingle();
+              if (transp?.id) extra.transportador_id = transp.id;
+            }
+
+            if (Object.keys(extra).length > 1) {
+              await supabase.from("frete_logistica").update(extra).eq("id", freteId);
+              console.log(`[${traceId}] Frete ${freteId} enriquecido: peso=${extra.peso_bruto}, vol=${extra.volumes}, transp=${extra.transportador_id ?? "não casado"}`);
+            }
+          }
         }
       }
+    } catch (enrichErr) {
+      // Não crítico — apenas loga
+      console.warn(`[${traceId}] Enriquecimento NFe falhou (não crítico):`, enrichErr);
     }
-
-    if (nota) {
-      const extra: Record<string, unknown> = { updated_at: new Date().toISOString() };
-
-      const pesoBruto = parseFloat(String(nota.peso_bruto ?? ""));
-      if (!isNaN(pesoBruto) && pesoBruto > 0) extra.peso_bruto = pesoBruto;
-
-      const volumes = parseInt(
-        String(nota.volumes ?? nota.qtd_volumes ?? nota.quantidade_volumes ?? nota.numero_volumes ?? ""),
-        10
-      );
-      if (!isNaN(volumes) && volumes > 0) extra.volumes = volumes;
-
-      // Tentar casar transportador pelo CNPJ
-      const cnpjRaw = nota.transportador?.cpf_cnpj ?? nota.transportador?.cnpj ?? "";
-      if (cnpjRaw) {
-        const cnpj = String(cnpjRaw).replace(/\D/g, "");
-        const { data: transp } = await supabase
-          .from("transportador_logistica")
-          .select("id")
-          .or(`cnpj.eq.${cnpj},cpf.eq.${cnpj}`)
-          .maybeSingle();
-        if (transp?.id) extra.transportador_id = transp.id;
-      }
-
-      if (Object.keys(extra).length > 1) {
-        await supabase.from("frete_logistica").update(extra).eq("id", freteId);
-        console.log(`[${traceId}] Frete ${freteId} enriquecido: peso=${extra.peso_bruto}, vol=${extra.volumes}, transp=${extra.transportador_id ?? "não casado"}`);
-      }
-    }
-  } catch (enrichErr) {
-    // Não crítico — apenas loga
-    console.warn(`[${traceId}] Enriquecimento NFe falhou (não crítico):`, enrichErr);
   }
 
   return { success: true, freteId, nfeNumero: numero };
@@ -368,8 +294,7 @@ Deno.serve(async (req) => {
     let result: Record<string, unknown>;
 
     if (tipo === "nota_fiscal") {
-      const payloadCnpj = String(dataWebhook.cnpj ?? "");
-      result = await handleNfe(supabase, dados, traceId, payloadCnpj);
+      result = await handleNfe(supabase, dados, traceId);
     } else {
       result = await handlePedido(supabase, dados, traceId);
     }
