@@ -4,6 +4,12 @@
 > Formato: `YYYY-MM-DD · [TAG] · descrição curta · SHA/PR/feature`.
 > Tags: `INGEST`, `RELEASE`, `BUGFIX`, `MIGRATION`, `ADR`, `RUNBOOK`, `VALIDATION`, `BLOCKED`, `MVP`.
 
+## 2026-06-24
+
+- 2026-06-24 · [BUGFIX] · Webhook Tiny NF-e: casa nota por `id_venda` quando `idPedidoEcommerce` vem vazio (deploy v31). Backfill de 88 notas reais; cadastro de 6 transportadoras + vínculo nos fretes; validação do rastreio SSW (cobertura 37/89). SHA `c31f802`. Detalhe: [logistica-status-2026-06-24](logistica-status-2026-06-24.md).
+- 2026-06-24 · [BUGFIX] · Produtos: imagens voltam na listagem via lazy-load sob demanda · PR #71 (V 1.65) · SHA `36dc138`.
+- 2026-06-24 · [CHORE] · Git: corrigido refspec do clone (`master`→`*`) que causava a confusão recorrente "main vs master"; `origin/main` sincronizado. Ver memória `git-branch-main-vs-master`.
+
 ## 2026-06-22
 
 - 2026-06-22 · [BUGFIX] · feat/revisao-geral (V 1.63) — CustomerMixTab reescrito para Supabase direto (contorna status-mix-v2 não deployada); ABC Clientes: Grupo/Rede → combobox pesquisável, status "Pendentes", fallback "Cliente #ID". Migration 137 pendente aplicação em prod. SHA 1392ff9.
