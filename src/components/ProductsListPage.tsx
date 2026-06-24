@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect } from "react";
+﻿import { useState, useMemo, useEffect, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
@@ -26,6 +26,61 @@ interface ProductsListPageProps {
   onVisualizarProduto?: (id: string) => void;
   /** Quando mudar, a lista recarrega (evita duplicação após editar) */
   refreshKey?: number;
+}
+
+/**
+ * Cache em memória das fotos já carregadas (por id de produto), evitando
+ * re-fetch quando a linha re-renderiza ou volta a entrar na viewport.
+ * `null` = produto não tem foto (não tenta de novo).
+ */
+const fotoCache = new Map<string, string | null>();
+
+/**
+ * Miniatura da foto do produto carregada SOB DEMANDA.
+ *
+ * O endpoint de listagem NÃO traz a foto (base64 inline deixava o payload em
+ * ~31MB / ~19s e o carregamento falhava). Aqui buscamos a foto por produto via
+ * a action `get`, e somente quando a linha entra na viewport (IntersectionObserver).
+ * Assim a página carrega rápido e as imagens aparecem progressivamente.
+ * Em qualquer falha/ausência, mantém o placeholder atual (não quebra a lista).
+ */
+function ProductThumbnail({ id, descricao }: { id: string; descricao: string }) {
+  const [foto, setFoto] = useState<string | null>(() => fotoCache.get(id) ?? null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Já temos no cache (foto ou ausência confirmada) → não busca de novo.
+    if (fotoCache.has(id)) {
+      setFoto(fotoCache.get(id) ?? null);
+      return;
+    }
+    const el = ref.current;
+    if (!el) return;
+    let cancelado = false;
+    const obs = new IntersectionObserver((entries) => {
+      if (!entries[0]?.isIntersecting) return;
+      obs.disconnect();
+      api.getById('produtos', id)
+        .then((p: any) => {
+          const url = p?.foto || null;
+          fotoCache.set(id, url);
+          if (!cancelado && url) setFoto(url);
+        })
+        .catch(() => { /* mantém placeholder */ });
+    }, { rootMargin: '150px' });
+    obs.observe(el);
+    return () => { cancelado = true; obs.disconnect(); };
+  }, [id]);
+
+  return (
+    <div ref={ref} className="w-12 h-12 bg-muted rounded flex items-center justify-center overflow-hidden">
+      {foto ? (
+        <img src={foto} alt={descricao} className="w-12 h-12 object-cover rounded" loading="lazy" />
+      ) : (
+        <ImageIcon className="h-6 w-6 text-muted-foreground" />
+      )}
+    </div>
+  );
 }
 
 export function ProductsListPage({
@@ -447,9 +502,7 @@ export function ProductsListPage({
                               className="w-12 h-12 object-cover rounded"
                             />
                           ) : (
-                            <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
-                              <ImageIcon className="h-6 w-6 text-muted-foreground" />
-                            </div>
+                            <ProductThumbnail id={produto.id} descricao={produto.descricao} />
                           )}
                         </TableCell>
                         <TableCell>
