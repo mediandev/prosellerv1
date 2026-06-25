@@ -43,3 +43,5 @@
 
 - 2026-06-22 · [BUGFIX] · `fix/relatorios-include-itens` (PR #64 / V 1.58) — Relatórios SolicitadoFaturado e MixCliente agora passam `include_itens=true` para carregar produtos. Badge Backoffice/Vendedor adicionado na lista de Usuários. SHA `59e2724`.
 2026-06-22 · [FIX] · Relatórios ABC Produtos/Mix/ROI: auth Supabase corrigida (JWT inject), loading infinito ROI, include_itens → query direta · PR #69 (V 1.62)
+- 2026-06-25 · [FEATURE] · F-LOG-CRM R-LOG-4: SSW automático — botão "Atualizar rastreio" (detalhe, force), botão "Atualizar" do Kanban varre SSW dos fretes visíveis, cron horário via ssw-sweep-v1 (agendamento pg_cron pendente de confirmação). Edges frete-logistica-v1 + ssw-sweep-v1 deployadas. V 1.69 · SHA 00964ff
+- 2026-06-25 · [FIX] · Clientes: regime Simples distingue "Não consultado" de "Indisponível" (antes ambos "—"). V 1.68 · SHA 7bc21f1
