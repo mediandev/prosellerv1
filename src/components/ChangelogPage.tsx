@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.68',
+    items: [
+      'Clientes > Detalhe: o regime "Optante Simples Nacional" agora distingue "Não consultado" (cliente ainda não enviado ao ERP) de "Indisponível" (consulta feita, mas Receita não respondeu) — antes ambos apareciam como "—".',
+    ],
+  },
+  {
     version: 'V 1.67',
     items: [
       'Pedidos > Envio ao ERP: se a consulta do regime tributário (Simples Nacional) falhar na Receita, o envio é bloqueado com aviso e opção "Tentar novamente" — evita emitir nota com natureza de operação incorreta. Falhas ficam registradas para auditoria.',

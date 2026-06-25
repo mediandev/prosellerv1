@@ -841,17 +841,34 @@ export function CustomerFormDadosCadastrais({
                   <Badge variant="secondary">Sim</Badge>
                 ) : formData.optanteSimplesNacional === false ? (
                   <Badge variant="outline">Não</Badge>
+                ) : formData.optanteSimplesNacionalConsultadoEm ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center gap-1">
+                          <Badge variant="outline">Indisponível</Badge>
+                          <Info className="h-3 w-3" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Consulta realizada em{' '}
+                        {new Date(formData.optanteSimplesNacionalConsultadoEm).toLocaleDateString('pt-BR')}, mas a
+                        ReceitaWS não retornou o regime. Será reconsultado no próximo envio ao ERP.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 ) : (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span className="inline-flex items-center gap-1">
-                          <Badge variant="outline">—</Badge>
+                          <Badge variant="outline">Não consultado</Badge>
                           <Info className="h-3 w-3" />
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        Não consultado ou ReceitaWS indisponível no último envio.
+                        Ainda não consultamos o Simples Nacional deste cliente na ReceitaWS. A consulta ocorre
+                        automaticamente no primeiro envio de pedido ao ERP.
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
