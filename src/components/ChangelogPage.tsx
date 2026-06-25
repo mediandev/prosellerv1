@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.66',
+    items: [
+      'Clientes > Detalhe: voltou a exibir o regime "Optante Simples Nacional" (Sim/Não) e o campo "Tipo Pessoa" — corrigido descasamento de acento em "Pessoa Jurídica" e inclusão do campo na consulta do cliente.',
+    ],
+  },
+  {
     version: 'V 1.65',
     items: [
       'Produtos: as imagens voltaram a aparecer na listagem, agora carregadas sob demanda (lazy-load) conforme a rolagem — sem travar o carregamento da página.',

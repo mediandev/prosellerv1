@@ -543,6 +543,28 @@ function extractCondicaoPagamentoIdFromVinculo(item: any): string | null {
   return id && id !== 'undefined' ? id : null;
 }
 
+/**
+ * Normaliza o tipo de pessoa para a forma canônica usada na UI
+ * ('Pessoa Física' | 'Pessoa Jurídica'), tolerando variações de acento e
+ * códigos curtos ('J'/'F'/'PJ'/'PF') vindos do backend.
+ *
+ * Causa do bug: o clientes-v2 podia devolver "Pessoa Juridica" (sem acento),
+ * que não casava com o gate `=== 'Pessoa Jurídica'` (escondia a linha do
+ * Optante Simples) nem com as opções do Select (deixava-o vazio).
+ */
+function canonTipoPessoa(raw: any, cpfCnpj?: any): 'Pessoa Física' | 'Pessoa Jurídica' {
+  const s = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, ''); // remove acentos
+  if (s === 'j' || s === 'pj' || s === 'juridica' || s === 'pessoa juridica') return 'Pessoa Jurídica';
+  if (s === 'f' || s === 'pf' || s === 'fisica' || s === 'pessoa fisica') return 'Pessoa Física';
+  // Fallback por documento (dígitos): 11 = CPF (PF), senão PJ.
+  const digits = String(cpfCnpj ?? '').replace(/\D/g, '');
+  return digits.length === 11 ? 'Pessoa Física' : 'Pessoa Jurídica';
+}
+
 function mapClienteFromApi(item: any): any {
   if (!item) return item;
   const statusAprovacao = item.statusAprovacao ?? item.status_aprovacao ?? 'pendente';
@@ -610,7 +632,7 @@ function mapClienteFromApi(item: any): any {
     codigoTinyIdExterno: item.codigoTinyIdExterno ?? item.codigo_tiny_id_externo ?? undefined,
     codigoTinyIntegrationRef: item.codigoTinyIntegrationRef ?? item.codigo_tiny_integration_ref ?? undefined,
     codigoGeradoEm: item.codigoGeradoEm ?? item.codigo_gerado_em ?? undefined,
-    tipoPessoa: item.tipoPessoa ?? (item.cpfCnpj?.length === 11 || item.cpf_cnpj?.length === 11 ? 'Pessoa Física' : 'Pessoa Jurídica'),
+    tipoPessoa: canonTipoPessoa(item.tipoPessoa, item.cpfCnpj ?? item.cpf_cnpj),
     refTipoPessoaId:
       item.refTipoPessoaId ??
       item.ref_tipo_pessoa_id ??
