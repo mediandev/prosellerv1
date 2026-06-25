@@ -285,6 +285,9 @@ const formatDisplayValue = (value: number) => {
 
 // Mapear erros do ERP para mensagens resumidas e contextuais
 function getErpErrorResumido(errorMsg: string): string {
+  if (errorMsg.includes('REGIME_LOOKUP_FAILED') || errorMsg.includes('Regime tributario') || errorMsg.includes('Regime tributário')) {
+    return 'Não foi possível confirmar na Receita (ReceitaWS) se o cliente é optante do Simples Nacional. Como esta empresa emite com naturezas de operação diferentes para Simples e não-Simples, a nota não será emitida sem essa confirmação — para evitar natureza de operação incorreta. Tente novamente em alguns instantes — normalmente é uma indisponibilidade temporária da consulta.';
+  }
   if (errorMsg.includes('Natureza de operacao nao mapeada')) {
     return 'Natureza de operação não mapeada para esta empresa. Edite o pedido e altere a Natureza de Operação.';
   }
@@ -1111,8 +1114,20 @@ export function SalesPage({
 
     } catch (error: any) {
       console.error('[SALES-PAGE] Erro ao enviar pedido ao ERP:', error);
-      const erroResumido = getErpErrorResumido(error.message || 'Erro desconhecido');
-      toast.error(erroResumido, { id: 'erp-envio', duration: 8000 });
+      const rawMsg = error.message || 'Erro desconhecido';
+      const erroResumido = getErpErrorResumido(rawMsg);
+      const isRegimeBloqueio = rawMsg.includes('REGIME_LOOKUP_FAILED')
+        || rawMsg.includes('Regime tributario') || rawMsg.includes('Regime tributário');
+      if (isRegimeBloqueio) {
+        // D3 · falha na consulta do regime bloqueia o envio; oferece reenvio direto.
+        toast.error(erroResumido, {
+          id: 'erp-envio',
+          duration: 12000,
+          action: { label: 'Tentar novamente', onClick: () => handleEnviarParaERP(saleId) },
+        });
+      } else {
+        toast.error(erroResumido, { id: 'erp-envio', duration: 8000 });
+      }
     } finally {
       setEnviandoParaERP(null);
     }

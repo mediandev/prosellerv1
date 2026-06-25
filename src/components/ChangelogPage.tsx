@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.67',
+    items: [
+      'Pedidos > Envio ao ERP: se a consulta do regime tributário (Simples Nacional) falhar na Receita, o envio é bloqueado com aviso e opção "Tentar novamente" — evita emitir nota com natureza de operação incorreta. Falhas ficam registradas para auditoria.',
+    ],
+  },
+  {
     version: 'V 1.66',
     items: [
       'Clientes > Detalhe: voltou a exibir o regime "Optante Simples Nacional" (Sim/Não) e o campo "Tipo Pessoa" — corrigido descasamento de acento em "Pessoa Jurídica" e inclusão do campo na consulta do cliente.',
