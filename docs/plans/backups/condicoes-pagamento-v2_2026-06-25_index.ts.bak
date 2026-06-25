@@ -116,19 +116,10 @@ function gerarDescricao(
   prazoInput: string,
   desconto: number
 ): string {
-  // Mantém TODAS as parcelas no nome (ex.: "10/15/20 dias"). Antes usava só o
-  // último prazo, gerando nomes errados ("20 dias") para condições parceladas.
-  const { intervaloParcela } = processarPrazoPagamento(prazoInput)
-  let prazoTexto: string
-  if (intervaloParcela.length === 0) {
-    prazoTexto = 'À vista'
-  } else if (intervaloParcela.length === 1) {
-    prazoTexto = intervaloParcela[0] === 0 ? 'À vista' : `${intervaloParcela[0]} dias`
-  } else {
-    prazoTexto = `${intervaloParcela.join('/')} dias`
-  }
+  const { prazoPagamento } = processarPrazoPagamento(prazoInput)
+  const prazoTexto = prazoPagamento === 0 ? 'À vista' : `${prazoPagamento} dias`
   const descontoTexto = desconto > 0 ? `desc extra ${desconto}%` : 'desc extra 0%'
-
+  
   return `${formaPagamentoNome} - ${prazoTexto} - ${descontoTexto}`
 }
 

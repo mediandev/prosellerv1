@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.70',
+    items: [
+      'Configurações > Condições de Pagamento: nome automático de condição parcelada agora usa TODAS as parcelas (ex.: "10/15/20 dias") em vez de só a última ("20 dias"). Corrigido no cadastro (backend) e no preview "Nome Gerado".',
+    ],
+  },
+  {
     version: 'V 1.69',
     items: [
       'Logística > Kanban: botão "Atualizar" agora sincroniza o rastreio SSW dos fretes visíveis (não-terminais) antes de recarregar, mostrando quantos foram atualizados.',

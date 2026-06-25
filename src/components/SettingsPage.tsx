@@ -553,8 +553,22 @@ export function SettingsPage({
     const formaPagamento = formasPagamento.find((f) => f.id === formaPagamentoId);
     if (!formaPagamento) return null;
 
-    const { ultimoPrazo } = processarPrazoPagamento(prazoPagamento);
-    const prazoTexto = ultimoPrazo === 0 ? 'À vista' : `${ultimoPrazo} dias`;
+    // Mantém TODAS as parcelas no nome (ex.: "10/15/20 dias"). Antes usava só o
+    // último prazo, gerando nomes errados ("20 dias") para condições parceladas.
+    const valores = prazoPagamento
+      .split('/')
+      .map((v) => v.trim())
+      .filter((v) => v !== '')
+      .map((v) => parseFloat(v))
+      .filter((v) => !isNaN(v) && v >= 0);
+    let prazoTexto: string;
+    if (valores.length === 0) {
+      prazoTexto = 'À vista';
+    } else if (valores.length === 1) {
+      prazoTexto = valores[0] === 0 ? 'À vista' : `${valores[0]} dias`;
+    } else {
+      prazoTexto = `${valores.join('/')} dias`;
+    }
     const descontoTexto = descontoExtra > 0 ? `desc extra ${descontoExtra}%` : 'desc extra 0%';
 
     return `${formaPagamento.nome} - ${prazoTexto} - ${descontoTexto}`;
