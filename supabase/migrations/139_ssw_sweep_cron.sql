@@ -27,7 +27,8 @@ select cron.schedule(
       'Content-Type', 'application/json',
       'x-sweep-secret', '<SSW_SWEEP_SECRET>'
     ),
-    body    := '{}'::jsonb
+    body    := '{}'::jsonb,
+    timeout_milliseconds := 60000
   );
   $$
 );
