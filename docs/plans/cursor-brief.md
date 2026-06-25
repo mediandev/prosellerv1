@@ -1389,3 +1389,62 @@ SELECT COUNT(*) FROM pg_policies WHERE tablename = 'status_mix';
 DROP TABLE IF EXISTS public.status_mix;
 DROP FUNCTION IF EXISTS public.update_status_mix_updated_at();
 ```
+
+---
+
+## Tarefa 13 — F-LOG-CRM R-LOG-4 · Cron horário SSW (migration 139 + secret ssw-sweep-v1)
+
+**Operação:** ativar a varredura automática de rastreio SSW a cada 1h.
+Componentes já em prod (deployados em 2026-06-25): edge `ssw-sweep-v1` (no-verify-jwt,
+dormente até o secret existir — sem secret responde 401) + `frete-logistica-v1`
+(action `ssw_sweep` + `force`). Falta só **ativar o cron** (passo abaixo, requer confirmação humana).
+
+**Pré-condições:**
+- `ssw-sweep-v1` deployada com `--no-verify-jwt`. ✅ (ver passo de deploy)
+- Extensões `pg_cron` e `pg_net` habilitadas no projeto Supabase.
+
+### Passo 1 — Secret na Edge Function
+
+```bash
+# Local, a partir do main:
+npx supabase secrets set SSW_SWEEP_SECRET=<SSW_SWEEP_SECRET> \
+  --project-ref xxoiqfraeolsqsmsheue
+```
+
+(Pode gerar outro valor com `openssl rand -hex 24` — só garantir que é o MESMO usado no passo 2.)
+
+### Passo 2 — Migration 139 (aplicar via editor SQL do Supabase, NÃO commitar com o secret preenchido)
+
+Abrir `supabase/migrations/139_ssw_sweep_cron.sql`, substituir `<SSW_SWEEP_SECRET>`
+pelo mesmo valor do passo 1, e executar. O arquivo:
+- `create extension if not exists pg_cron; create extension if not exists pg_net;`
+- agenda `ssw-sweep-hourly` (`0 * * * *`) chamando `ssw-sweep-v1` com header `x-sweep-secret`.
+
+### Smoke (validar)
+
+```sql
+-- agendamento existe?
+select jobname, schedule, active from cron.job where jobname = 'ssw-sweep-hourly';
+-- após 1h (ou disparo manual), ver execuções:
+select status, return_message, start_time
+from cron.job_run_details
+where command ilike '%ssw-sweep-v1%'
+order by start_time desc limit 5;
+```
+
+Disparo manual para testar sem esperar 1h:
+```bash
+curl -s -X POST https://xxoiqfraeolsqsmsheue.supabase.co/functions/v1/ssw-sweep-v1 \
+  -H 'x-sweep-secret: <SSW_SWEEP_SECRET>' | jq
+# espera: { "success": true, "data": { "candidatos": N, "atualizados": M } }
+```
+
+### Rollback
+
+```sql
+select cron.unschedule('ssw-sweep-hourly');
+```
+```bash
+# opcional: desligar o secret (deixa a edge dormente / 401)
+npx supabase secrets unset SSW_SWEEP_SECRET --project-ref xxoiqfraeolsqsmsheue
+```

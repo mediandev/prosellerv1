@@ -93,12 +93,22 @@ export default function FreteDetalhePage({
   const [uploadingComp, setUploadingComp] = useState(false);
   const [uploadingDacte, setUploadingDacte] = useState(false);
   const [bucketAvailable, setBucketAvailable] = useState<boolean | null>(null);
+  const [sincronizando, setSincronizando] = useState(false);
 
-  async function load() {
+  async function handleAtualizarRastreio() {
+    setSincronizando(true);
+    try {
+      await load(true);
+    } finally {
+      setSincronizando(false);
+    }
+  }
+
+  async function load(force = false) {
     setLoading(true);
     setError(null);
     try {
-      const data = await getFreteWithOcorrencias(freteId);
+      const data = await getFreteWithOcorrencias(freteId, force);
       setFrete(data.frete);
       setOcorrencias(data.ocorrencias);
       if (data.frete) {
@@ -541,7 +551,17 @@ export default function FreteDetalhePage({
 
       {/* Timeline */}
       <Card className="p-4 space-y-3">
-        <h3 className="font-medium">Atualizações no Transportador</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-medium">Atualizações no Transportador</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAtualizarRastreio}
+            disabled={sincronizando || loading}
+          >
+            {sincronizando ? "Atualizando..." : "Atualizar rastreio"}
+          </Button>
+        </div>
         <FreteOcorrenciaTimeline ocorrencias={ocorrencias} />
       </Card>
     </div>

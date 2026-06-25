@@ -163,13 +163,31 @@ export async function listFretesByStatus(): Promise<DashboardBuckets> {
   return data;
 }
 
-/** Detalhe + timeline de ocorrências (R-LOG-2). Timeline pode estar vazia (R-LOG-4). */
+/** Detalhe + timeline de ocorrências (R-LOG-2). Timeline pode estar vazia (R-LOG-4).
+ *  force=true ignora o cache de 30 min do SSW (botão "Atualizar rastreio"). */
 export async function getFreteWithOcorrencias(
   id: string | number,
-): Promise<{ frete: FreteLogisticaEnriched; ocorrencias: OcorrenciaSSW[] }> {
+  force = false,
+): Promise<{ frete: FreteLogisticaEnriched; ocorrencias: OcorrenciaSSW[]; sswPolled?: boolean }> {
   const data = (await call('frete-logistica-v1', 'GET', {
-    query: { action: 'get_with_ocorrencias', id: String(id) },
-  })) as { frete: FreteLogisticaEnriched; ocorrencias: OcorrenciaSSW[] };
+    query: { action: 'get_with_ocorrencias', id: String(id), force: force ? 'true' : undefined },
+  })) as { frete: FreteLogisticaEnriched; ocorrencias: OcorrenciaSSW[]; sswPolled?: boolean };
+  return data;
+}
+
+/** Varredura SSW sob demanda (botão "Atualizar" do Kanban). Atualiza os fretes
+ *  não-terminais informados em `ids` (ou da empresa). Retorna quantos foram atualizados. */
+export async function sweepSswFretes(
+  params: { ids?: Array<string | number>; empresaId?: number; force?: boolean } = {},
+): Promise<{ candidatos: number; atualizados: number }> {
+  const data = (await call('frete-logistica-v1', 'POST', {
+    query: { action: 'ssw_sweep' },
+    body: {
+      ids: params.ids ? params.ids.map((x) => String(x)) : undefined,
+      empresaId: params.empresaId,
+      force: params.force ?? false,
+    },
+  })) as { candidatos: number; atualizados: number };
   return data;
 }
 

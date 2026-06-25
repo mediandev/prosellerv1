@@ -16,8 +16,14 @@ import {
   clampOffset,
   DASHBOARD_BUCKETS,
   diasEmTransito,
+  isTerminalStatus,
+  resolveFreteStatusFromTracking,
 } from '../_shared/frete-logistica-helpers.ts'
-import { refreshSswForFrete, sweepSsw } from '../_shared/ssw-refresh.ts'
+import {
+  fetchSswTracking,
+  mapSswToOcorrencias,
+  isCacheStale,
+} from '../_shared/ssw-client.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -183,11 +189,7 @@ async function handleListByStatus(supabase: ReturnType<typeof createClient>) {
   return buckets
 }
 
-async function handleGetWithOcorrencias(
-  supabase: ReturnType<typeof createClient>,
-  id: string,
-  force = false,
-) {
+async function handleGetWithOcorrencias(supabase: ReturnType<typeof createClient>, id: string) {
   const { data: freteRow, error: freteErr } = await supabase
     .from('frete_logistica')
     .select(SELECT_WITH_JOINS)
@@ -197,22 +199,64 @@ async function handleGetWithOcorrencias(
   if (freteErr || !freteRow) return { frete: null as EnrichedFrete | null, ocorrencias: [], sswPolled: false }
 
   const frete = freteRow as Record<string, unknown>
+  const chaveNfe = frete.nfe_chave_acesso as string | null
+  const currentStatus = frete.status_entrega as string
 
   let sswPolled = false
 
-  if (isLogCrmSswEnabledFromEnv()) {
-    const result = await refreshSswForFrete(
-      supabase,
-      {
-        id,
-        nfe_chave_acesso: frete.nfe_chave_acesso as string | null,
-        status_entrega: frete.status_entrega as string,
-      },
-      { force },
-    )
-    sswPolled = result.polled
-    if (result.polled) {
-      console.log(`[${FUNC_NAME}] SSW atualizado (force=${force}) para frete ${id} → '${result.newStatus}'`)
+  const shouldPollSsw = isLogCrmSswEnabledFromEnv()
+    && !!chaveNfe
+    && /^[0-9]{44}$/.test(chaveNfe)
+    && !isTerminalStatus(currentStatus)
+
+  if (shouldPollSsw) {
+    const { data: latestOcorr } = await supabase
+      .from('frete_logistica_ocorrencia')
+      .select('created_at')
+      .eq('frete_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    const latestCreatedAt = latestOcorr?.created_at as string | null | undefined
+
+    if (isCacheStale(latestCreatedAt)) {
+      console.log(`[${FUNC_NAME}] SSW polling para frete ${id}, chave ${chaveNfe!.substring(0, 10)}...`)
+      const sswResponse = await fetchSswTracking(chaveNfe!)
+
+      if (sswResponse.success && sswResponse.documento.tracking.length > 0) {
+        const inserts = mapSswToOcorrencias(sswResponse, id)
+
+        await supabase.from('frete_logistica_ocorrencia').delete().eq('frete_id', id)
+        const { error: insertErr } = await supabase
+          .from('frete_logistica_ocorrencia')
+          .insert(inserts)
+        if (insertErr) {
+          console.error(`[${FUNC_NAME}] Erro ao inserir ocorrências SSW:`, insertErr.message)
+        } else {
+          sswPolled = true
+          const newStatus = resolveFreteStatusFromTracking(
+            sswResponse.documento.tracking.map((t) => ({ tipo: t.tipo, ocorrencia: t.ocorrencia })),
+          )
+          const statusPatch: Record<string, unknown> = {
+            status_entrega: newStatus,
+            updated_at: new Date().toISOString(),
+          }
+          if (newStatus === 'Entregue') {
+            const lastTracking = sswResponse.documento.tracking[sswResponse.documento.tracking.length - 1]
+            if (lastTracking?.data_hora_efetiva) {
+              const d = new Date(lastTracking.data_hora_efetiva)
+              if (!isNaN(d.getTime())) {
+                statusPatch.data_entrega = d.toISOString().split('T')[0]
+              }
+            }
+          }
+          await supabase.from('frete_logistica').update(statusPatch).eq('id', id)
+          console.log(`[${FUNC_NAME}] Status atualizado para '${newStatus}', ${inserts.length} ocorrências inseridas`)
+        }
+      } else {
+        console.log(`[${FUNC_NAME}] SSW sem dados novos (success=${sswResponse.success}, msg=${sswResponse.message}) — ocorrências existentes preservadas`)
+      }
     }
   }
 
@@ -269,8 +313,7 @@ serve(async (req) => {
       // R-LOG-2: Detalhe + timeline.
       if (action === 'get_with_ocorrencias') {
         if (!id) return jsonResponse(400, { success: false, error: 'ID obrigatório' })
-        const force = url.searchParams.get('force') === 'true'
-        const result = await handleGetWithOcorrencias(supabase, id, force)
+        const result = await handleGetWithOcorrencias(supabase, id)
         if (!result.frete) return jsonResponse(404, { success: false, error: 'Frete não encontrado' })
         return jsonResponse(200, { success: true, data: result })
       }
@@ -332,23 +375,6 @@ serve(async (req) => {
     // POST + PUT: backoffice ou vendedor (com tenant scoping no payload).
     if (req.method === 'POST') {
       const body = await req.json()
-
-      // R-LOG-4: varredura SSW sob demanda (botão "Atualizar" do Kanban).
-      // Atualiza os fretes não-terminais visíveis (ids opcionais) ou da empresa.
-      if (action === 'ssw_sweep') {
-        if (!isLogCrmSswEnabledFromEnv()) {
-          return jsonResponse(200, { success: true, data: { candidatos: 0, atualizados: 0, sswDesligado: true } })
-        }
-        const ids = Array.isArray(body.ids) ? body.ids.map((x: unknown) => String(x)) : undefined
-        const result = await sweepSsw(supabase, {
-          empresaId: body.empresaId ?? null,
-          ids,
-          force: body.force === true,
-        })
-        console.log(`[${FUNC_NAME}] ssw_sweep: ${result.atualizados}/${result.candidatos} atualizados`)
-        return jsonResponse(200, { success: true, data: result })
-      }
-
       if (!body.empresaId) return jsonResponse(400, { success: false, error: 'empresaId obrigatório' })
       const insert = bodyToInsert(body, user.id)
       const { data, error } = await supabase.from('frete_logistica').insert(insert).select().single()

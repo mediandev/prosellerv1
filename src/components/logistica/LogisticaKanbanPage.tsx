@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "../ui/button";
-import { listFretes, freteService } from "../../services/logisticaService";
+import { listFretes, freteService, sweepSswFretes } from "../../services/logisticaService";
 import FreteStatusBadge from "./FreteStatusBadge";
 import type { FreteLogisticaEnriched } from "@shared/types/frete-logistica";
 
@@ -45,6 +45,10 @@ export default function LogisticaKanbanPage({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<Status | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  const TERMINAIS = ["Entregue", "Devolvido - Entregue"];
 
   async function load() {
     setLoading(true);
@@ -56,6 +60,29 @@ export default function LogisticaKanbanPage({
       setError(err instanceof Error ? err.message : "Falha ao carregar fretes");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Botão "Atualizar": varre o rastreio SSW dos fretes visíveis não-terminais
+  // e recarrega. Respeita o cache de 30 min (não martela o SSW); o cron horário
+  // mantém o grosso atualizado em segundo plano.
+  async function handleAtualizar() {
+    setSyncing(true);
+    setSyncMsg(null);
+    setError(null);
+    try {
+      const ids = fretes
+        .filter((f) => !TERMINAIS.includes(f.statusEntrega))
+        .map((f) => f.id);
+      if (ids.length > 0) {
+        const r = await sweepSswFretes({ ids });
+        setSyncMsg(`Rastreio sincronizado: ${r.atualizados} de ${r.candidatos} frete(s) atualizado(s).`);
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao sincronizar rastreio");
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -94,11 +121,14 @@ export default function LogisticaKanbanPage({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Kanban de Fretes</h2>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-          {loading ? "Carregando..." : "Atualizar"}
+        <Button variant="outline" size="sm" onClick={handleAtualizar} disabled={loading || syncing}>
+          {syncing ? "Sincronizando..." : loading ? "Carregando..." : "Atualizar"}
         </Button>
       </div>
 
+      {syncMsg && (
+        <p className="text-sm text-muted-foreground">{syncMsg}</p>
+      )}
       {error && (
         <p className="text-sm text-destructive">{error}</p>
       )}

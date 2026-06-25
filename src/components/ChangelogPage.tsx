@@ -8,6 +8,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.69',
+    items: [
+      'Logística > Kanban: botão "Atualizar" agora sincroniza o rastreio SSW dos fretes visíveis (não-terminais) antes de recarregar, mostrando quantos foram atualizados.',
+      'Logística > Detalhe do frete: novo botão "Atualizar rastreio" força a consulta SSW daquele frete na hora (ignora o cache de 30 min).',
+      'Logística: varredura automática de rastreio SSW a cada 1h em segundo plano (ativação do agendamento pendente de confirmação em produção).',
+    ],
+  },
+  {
     version: 'V 1.68',
     items: [
       'Clientes > Detalhe: o regime "Optante Simples Nacional" agora distingue "Não consultado" (cliente ainda não enviado ao ERP) de "Indisponível" (consulta feita, mas Receita não respondeu) — antes ambos apareciam como "—".',
