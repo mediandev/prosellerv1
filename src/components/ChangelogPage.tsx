@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.71',
+    items: [
+      'Pedidos > Envio ao ERP: corrigido "falso sucesso" — a mensagem "enviado com sucesso" e a mudança de status só ocorrem quando o Tiny confirma o pedido (retorna um ID). Sem confirmação, o sistema avisa que NÃO foi enviado e mantém o pedido para reenvio, em vez de enganar o usuário.',
+    ],
+  },
+  {
     version: 'V 1.70',
     items: [
       'Configurações > Condições de Pagamento: nome automático de condição parcelada agora usa TODAS as parcelas (ex.: "10/15/20 dias") em vez de só a última ("20 dias"). Corrigido no cadastro (backend) e no preview "Nome Gerado".',

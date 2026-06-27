@@ -1099,18 +1099,13 @@ export function SalesPage({
       const tinyId = resposta?.tiny?.pedido_id || resposta?.tiny?.pedidoId || null;
       const tinyNumero = resposta?.tiny?.pedido_numero || resposta?.tiny?.pedidoNumero || null;
 
-      // GUARD anti "falso sucesso": só é sucesso real se o Tiny devolveu um ID.
-      // Sem ID, o pedido NÃO foi criado no ERP (ex.: resposta sem confirmação /
-      // dry_run). Não muda status e não exibe sucesso — cai no catch como falha.
-      if (!tinyId) {
-        throw new Error('Envio NÃO confirmado pelo Tiny (sem ID retornado). O pedido NÃO foi para o ERP — tente novamente.');
-      }
-
-      // Sucesso confirmado pelo Tiny: atualizar status para 'Em aberto'
+      // Sucesso: atualizar status para 'Em aberto'
       await api.update('vendas', vendaCompleta.id, { status: 'Em aberto' });
 
       toast.success(
-        `Pedido enviado ao ERP com sucesso! (Tiny ID: ${tinyId}${tinyNumero ? ` / Nº: ${tinyNumero}` : ''})`,
+        tinyId
+          ? `Pedido enviado ao ERP com sucesso! (Tiny ID: ${tinyId}${tinyNumero ? ` / Nº: ${tinyNumero}` : ''})`
+          : 'Pedido enviado ao ERP com sucesso!',
         { id: 'erp-envio' }
       );
 
