@@ -87,6 +87,31 @@ Deno.test("resolveFreteStatusFromTracking: array vazio → Em Trânsito", () => 
   assertEquals(resolveFreteStatusFromTracking([]), "Em Trânsito");
 });
 
+Deno.test("resolveFreteStatusFromTracking: comprovante complementar (70) APÓS entrega não rebaixa → Entregue", () => {
+  const tracking = [
+    { tipo: "Informativo", ocorrencia: "SAIDA PARA ENTREGA (92)" },
+    { tipo: "Entrega", ocorrencia: "MERCADORIA ENTREGUE (01)" },
+    { tipo: "Informativo", ocorrencia: "ANEXADO COMPROVANTE DE ENTREGA COMPLEMENTAR (70)" },
+  ];
+  assertEquals(resolveFreteStatusFromTracking(tracking), "Entregue");
+});
+
+Deno.test("resolveFreteStatusFromTracking: saída p/ entrega após agendamento NÃO vira Agendado → Em Trânsito", () => {
+  const tracking = [
+    { tipo: "Informativo", ocorrencia: "ENTREGA AGENDADA (08)" },
+    { tipo: "Informativo", ocorrencia: "SAIDA PARA ENTREGA (92)" },
+  ];
+  assertEquals(resolveFreteStatusFromTracking(tracking), "Em Trânsito");
+});
+
+Deno.test("resolveFreteStatusFromTracking: devolução APÓS entrega → Devolvido - Trânsito", () => {
+  const tracking = [
+    { tipo: "Entrega", ocorrencia: "MERCADORIA ENTREGUE (01)" },
+    { tipo: "Informativo", ocorrencia: "MERCADORIA DEVOLVIDA EM TRANSITO" },
+  ];
+  assertEquals(resolveFreteStatusFromTracking(tracking), "Devolvido - Trânsito");
+});
+
 // ----- isCacheStale -----
 
 Deno.test("isCacheStale: null → stale", () => {

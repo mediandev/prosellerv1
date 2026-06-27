@@ -100,23 +100,8 @@ export function resolveFreteStatusFromTracking(
   tracking: Array<{ tipo: string; ocorrencia: string }>,
 ): StatusEntrega {
   if (tracking.length === 0) return 'Em Trânsito';
-  const statuses = tracking.map((t) => mapOcorrenciaToStatus(t.tipo, t.ocorrencia));
-  const last = statuses[statuses.length - 1];
-  // Eventos administrativos no fim da timeline (ex.: "ANEXADO COMPROVANTE DE
-  // ENTREGA COMPLEMENTAR (70)") mapeiam para o default 'Em Trânsito' e NÃO devem
-  // rebaixar uma entrega/devolução/recusa que já ocorreu. Só quando o ÚLTIMO
-  // evento é esse default genérico procuramos o último status "fixo" anterior.
-  // (Agendado/Reentrega NÃO são fixos de propósito, p/ preservar a progressão
-  //  agendado → saída para entrega → em trânsito.)
-  if (last === 'Em Trânsito') {
-    const STICKY: ReadonlySet<StatusEntrega> = new Set<StatusEntrega>([
-      'Entregue', 'Devolvido - Entregue', 'Devolvido - Trânsito', 'Recusado',
-    ]);
-    for (let i = statuses.length - 1; i >= 0; i--) {
-      if (STICKY.has(statuses[i])) return statuses[i];
-    }
-  }
-  return last;
+  const latest = tracking[tracking.length - 1];
+  return mapOcorrenciaToStatus(latest.tipo, latest.ocorrencia);
 }
 
 /**
