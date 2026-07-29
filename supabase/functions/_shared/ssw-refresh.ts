@@ -6,7 +6,7 @@
 // com a opção `force` para o botão "Atualizar agora" da tela de detalhe.
 
 import { fetchSswTracking, mapSswToOcorrencias, isCacheStale } from './ssw-client.ts'
-import { isTerminalStatus, resolveFreteStatusFromTracking } from './frete-logistica-helpers.ts'
+import { isTerminalStatus, resolveFreteStatusFromTracking, mapOcorrenciaToStatus } from './frete-logistica-helpers.ts'
 
 // Status terminais — não evoluem mais via SSW. Tudo o que NÃO está aqui é
 // considerado "ativo" e elegível para varredura (robusto a drift de status,
@@ -77,9 +77,22 @@ export async function refreshSswForFrete(
     updated_at: new Date().toISOString(),
   }
   if (newStatus === 'Entregue') {
-    const last = sswResponse.documento.tracking[sswResponse.documento.tracking.length - 1]
-    if (last?.data_hora_efetiva) {
-      const d = new Date(last.data_hora_efetiva)
+    // A data de entrega é a do evento que REPRESENTA a entrega ("MERCADORIA
+    // ENTREGUE (01)"), não a do último evento da timeline — que pode ser
+    // administrativo e posterior (ex.: "ANEXADO COMPROVANTE DE ENTREGA
+    // COMPLEMENTAR (70)", dias depois), gravando uma data de entrega errada.
+    const tracking = sswResponse.documento.tracking
+    let eventoEntrega: typeof tracking[number] | undefined
+    for (let i = tracking.length - 1; i >= 0; i--) {
+      if (mapOcorrenciaToStatus(tracking[i].tipo, tracking[i].ocorrencia) === 'Entregue') {
+        eventoEntrega = tracking[i]
+        break
+      }
+    }
+    const origem = eventoEntrega ?? tracking[tracking.length - 1]
+    const raw = origem?.data_hora_efetiva || origem?.data_hora
+    if (raw) {
+      const d = new Date(raw)
       if (!isNaN(d.getTime())) statusPatch.data_entrega = d.toISOString().split('T')[0]
     }
   }
