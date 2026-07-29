@@ -1860,6 +1860,27 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
         toast.error('Selecione uma condição de pagamento');
       }
 
+      // Valor mínimo da condição de pagamento é requisito para usá-la
+      // (decisão do cliente, 2026-07-28). Só valida quando a condição
+      // realmente define um mínimo (> 0).
+      if (formData.condicaoPagamentoId) {
+        const condicaoSelecionada = condicoes.find(c => c.id === formData.condicaoPagamentoId);
+        const minimo = Number(
+          (condicaoSelecionada as any)?.valorMinimo
+          ?? (condicaoSelecionada as any)?.valorPedidoMinimo
+          ?? 0
+        );
+        const totalPedido = Number(formData.valorPedido ?? formData.valorTotalProdutos ?? 0);
+        if (minimo > 0 && totalPedido > 0 && totalPedido < minimo) {
+          erros.add('condicaoPagamentoId');
+          toast.error(
+            `A condição "${condicaoSelecionada?.nome ?? ''}" exige pedido mínimo de ` +
+            `${minimo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. ` +
+            `Este pedido soma ${totalPedido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`
+          );
+        }
+      }
+
       if (!formData.empresaFaturamentoId) {
         erros.add('empresaFaturamentoId');
       }

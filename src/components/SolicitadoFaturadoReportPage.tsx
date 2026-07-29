@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
+import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { Download, Filter, X, ArrowLeft, Calendar as CalendarIcon, RefreshCw } from "lucide-react";
@@ -29,6 +30,7 @@ interface SolicitadoFaturadoFilters {
   groupBy: GroupBy;
   statusVendas: "concluidas" | "todas";
   apenasComCorte: boolean; // Novo filtro
+  produtoBusca: string; // Filtro por produto (descrição ou SKU) — decisão do cliente 2026-07-28
 }
 
 interface SolicitadoFaturadoData {
@@ -136,6 +138,7 @@ export function SolicitadoFaturadoReportPage({ onBack }: SolicitadoFaturadoRepor
     groupBy: "none",
     statusVendas: "todas",
     apenasComCorte: false,
+    produtoBusca: "",
   });
 
   // Estados para controle de período - padrão alterado para "365" (último ano)
@@ -388,13 +391,22 @@ export function SolicitadoFaturadoReportPage({ onBack }: SolicitadoFaturadoRepor
     });
 
     // Aplicar filtro de apenas com corte
-    const dataFiltrada = filters.apenasComCorte 
+    let dataFiltrada = filters.apenasComCorte
       ? data.filter(d => d.perdaQuantidade > 0)
       : data;
 
+    // Filtro por produto (descrição ou SKU), case-insensitive
+    const termoProduto = (filters.produtoBusca || '').trim().toLowerCase();
+    if (termoProduto) {
+      dataFiltrada = dataFiltrada.filter(d =>
+        (d.descricaoProduto || '').toLowerCase().includes(termoProduto) ||
+        (d.codigoSku || '').toLowerCase().includes(termoProduto)
+      );
+    }
+
     // Ordenar por perda de quantidade (decrescente)
     return dataFiltrada.sort((a, b) => b.perdaQuantidade - a.perdaQuantidade);
-  }, [filteredSales, filters.apenasComCorte]);
+  }, [filteredSales, filters.apenasComCorte, filters.produtoBusca]);
 
   // Limpar filtros
   const clearFilters = () => {
@@ -409,6 +421,7 @@ export function SolicitadoFaturadoReportPage({ onBack }: SolicitadoFaturadoRepor
       groupBy: "none",
       statusVendas: "todas",
       apenasComCorte: false,
+      produtoBusca: "",
     });
     setPeriod("365"); // Voltar para "Último ano" ao limpar filtros
     setDateRange({});
@@ -668,19 +681,30 @@ export function SolicitadoFaturadoReportPage({ onBack }: SolicitadoFaturadoRepor
                 </div>
               </div>
 
-              {/* Linha 3: Checkbox "Mostrar somente produtos com corte no pedido" */}
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="apenasComCorte" 
-                  checked={filters.apenasComCorte}
-                  onCheckedChange={(checked) => setFilters({ ...filters, apenasComCorte: checked as boolean })}
-                />
-                <label
-                  htmlFor="apenasComCorte"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Mostrar somente produtos com corte no pedido
-                </label>
+              {/* Linha 3: filtro por produto + checkbox de corte */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                <div className="space-y-2">
+                  <Label htmlFor="produtoBusca">Produto (descrição ou SKU)</Label>
+                  <Input
+                    id="produtoBusca"
+                    placeholder="Filtrar por produto..."
+                    value={filters.produtoBusca}
+                    onChange={(e) => setFilters({ ...filters, produtoBusca: e.target.value })}
+                  />
+                </div>
+                <div className="flex items-center space-x-2 pb-2">
+                  <Checkbox
+                    id="apenasComCorte"
+                    checked={filters.apenasComCorte}
+                    onCheckedChange={(checked) => setFilters({ ...filters, apenasComCorte: checked as boolean })}
+                  />
+                  <label
+                    htmlFor="apenasComCorte"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Mostrar somente produtos com corte no pedido
+                  </label>
+                </div>
               </div>
             </div>
 

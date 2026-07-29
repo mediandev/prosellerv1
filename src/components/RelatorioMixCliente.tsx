@@ -241,19 +241,26 @@ export function RelatorioMixCliente({ onNavigateBack }: RelatorioMixClienteProps
         quantidadeTotal: number;
         dataUltimoPedido: string;
         numeroPedidos: number;
+        // Pedidos DISTINTOS em que o produto apareceu. Antes contávamos 1 por item,
+        // então um produto em 2 linhas do mesmo pedido contava 2 "pedidos".
+        pedidosDistintos: Set<string>;
       }>();
 
       allItens.forEach((item: any) => {
         const produtoId = String(item.produto_id);
+        const pedidoId = String(item.pedido_venda_id ?? '');
         const dataVenda = dataPorVenda.get(item.pedido_venda_id) || '';
         const existing = mapaProdutos.get(produtoId);
         if (existing) {
           existing.quantidadeTotal += Number(item.quantidade ?? 0);
-          existing.numeroPedidos += 1;
+          if (pedidoId) existing.pedidosDistintos.add(pedidoId);
+          existing.numeroPedidos = existing.pedidosDistintos.size;
           if (dataVenda && new Date(dataVenda) > new Date(existing.dataUltimoPedido)) {
             existing.dataUltimoPedido = dataVenda;
           }
         } else {
+          const pedidosDistintos = new Set<string>();
+          if (pedidoId) pedidosDistintos.add(pedidoId);
           mapaProdutos.set(produtoId, {
             produtoId,
             descricao: item.descricao || '',
@@ -262,7 +269,8 @@ export function RelatorioMixCliente({ onNavigateBack }: RelatorioMixClienteProps
             unidade: item.unidade || '',
             quantidadeTotal: Number(item.quantidade ?? 0),
             dataUltimoPedido: dataVenda,
-            numeroPedidos: 1,
+            numeroPedidos: Math.max(pedidosDistintos.size, 1),
+            pedidosDistintos,
           });
         }
       });
@@ -282,8 +290,10 @@ export function RelatorioMixCliente({ onNavigateBack }: RelatorioMixClienteProps
             codigoSkuCliente = statusMix.codigoSkuCliente;
           }
 
+          // `pedidosDistintos` é auxiliar de contagem — não vai para o resultado.
+          const { pedidosDistintos: _pedidosDistintos, ...produtoSemAuxiliar } = produto;
           return {
-            ...produto,
+            ...produtoSemAuxiliar,
             statusMix: statusFinal,
             codigoSkuCliente,
           };

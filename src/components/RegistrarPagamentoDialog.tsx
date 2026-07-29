@@ -92,13 +92,23 @@ export function RegistrarPagamentoDialog({
       toast.error('Digite um valor válido');
       return;
     }
-    if (parseFloat(formData.valor) > compromissoEfetivo.valorPendente) {
-      toast.error(`O valor não pode ser maior que o valor pendente (${formatCurrency(compromissoEfetivo.valorPendente)})`);
-      return;
-    }
     if (!formData.formaPagamentoId) {
       toast.error('Selecione a forma de pagamento');
       return;
+    }
+
+    // Valor acima do pendente: ALERTA e pede confirmação, mas NÃO impede o
+    // registro (decisão do cliente, 2026-07-28). Antes era bloqueio.
+    const valorInformado = parseFloat(formData.valor);
+    if (valorInformado > compromissoEfetivo.valorPendente) {
+      const excedente = valorInformado - compromissoEfetivo.valorPendente;
+      const confirmado = window.confirm(
+        `Atenção: o valor informado (${formatCurrency(valorInformado)}) é maior que o valor pendente ` +
+        `(${formatCurrency(compromissoEfetivo.valorPendente)}).\n\n` +
+        `Excedente: ${formatCurrency(excedente)}.\n\n` +
+        `Deseja registrar mesmo assim?`
+      );
+      if (!confirmado) return;
     }
 
     onSalvar({

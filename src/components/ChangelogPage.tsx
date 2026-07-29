@@ -8,6 +8,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.72',
+    items: [
+      'Relatórios > Mix do Cliente: a coluna "nº de pedidos" passa a contar pedidos únicos (antes contava cada linha do produto, inflando o número quando o item aparecia mais de uma vez no mesmo pedido).',
+      'Relatórios > Solicitado x Faturado: novo filtro por produto (descrição ou SKU).',
+      'Pedidos: se a condição de pagamento tiver valor mínimo, o pedido abaixo desse valor é bloqueado com aviso do quanto falta.',
+      'Clientes: ao cadastrar um cliente novo, é obrigatório selecionar ao menos uma condição de pagamento.',
+      'Conta Corrente: pagamento acima do valor pendente deixa de ser bloqueado — o sistema avisa o excedente e pede confirmação, permitindo registrar.',
+      'Logística: a data de entrega passa a usar o evento de entrega real, não o último lançamento do transportador (que podia ser o anexo do comprovante, dias depois).',
+    ],
+  },
+  {
     version: 'V 1.71',
     items: [
       'Pedidos > Envio ao ERP: corrigido "falso sucesso" — a mensagem "enviado com sucesso" e a mudança de status só ocorrem quando o Tiny confirma o pedido (retorna um ID). Sem confirmação, o sistema avisa que NÃO foi enviado e mantém o pedido para reenvio, em vez de enganar o usuário.',

@@ -219,6 +219,15 @@ export function CustomerFormPage({ clienteId, modo, onVoltar, onAprovar, onRejei
       return;
     }
 
+    // Todo cliente novo precisa de ao menos uma condição de pagamento
+    // (decisão do cliente, 2026-07-28). Só na CRIAÇÃO: aplicar também na edição
+    // travaria os 254 cadastros antigos que ainda não têm condição.
+    if (modo === 'criar' && (formData.condicoesPagamentoAssociadas?.length ?? 0) === 0) {
+      toast.error('Selecione ao menos uma condição de pagamento para o cliente');
+      setActiveTab('condicao-comercial');
+      return;
+    }
+
     // Validar código de cliente (modo manual)
     if (!customerCodeService.ehModoAutomatico()) {
       try {
