@@ -153,7 +153,7 @@ A suíte expôs **migração pela metade** (intencional no front, nunca aplicada
 
 ---
 
-## 🔎 Item C — Solicitado × Faturado · INVESTIGADO (2026-07-31): não é bug de cálculo, é DADO INEXISTENTE
+## ✅ Item C — Solicitado × Faturado · CONCLUÍDO E REATIVADO (V 1.75, 2026-07-31)
 
 **Causa raiz:** o relatório espera `venda.itensFaturados` (itens reais da NF), mas **não existe nenhuma fonte de itens de nota fiscal no sistema em lote**: nenhuma tabela de NF no banco, o webhook do Tiny não grava itens, `pedido_venda_produtos` só tem os solicitados. A listagem de vendas nunca traz `itensFaturados` → colunas "Faturado" sempre zeradas. O único lugar que mostra itens faturados é o DETALHE de um pedido — buscando a NF **ao vivo no Tiny** (2+ chamadas por pedido), o que é inviável para um relatório em lote (rate limit do Tiny).
 
@@ -163,4 +163,11 @@ A suíte expôs **migração pela metade** (intencional no front, nunca aplicada
 3. **Backfill one-off:** para pedidos já faturados, buscar as NFs no Tiny com throttle (respeita rate limit).
 4. **Relatório:** ler do banco (rápido e correto) + reativar no menu.
 
-**Porte:** médio (migration + webhook + backfill + front). Toca o webhook core da logística ⇒ trazido para aprovação em vez de executado direto.
+**Executado (2026-07-31):**
+- Migration **149**: tabela `nota_fiscal_item` (aditiva, RLS read).
+- Webhook `webhook-tiny-atualizacao`: persiste os itens da MESMA resposta `nota.fiscal.obter` já consultada p/ logística — **zero chamadas novas ao Tiny**, gravação **blindada** (try/catch próprio; falha nunca interrompe a logística). Redeploy com `--no-verify-jwt` preservado; 0 erros novos de typecheck (19 pré-existentes).
+- **Backfill** one-off com throttle 2.2s (docs/plans/backfill_nf_itens.py, idempotente) — em execução; erros intermitentes de conexão serão re-rodados ao final (pula quem já tem itens).
+- Front: injeta `itensFaturados` de `nota_fiscal_item`; **descoberto no teste** que a edge ignora `include_itens` (bug pré-existente) → itens SOLICITADOS também passam a vir por query direta (`pedido_venda_produtos`), padrão V1.62. Chave de agregação por **SKU** (elo real pedido↔NF). Rota `solicitado-faturado` criada no App (import existia, rota nunca ligada) + card reativado.
+- **Teste na tela (Playwright, prod):** card no menu ✓ · relatório abre ✓ · Solicitado (ex.: 133.736 un/R$ 845 mil/440 pedidos) × Faturado (19.416 un/R$ 132 mil/90 pedidos) × **Perda calculada** ✓.
+- ⚠️ **Nota de transição:** enquanto o backfill não completa (423 pedidos, ~62% restantes), os números de Faturado são PARCIAIS e a "Perda %" fica inflada. Normaliza ao fim do backfill; NFs novas entram sozinhas via webhook.
+- Commits: `ca810b0` (V1.75) + `73d2ac4` (solicitados via query direta).
