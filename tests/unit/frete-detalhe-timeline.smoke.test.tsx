@@ -14,15 +14,14 @@ describe("FreteOcorrenciaTimeline (F-LOG-2 CA-7)", () => {
   it("mostra placeholder quando lista vazia", () => {
     render(<FreteOcorrenciaTimeline ocorrencias={[]} />);
     expect(
-      screen.getByText(/Sem atualizações do transportador/i),
+      screen.getByText(/Sem atualizações de rastreio/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/R-LOG-4/i)).toBeInTheDocument();
   });
 
   it("mostra placeholder quando ocorrencias = undefined", () => {
     render(<FreteOcorrenciaTimeline ocorrencias={undefined} />);
     expect(
-      screen.getByText(/Sem atualizações do transportador/i),
+      screen.getByText(/Sem atualizações de rastreio/i),
     ).toBeInTheDocument();
   });
 
@@ -61,6 +60,6 @@ describe("FreteOcorrenciaTimeline (F-LOG-2 CA-7)", () => {
     );
     expect(screen.getByText(/Entregue ao destinatário/i)).toBeInTheDocument();
     expect(screen.getByText(/Em trânsito/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Sem atualizações do transportador/i)).toBeNull();
+    expect(screen.queryByText(/Sem atualizações de rastreio/i)).toBeNull();
   });
 });

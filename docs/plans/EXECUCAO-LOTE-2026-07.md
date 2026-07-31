@@ -140,3 +140,13 @@ Decisões do cliente (2026-07-31): (a) sem período aberto → **mês corrente**
 - **Camada 1:** testes automatizados das invariantes puras (expandir o padrão dos 23 testes do SSW).
 - **C · Solicitado × Faturado:** investigar cálculo, corrigir, reativar no menu.
 - 7 (Simples c/ cache) e 10 (auditoria) na sequência.
+
+---
+
+## 🔍 Achado da camada de testes (2026-07-31) — ENUM de status de frete divergente (efeito cascata, adiado)
+
+A suíte expôs **migração pela metade** (intencional no front, nunca aplicada no banco): o front/zod trocou `Em Trânsito - Reentrega` por `Aguardando Agendamento` (changelog V1.5x), mas o **enum do banco** (`status_entrega_frete`) segue com Reentrega e **sem** Aguardando Agendamento.
+
+**Consequências reais hoje:** arrastar um frete para a coluna "Aguardando Agendamento" do Kanban é **rejeitado pelo banco**; o resolver SSW ainda pode gravar "Em Trânsito - Reentrega", que o front não sabe exibir (0 fretes nesses status no momento).
+
+**Correção completa (adiada por cascata):** `ALTER TYPE ... ADD VALUE 'Aguardando Agendamento'` + decidir destino de Reentrega no resolver/buckets + alinhar zod/Kanban/badge. Requer decisão: manter os dois status ou concluir a troca?

@@ -141,7 +141,7 @@ export function validateNotEmpty(value: string | null | undefined): boolean {
  * Valida se string tem tamanho mínimo
  */
 export function validateMinLength(value: string, minLength: number): boolean {
-  return value && value.trim().length >= minLength
+  return !!value && value.trim().length >= minLength
 }
 
 /**

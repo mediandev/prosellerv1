@@ -55,9 +55,10 @@ Deno.test("clampLimit acima de 100 -> 100 (hard cap INC-016)", () => {
   assertEquals(clampLimit(99999), 100);
 });
 
-Deno.test("clampLimit zero/negativo -> 20 (default)", () => {
+Deno.test("clampLimit zero -> 20 (default) e negativo -> 1 (clamp, conforme docstring)", () => {
   assertEquals(clampLimit(0), 20);
-  assertEquals(clampLimit(-10), 20);
+  // negativo NÃO é default: a docstring da função define "mínimo 1" (clamp).
+  assertEquals(clampLimit(-10), 1);
 });
 
 Deno.test("clampLimit string inválida -> 20 (default)", () => {

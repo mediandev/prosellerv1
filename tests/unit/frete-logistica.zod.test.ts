@@ -5,11 +5,11 @@ import { describe, it, expect } from 'vitest';
 import {
   FreteLogisticaCreate,
   StatusEntregaFrete,
-} from '@shared/frete-logistica';
+} from '@shared/types/frete-logistica';
 import {
   TransportadorLogisticaCreate,
   GrupoTransportador,
-} from '@shared/transportador-logistica';
+} from '@shared/types/transportador-logistica';
 
 describe('FreteLogisticaCreate (F-LOG-CRM R-LOG-1)', () => {
   it('aceita payload mínimo válido (empresaId obrigatório, defaults preenchidos)', () => {
@@ -53,12 +53,19 @@ describe('FreteLogisticaCreate (F-LOG-CRM R-LOG-1)', () => {
     expect(result.success).toBe(true);
   });
 
+  // ⚠️ PENDÊNCIA CONHECIDA (2026-07-31): o zod/front trocou 'Em Trânsito - Reentrega'
+  // por 'Aguardando Agendamento' (changelog V1.5x), mas o ENUM DO BANCO nunca foi
+  // migrado (segue com Reentrega e SEM Aguardando Agendamento). Consequências reais:
+  // drop no Kanban p/ "Aguardando Agendamento" é rejeitado pelo banco; o resolver SSW
+  // ainda pode gravar Reentrega, que o front não exibe. Registrado em
+  // docs/plans/EXECUCAO-LOTE-2026-07.md para completar a migração do enum.
+  // Este teste valida o schema zod COMO ESTÁ HOJE.
   it('aceita todos os 9 valores de StatusEntregaFrete', () => {
     const status: Array<string> = [
       'Em Separação',
       'Aguardando Coleta',
       'Em Trânsito',
-      'Em Trânsito - Reentrega',
+      'Aguardando Agendamento',
       'Entregue',
       'Agendado',
       'Recusado',
