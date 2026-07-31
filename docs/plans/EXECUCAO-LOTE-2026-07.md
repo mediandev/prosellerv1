@@ -150,3 +150,17 @@ A suíte expôs **migração pela metade** (intencional no front, nunca aplicada
 **Consequências reais hoje:** arrastar um frete para a coluna "Aguardando Agendamento" do Kanban é **rejeitado pelo banco**; o resolver SSW ainda pode gravar "Em Trânsito - Reentrega", que o front não sabe exibir (0 fretes nesses status no momento).
 
 **Correção completa (adiada por cascata):** `ALTER TYPE ... ADD VALUE 'Aguardando Agendamento'` + decidir destino de Reentrega no resolver/buckets + alinhar zod/Kanban/badge. Requer decisão: manter os dois status ou concluir a troca?
+
+---
+
+## 🔎 Item C — Solicitado × Faturado · INVESTIGADO (2026-07-31): não é bug de cálculo, é DADO INEXISTENTE
+
+**Causa raiz:** o relatório espera `venda.itensFaturados` (itens reais da NF), mas **não existe nenhuma fonte de itens de nota fiscal no sistema em lote**: nenhuma tabela de NF no banco, o webhook do Tiny não grava itens, `pedido_venda_produtos` só tem os solicitados. A listagem de vendas nunca traz `itensFaturados` → colunas "Faturado" sempre zeradas. O único lugar que mostra itens faturados é o DETALHE de um pedido — buscando a NF **ao vivo no Tiny** (2+ chamadas por pedido), o que é inviável para um relatório em lote (rate limit do Tiny).
+
+**Desenho da correção (proposto, aguardando go):**
+1. **Migration:** tabela `nota_fiscal_item` (pedido_venda_id, sku/produto, quantidade, valor, nota_id, data_emissao).
+2. **Webhook:** `webhook-tiny-atualizacao` JÁ recebe o evento de NF emitida e JÁ chama `nota.fiscal.obter` (para a logística) — gravar os itens dessa MESMA resposta (aditivo, mas toca o webhook core ⇒ cautela + backup).
+3. **Backfill one-off:** para pedidos já faturados, buscar as NFs no Tiny com throttle (respeita rate limit).
+4. **Relatório:** ler do banco (rápido e correto) + reativar no menu.
+
+**Porte:** médio (migration + webhook + backfill + front). Toca o webhook core da logística ⇒ trazido para aprovação em vez de executado direto.
