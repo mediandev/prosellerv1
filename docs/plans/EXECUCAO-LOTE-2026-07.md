@@ -120,3 +120,23 @@ Decisões do cliente (2026-07-31): (a) sem período aberto → **mês corrente**
 - ✅ **A · CEP — CONCLUÍDO (V 1.74, commit `83420cf`, migration 146).** RPCs `create/update_cliente_v2` passam a guardar só dígitos (`regexp_replace('\D')` — antes só removia o hífen, origem do "13.345400"). Base normalizada: **936/936 endereços com 8 dígitos, 0 símbolos, 498 zeros à esquerda preservados** (coluna TEXT — nunca converter p/ número). Front: máscara `NN.NNN-NNN` na exibição/digitação (form principal + endereço de entrega). Compatível com a emissão (tiny-enviar já usa digitsOnly). Dry-run 4/4 + **teste na tela em prod**: exibe `13.345-400`, salva, banco mantém `13345400`, observação preservada (regra 140 intacta). Backups: `create/update_cliente_v2_PRE-146_2026-07-31.sql`.
 - **B · Estorno de comissão** — trigger no soft delete + função (decisões a/b/c acima).
 - **C · Solicitado × Faturado** — investigar por que "não exibe faturados corretamente", corrigir, reativar no menu.
+
+---
+
+## 🛡️ Estrutura anti-regressão — Camada 2: SENTINELA (migration 148, 2026-07-31)
+
+| | |
+|---|---|
+| **O que é** | Verificação diária automática (pg_cron `sentinela-diaria`, 6h BRT) de **7 invariantes do contrato** direto no banco. Violações entram em `sentinela_alerta` (dedup por chave) e **auto-resolvem** quando a condição some. Alerta aberto = violação ativa agora. |
+| **Regras** | 1· comissão de pedido excluído · 2· pedido "Em aberto/Enviado" sem ID Tiny · 3· frete com entrega registrada preso em status não-terminal · 4· CEP fora do padrão (dígitos, 8 posições) · 5· observação de contato apagada nas últimas 24h · 6· cliente novo sem condição de pagamento · 7· condição parcelada com nome divergente |
+| **Baseline** | 7/7 regras com **ZERO** violações na ativação (sistema limpo) |
+| **Dry-run** | Ciclo completo provado revertido: forjada violação de CEP → alerta criado com detalhe → consertada → **auto-resolvido** |
+| **Consulta** | `select * from sentinela_alerta where resolvido_em is null;` |
+| **Rollback** | `cron.unschedule('sentinela-diaria')` + drop function/table |
+
+## ✅ Item B aplicado — estorno (147) confirmado em prod: trigger ativo, teste ao vivo revertido OK, 0 comissões órfãs.
+
+## ⏳ Próximos
+- **Camada 1:** testes automatizados das invariantes puras (expandir o padrão dos 23 testes do SSW).
+- **C · Solicitado × Faturado:** investigar cálculo, corrigir, reativar no menu.
+- 7 (Simples c/ cache) e 10 (auditoria) na sequência.
