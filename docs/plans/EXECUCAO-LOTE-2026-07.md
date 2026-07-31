@@ -41,12 +41,11 @@
 
 ---
 
-## ⏸️ Item 2 — Estorno de comissão de pedido excluído · INVESTIGADO, aguardando decisão
+## ✅ Item 2 — Estorno de comissão de pedido excluído · CONCLUÍDO (migration 147, 2026-07-31)
 
-Investigação completa em 2026-07-28. **Não implementado** — 3 pontos precisam de decisão do cliente (registrados em `docs/specs/business-rules/comissao.md`):
-1. Vendedor **sem período aberto** (3 casos em prod): lançar no mês corrente ou criar o período?
-2. Período ainda **aberto**: apagar a linha de comissão ou manter zerada?
-3. Pedido **restaurado**: reverter o estorno automaticamente?
+Decisões do cliente (2026-07-31): (a) sem período aberto → **mês corrente** · (b) período aberto → **apagar** · (c) restaurado → **não reverter**.
+**Implementado:** trigger `trg_estorno_comissao_on_delete` (dispara na transição para excluído) + função `tg_estorno_comissao_pedido_excluido`. Período sem registro de fechamento = aberto (266 casos). Período fechado: linha do fechamento permanece + **débito** rastreável no período aberto mais recente (ou mês corrente). Valor R$0 fechado: sem débito (ruído).
+**Validação:** dry-run 3/3 (aberto apaga · fechado débito 2026-06 · sem aberto débito mês corrente) + teste ao vivo revertido com o trigger real instalado. **Órfã legada limpa** (pedido 395, R$0) → 0 comissões órfãs no sistema.
 
 *Apurado:* excluir pedido é soft delete puro e não toca comissão; triggers atuais só disparam em `valor_total` e status→`Faturado`; saldo = `saldo_anterior + comissão + créditos − débitos` ⇒ estorno é **débito**. Estrago atual irrelevante (1 comissão órfã de R$ 0,00). Desenho pronto: trigger em `deleted_at` → função de estorno.
 
@@ -99,22 +98,25 @@ Investigação completa em 2026-07-28. **Não implementado** — 3 pontos precis
 
 ---
 
-## 🔍 Achados a investigar (fora do lote)
+## ✅ Achados — resolvidos em V 1.73 (commit `2f68286`)
 
-1. **Filtro "Nº NFe" da Busca de Fretes não filtra** — continuou exibindo todos os 236 registros.
-2. **Solicitado × Faturado não listado** na tela de Relatórios — verificar se está acessível ao usuário.
-3. **`src/services/tinyERPSync_temp.ts` tem erro de sintaxe** (pré-existente, aparece no typecheck) — arquivo `_temp`, provável resíduo a remover.
+1. **Filtro "Nº NFe" — CORRIGIDO.** Causa: a edge usava `nfe_numero::text` + `ilike`, que o PostgREST não interpreta como cast → Postgres respondia **500** ("operator does not exist: integer ~~*") e a tela engolia o erro mantendo a lista anterior (parecia "não filtrar"). Fix: busca **exata** pelo número (coluna é INTEGER); entrada não numérica → vazio explícito; label "contém"→"exato". **Invariante anti falso-sucesso no front:** em erro de busca, limpa a lista e mostra o erro (nunca exibe resultado antigo como novo). Backup: `frete-logistica-v1_PRE-filtronfe_2026-07-31.ts.bak`. Testado: backend 4/4 cenários (6359→1 · 999999→0 · "abc"→0 sem 500 · sem filtro→244) + tela em prod ("Mostrando 1 de 1", NFe 6359).
+2. **Solicitado × Faturado fora do menu — É INTENCIONAL** (comentado no `ReportsPage` com nota: *"Problema: Relatório não exibe dados faturados corretamente"*). ⚠️ Consequência: o item 9 do lote (filtro por produto) está entregue **num relatório inacessível**. Virou decisão do cliente (nº 5 do consolidado).
+3. **`tinyERPSync_temp.ts` — REMOVIDO.** Rascunho residual sem nenhum import; typecheck limpo (0 ocorrências).
 
 ---
 
-## ❓ Consolidado — aguardando decisão do cliente
+## ✅ Consolidado — decisões do cliente (respondidas em 2026-07-31)
 
-| # | Assunto | Pergunta |
+| # | Assunto | Decisão |
 |---|---|---|
-| 1 | **CEP** | Guardar só dígitos (`13345400`) ou com máscara (`13.345-400`)? 81 registros a normalizar. |
-| 2 | **Condição de crédito** | Campo salvo mas não usado em lugar nenhum; o cliente não o conhece — remover da tela? |
-| 3 | **Estorno de comissão** | (a) vendedor sem período aberto: lançar no mês corrente ou criar período? (b) período aberto: apagar a linha ou manter zerada? (c) pedido restaurado: reverter o estorno? |
+| 1 | **CEP** | Guardar **só números, preservando zeros à esquerda** (nunca converter para número). Exibir com **máscara ponto + hífen** (`13.345-400`). Normalizar a base. |
+| 2 | **Condição de crédito** | **Deixar como está** (precaução). Nenhuma ação. |
+| 3 | **Estorno de comissão** | (a) sem período aberto → **lançar no mês corrente** · (b) período aberto → **apagar** a comissão · (c) pedido restaurado → **não reverter** automaticamente. |
+| 4 | **Clientes sem condição** | Exigir **só na criação** daqui em diante. **Não regularizar** os 254 (provavelmente inativos). Nenhuma ação extra. |
+| 5 | **Solicitado × Faturado** | **Corrigir o cálculo e reativar** o relatório. |
 
-## ❓ Aguardando decisão do cliente
-- **Formato do CEP:** só dígitos (`13345400`) ou com máscara (`13.345-400`)? 81 registros a normalizar.
-- **Campo "condição de crédito":** o cliente não conhece; é salvo mas não usado em lugar nenhum — remover da tela?
+### Fila de execução decorrente
+- ✅ **A · CEP — CONCLUÍDO (V 1.74, commit `83420cf`, migration 146).** RPCs `create/update_cliente_v2` passam a guardar só dígitos (`regexp_replace('\D')` — antes só removia o hífen, origem do "13.345400"). Base normalizada: **936/936 endereços com 8 dígitos, 0 símbolos, 498 zeros à esquerda preservados** (coluna TEXT — nunca converter p/ número). Front: máscara `NN.NNN-NNN` na exibição/digitação (form principal + endereço de entrega). Compatível com a emissão (tiny-enviar já usa digitsOnly). Dry-run 4/4 + **teste na tela em prod**: exibe `13.345-400`, salva, banco mantém `13345400`, observação preservada (regra 140 intacta). Backups: `create/update_cliente_v2_PRE-146_2026-07-31.sql`.
+- **B · Estorno de comissão** — trigger no soft delete + função (decisões a/b/c acima).
+- **C · Solicitado × Faturado** — investigar por que "não exibe faturados corretamente", corrigir, reativar no menu.
