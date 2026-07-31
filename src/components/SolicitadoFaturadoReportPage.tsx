@@ -104,11 +104,37 @@ export function SolicitadoFaturadoReportPage({ onBack }: SolicitadoFaturadoRepor
           });
           if (!page || page.length < PAGE) break;
         }
+        // Itens SOLICITADOS via query direta (pedido_venda_produtos): a edge
+        // pedido-venda-v2 ignora include_itens (bug pré-existente — mesmo motivo
+        // da migração dos outros relatórios p/ query direta na V1.62).
+        const solicitadosPorPedido = new Map<string, any[]>();
+        for (let from = 0; ; from += PAGE) {
+          const { data: page, error } = await sb
+            .from('pedido_venda_produtos')
+            .select('pedido_venda_id, produto_id, codigo_sku, codigo_ean, descricao, quantidade, subtotal')
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          (page ?? []).forEach((r: any) => {
+            const k = String(r.pedido_venda_id);
+            if (!solicitadosPorPedido.has(k)) solicitadosPorPedido.set(k, []);
+            solicitadosPorPedido.get(k)!.push({
+              produtoId: r.produto_id != null ? String(r.produto_id) : undefined,
+              codigoSku: r.codigo_sku || '',
+              codigoEan: r.codigo_ean || undefined,
+              descricaoProduto: r.descricao || '',
+              quantidade: Number(r.quantidade) || 0,
+              subtotal: Number(r.subtotal) || 0,
+            });
+          });
+          if (!page || page.length < PAGE) break;
+        }
+
         vendasComFaturados = vendasComFaturados.map((v: any) => ({
           ...v,
+          itens: (Array.isArray(v.itens) && v.itens.length > 0) ? v.itens : (solicitadosPorPedido.get(String(v.id)) ?? []),
           itensFaturados: porPedido.get(String(v.id)) ?? v.itensFaturados,
         }));
-        console.log('[SOLICITADO-FATURADO] Itens de NF injetados para', porPedido.size, 'pedidos');
+        console.log('[SOLICITADO-FATURADO] Injetados: solicitados p/', solicitadosPorPedido.size, 'pedidos · faturados p/', porPedido.size, 'pedidos');
       } catch (nfiErr) {
         console.warn('[SOLICITADO-FATURADO] Falha ao carregar itens de NF (colunas Faturado podem zerar):', nfiErr);
       }
