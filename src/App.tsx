@@ -83,7 +83,7 @@ type CustomerView = 'list' | 'create' | 'edit' | 'view';
 type PriceListView = 'settings' | 'create' | 'edit' | 'view';
 type SaleView = 'list' | 'create' | 'edit' | 'view';
 type ProductView = 'list' | 'create' | 'edit' | 'view';
-type ReportView = 'index' | 'vendas' | 'clientes-abc' | 'produtos-abc' | 'clientes-risco' | 'mix-cliente' | 'roi-clientes' | 'analise-abc-dez2025';
+type ReportView = 'index' | 'vendas' | 'clientes-abc' | 'produtos-abc' | 'clientes-risco' | 'mix-cliente' | 'roi-clientes' | 'analise-abc-dez2025' | 'solicitado-faturado';
 
 const menuItems: Array<{ id: Page; icon: any; label: string; backofficeOnly?: boolean; featureFlag?: boolean }> = [
   { id: "dashboard", icon: LayoutDashboard, label: "Dashboards" },
@@ -157,7 +157,7 @@ function SidebarUserInfo({
   onOpenChangelog: () => void;
 }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.74";
+  const systemVersion = "V 1.75";
   const ultimaVersao = CHANGELOG[0];
   
   if (!usuario) return null;
@@ -1082,6 +1082,8 @@ function AppContent() {
           return <RelatorioROICliente onNavigateBack={handleBackToReportsIndex} />;
         } else if (reportView === 'analise-abc-dez2025') {
           return <AnaliseCurvaABCPage onBack={handleBackToReportsIndex} />;
+        } else if (reportView === 'solicitado-faturado') {
+          return <SolicitadoFaturadoReportPage onBack={handleBackToReportsIndex} />;
         } else {
           return <ClientsRiskReportPage onNavigateBack={handleBackToReportsIndex} />;
         }

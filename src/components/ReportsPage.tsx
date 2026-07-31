@@ -3,7 +3,7 @@ import { FileText, TrendingUp, Package, ChevronRight, AlertTriangle, FileBarChar
 import { Button } from "./ui/button";
 
 interface ReportsPageProps {
-  onNavigateToReport: (reportType: "vendas" | "clientes-abc" | "produtos-abc" | "clientes-risco" | "mix-cliente" | "roi-clientes" | "analise-abc-dez2025") => void;
+  onNavigateToReport: (reportType: "vendas" | "clientes-abc" | "produtos-abc" | "clientes-risco" | "mix-cliente" | "roi-clientes" | "analise-abc-dez2025" | "solicitado-faturado") => void;
 }
 
 export function ReportsPage({ onNavigateToReport }: ReportsPageProps) {
@@ -73,18 +73,17 @@ export function ReportsPage({ onNavigateToReport }: ReportsPageProps) {
     //   borderColor: "border-yellow-200 dark:border-yellow-900",
     // },
     
-    // TEMPORARIAMENTE REMOVIDO - pode ser restaurado e corrigido no futuro
-    // Problema: Relatório não exibe dados faturados corretamente
-    // Arquivo: /components/SolicitadoFaturadoReportPage.tsx
-    // {
-    //   id: "solicitado-faturado" as const,
-    //   icon: ClipboardCheck,
-    //   title: "Análise Solicitado X Faturado",
-    //   description: "Comparação entre quantidades e valores solicitados versus faturados por produto. Identifica perdas de vendas (cortes no pedido) quando o faturado é menor que o solicitado. Filtros por período, vendedor, grupo/rede, UF, empresa emitente e opção de exibir apenas produtos com corte.",
-    //   color: "text-teal-600 dark:text-teal-400",
-    //   bgColor: "bg-teal-50 dark:bg-teal-950/20",
-    //   borderColor: "border-teal-200 dark:border-teal-900",
-    // },
+    // Reativado em V 1.75: os itens reais da NF agora são persistidos em
+    // nota_fiscal_item (webhook Tiny + backfill), corrigindo o "Faturado zerado".
+    {
+      id: "solicitado-faturado" as const,
+      icon: ClipboardCheck,
+      title: "Análise Solicitado X Faturado",
+      description: "Comparação entre quantidades e valores solicitados versus faturados por produto. Identifica perdas de vendas (cortes no pedido) quando o faturado é menor que o solicitado. Filtros por período, vendedor, natureza e produto.",
+      color: "text-teal-600 dark:text-teal-400",
+      bgColor: "bg-teal-50 dark:bg-teal-950/20",
+      borderColor: "border-teal-200 dark:border-teal-900",
+    },
   ];
 
   return (

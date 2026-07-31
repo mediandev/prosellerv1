@@ -214,43 +214,6 @@ async function handleNfe(
     .eq("id_tiny", idTinyPedido)
     .maybeSingle();
 
-  // Persiste os itens REAIS da NF em nota_fiscal_item (base do relatório
-  // Solicitado × Faturado). BLINDADO: qualquer falha aqui apenas loga — NUNCA
-  // interrompe o fluxo da logística. Sync idempotente: DELETE por nota + INSERT.
-  async function persistirItensNota(nota: any, pedidoVendaId: number) {
-    try {
-      const idNota = String(nota?.id ?? idNotaFiscalTiny ?? "");
-      const rawItens = Array.isArray(nota?.itens) ? nota.itens : [];
-      if (!idNota || rawItens.length === 0) return;
-      const rows = rawItens
-        .map((wrap: any) => wrap?.item ?? wrap)
-        .filter((it: any) => it)
-        .map((it: any) => ({
-          pedido_venda_id: pedidoVendaId,
-          id_nota_tiny: idNota,
-          numero_nota: nota?.numero != null ? String(nota.numero) : null,
-          data_emissao: (() => {
-            const d = String(nota?.data_emissao ?? "");
-            const m = d.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-            return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
-          })(),
-          codigo_sku: it.codigo != null ? String(it.codigo) : null,
-          descricao: it.descricao != null ? String(it.descricao) : null,
-          quantidade: parseFloat(String(it.quantidade ?? 0)) || 0,
-          valor_unitario: parseFloat(String(it.valor_unitario ?? 0)) || 0,
-          valor_total: parseFloat(String(it.valor_total ?? it.valor ?? 0)) ||
-            (parseFloat(String(it.quantidade ?? 0)) || 0) * (parseFloat(String(it.valor_unitario ?? 0)) || 0),
-        }));
-      if (rows.length === 0) return;
-      await supabase.from("nota_fiscal_item").delete().eq("id_nota_tiny", idNota);
-      const { error: insErr } = await supabase.from("nota_fiscal_item").insert(rows);
-      if (insErr) console.warn(`[${traceId}] nota_fiscal_item insert falhou (não crítico):`, insErr.message);
-      else console.log(`[${traceId}] ✅ ${rows.length} itens da NF ${idNota} persistidos (pedido ${pedidoVendaId})`);
-    } catch (e) {
-      console.warn(`[${traceId}] persistirItensNota falhou (não crítico):`, e);
-    }
-  }
-
   if (pedidoErr) {
     console.error(`[${traceId}] Erro buscando pedido NFe:`, pedidoErr.message);
     return { success: false, error: pedidoErr.message };
@@ -322,8 +285,6 @@ async function handleNfe(
     }
 
     if (nota) {
-      await persistirItensNota(nota, pedidoVendaId);
-
       const extra: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
       const pesoBruto = parseFloat(String(nota.peso_bruto ?? ""));

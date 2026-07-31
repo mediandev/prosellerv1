@@ -75,7 +75,45 @@ export function SolicitadoFaturadoReportPage({ onBack }: SolicitadoFaturadoRepor
         api.get('naturezas-operacao'),
       ]);
       
-      setVendas(Array.isArray(vendasAPI) ? vendasAPI : []);
+      let vendasComFaturados = Array.isArray(vendasAPI) ? vendasAPI : [];
+
+      // Itens REAIS da NF vêm de nota_fiscal_item (populada pelo webhook do Tiny
+      // na emissão + backfill). Sem essa injeção, itensFaturados nunca chega e as
+      // colunas "Faturado" zeram — o motivo histórico de o relatório ter saído do ar.
+      try {
+        const { getSupabaseClient } = await import('../services/supabase');
+        const sb = getSupabaseClient();
+        const porPedido = new Map<string, any[]>();
+        const PAGE = 1000;
+        for (let from = 0; ; from += PAGE) {
+          const { data: page, error } = await sb
+            .from('nota_fiscal_item')
+            .select('pedido_venda_id, codigo_sku, descricao, quantidade, valor_unitario, valor_total')
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          (page ?? []).forEach((r: any) => {
+            const k = String(r.pedido_venda_id);
+            if (!porPedido.has(k)) porPedido.set(k, []);
+            porPedido.get(k)!.push({
+              codigoSku: r.codigo_sku,
+              descricao: r.descricao,
+              quantidade: Number(r.quantidade) || 0,
+              valorUnitario: Number(r.valor_unitario) || 0,
+              subtotal: Number(r.valor_total) || 0,
+            });
+          });
+          if (!page || page.length < PAGE) break;
+        }
+        vendasComFaturados = vendasComFaturados.map((v: any) => ({
+          ...v,
+          itensFaturados: porPedido.get(String(v.id)) ?? v.itensFaturados,
+        }));
+        console.log('[SOLICITADO-FATURADO] Itens de NF injetados para', porPedido.size, 'pedidos');
+      } catch (nfiErr) {
+        console.warn('[SOLICITADO-FATURADO] Falha ao carregar itens de NF (colunas Faturado podem zerar):', nfiErr);
+      }
+
+      setVendas(vendasComFaturados);
       setClientes(Array.isArray(clientesData) ? clientesData : []);
       setVendedores(Array.isArray(vendedoresData) ? vendedoresData : []);
       setNaturezas(Array.isArray(naturezasData) ? naturezasData : []);
@@ -309,9 +347,13 @@ export function SolicitadoFaturadoReportPage({ onBack }: SolicitadoFaturadoRepor
      * Prioridade: produtoId -> EAN -> SKU
      */
     const getItemKey = (item: any): string => {
-      if (item.produtoId) return `id:${item.produtoId}`;
+      // SKU primeiro: é o elo comum entre o item SOLICITADO (codigo_sku do pedido)
+      // e o item FATURADO (o "codigo" da NF do Tiny é o mesmo SKU enviado na
+      // emissão). produtoId é interno e não existe nos itens da NF.
+      if (item.codigoSku) return `sku:${item.codigoSku}`;
       if (item.codigoEan) return `ean:${item.codigoEan}`;
-      return `sku:${item.codigoSku}`;
+      if (item.produtoId) return `id:${item.produtoId}`;
+      return `desc:${item.descricao || item.descricaoProduto || '?'}`;
     };
 
     filteredSales.forEach((venda) => {

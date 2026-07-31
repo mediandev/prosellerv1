@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.75',
+    items: [
+      'Relatórios > Solicitado x Faturado: relatório REATIVADO no menu. Os itens reais de cada nota fiscal agora são guardados no sistema (capturados automaticamente na emissão + carga histórica), permitindo comparar o que foi pedido com o que foi faturado e identificar cortes.',
+    ],
+  },
+  {
     version: 'V 1.74',
     items: [
       'Clientes > Endereço: o CEP agora é guardado apenas com números (zeros à esquerda preservados) e exibido com máscara completa (ex.: 13.345-400). Corrige o defeito que salvava o CEP num formato quebrado (13.345400) — toda a base foi normalizada (936 endereços).',
