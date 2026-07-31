@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.74',
+    items: [
+      'Clientes > Endereço: o CEP agora é guardado apenas com números (zeros à esquerda preservados) e exibido com máscara completa (ex.: 13.345-400). Corrige o defeito que salvava o CEP num formato quebrado (13.345400) — toda a base foi normalizada (936 endereços).',
+    ],
+  },
+  {
     version: 'V 1.73',
     items: [
       'Logística > Busca: o filtro "Nº NFe" voltou a funcionar (busca exata pelo número). Antes o backend recusava a consulta e a tela mantinha a lista anterior, parecendo que o filtro não filtrava.',

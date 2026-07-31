@@ -59,12 +59,15 @@ const formatCNPJ = (value: string) => {
     .replace(/(-\d{2})\d+?$/, '$1');
 };
 
-// Função para formatar CEP
+// Máscara de exibição do CEP: NN.NNN-NNN (ponto + hífen — decisão do cliente
+// 2026-07-31). O banco guarda SÓ dígitos (migration 146), preservando zeros à
+// esquerda; a máscara é aplicada apenas na exibição/digitação.
 const formatCEP = (value: string) => {
   return value
     .replace(/\D/g, '')
-    .replace(/(\d{5})(\d)/, '$1-$2')
-    .replace(/(-\d{3})\d+?$/, '$1');
+    .slice(0, 8)
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2}\.\d{3})(\d)/, '$1-$2');
 };
 
 export function CustomerFormDadosCadastrais({
@@ -1037,10 +1040,10 @@ export function CustomerFormDadosCadastrais({
             <div className="flex gap-2">
               <Input
                 id="cep"
-                value={formData.cep || ''}
+                value={formatCEP(formData.cep || '')}
                 onChange={(e) => updateFormData({ cep: formatCEP(e.target.value) })}
-                placeholder="00000-000"
-                maxLength={9}
+                placeholder="00.000-000"
+                maxLength={10}
                 disabled={readOnly}
               />
               {!readOnly && (
@@ -1170,7 +1173,7 @@ export function CustomerFormDadosCadastrais({
                 <div className="flex gap-2">
                   <Input
                     id="cepEntrega"
-                    value={formData.enderecoEntrega?.cep || ''}
+                    value={formatCEP(formData.enderecoEntrega?.cep || '')}
                     onChange={(e) =>
                       updateFormData({
                         enderecoEntrega: {
@@ -1179,8 +1182,8 @@ export function CustomerFormDadosCadastrais({
                         },
                       })
                     }
-                    placeholder="00000-000"
-                    maxLength={9}
+                    placeholder="00.000-000"
+                    maxLength={10}
                     disabled={readOnly}
                   />
                   {!readOnly && (
