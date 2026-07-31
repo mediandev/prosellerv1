@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.73',
+    items: [
+      'Logística > Busca: o filtro "Nº NFe" voltou a funcionar (busca exata pelo número). Antes o backend recusava a consulta e a tela mantinha a lista anterior, parecendo que o filtro não filtrava.',
+      'Logística > Busca: quando a busca falha, a tela agora mostra o erro e limpa a lista — em vez de exibir o resultado antigo como se fosse o novo.',
+    ],
+  },
+  {
     version: 'V 1.72',
     items: [
       'Relatórios > Mix do Cliente: a coluna "nº de pedidos" passa a contar pedidos únicos (antes contava cada linha do produto, inflando o número quando o item aparecia mais de uma vez no mesmo pedido).',

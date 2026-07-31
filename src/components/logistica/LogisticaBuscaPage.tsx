@@ -80,6 +80,10 @@ export default function LogisticaBuscaPage({
         setPage(nextPage);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Falha ao buscar fretes");
+        // Invariante anti "falso sucesso": em erro, NUNCA manter a lista anterior
+        // na tela — pareceria um resultado válido do filtro recém-aplicado.
+        setFretes([]);
+        setTotal(0);
       } finally {
         setLoading(false);
       }
@@ -162,7 +166,7 @@ export default function LogisticaBuscaPage({
               </select>
             </div>
             <div>
-              <Label htmlFor="f-nfe">Nº NFe (contém)</Label>
+              <Label htmlFor="f-nfe">Nº NFe (exato)</Label>
               <Input
                 id="f-nfe"
                 placeholder="ex.: 9999"

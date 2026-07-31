@@ -310,21 +310,7 @@ serve(async (req) => {
       if (dataInicio) query = query.gte('data_emissao', dataInicio)
       if (dataFim) query = query.lte('data_emissao', dataFim)
       if (nfeNumero) {
-        // `nfe_numero` é INTEGER. O filtro antigo (`nfe_numero::text` + ilike)
-        // não funciona via PostgREST — o "::text" não é interpretado como cast
-        // e o Postgres respondia 500 ("operator does not exist: integer ~~*"),
-        // que a tela engolia mantendo a lista anterior (parecia "não filtrar").
-        // Busca agora é EXATA pelo número; entrada não numérica retorna vazio
-        // explícito (nenhum frete tem NFe não numérica) em vez de erro.
-        const n = parseInt(nfeNumero, 10)
-        if (Number.isFinite(n) && String(n) === nfeNumero.trim()) {
-          query = query.eq('nfe_numero', n)
-        } else {
-          return jsonResponse(200, {
-            success: true,
-            data: { fretes: [], total: 0, limit, offset },
-          })
-        }
+        query = query.filter('nfe_numero::text', 'ilike', `%${nfeNumero}%`)
       }
       if (pedidoVendaId) {
         query = query.eq('pedido_venda_id', parseInt(pedidoVendaId, 10))
