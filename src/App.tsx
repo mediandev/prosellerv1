@@ -13,7 +13,8 @@ import {
   DollarSign,
   LogOut,
   Sparkles,
-  Truck
+  Truck,
+  ShieldAlert
 } from "lucide-react";
 import { format } from "date-fns@4.1.0";
 import { ptBR } from "date-fns@4.1.0/locale";
@@ -59,6 +60,8 @@ import { TinyERPPedidosPage } from "./components/TinyERPPedidosPage";
 import LogisticaPage from "./components/logistica/LogisticaPage";
 import { TinyERPModeIndicator } from "./components/TinyERPModeIndicator";
 import { ChangelogPage, CHANGELOG } from "./components/ChangelogPage";
+import { SentinelaPage } from "./components/SentinelaPage";
+import { contarAlertasAbertos } from "./services/sentinelaService";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { DataInitializer } from "./components/DataInitializerSimple";
 import { DemoModeBadge } from "./components/DemoModeBadge";
@@ -76,7 +79,7 @@ import { toast } from "sonner@2.0.3";
 import { api } from "./services/api";
 import { tinyERPSyncService } from "./services/tinyERPSync";
 
-type Page = "dashboard" | "vendas" | "equipe" | "clientes" | "comissoes" | "contacorrente" | "produtos" | "metas" | "relatorios" | "configuracoes" | "perfil" | "clientes-pendentes" | "tiny-erp" | "changelog" | "logistica";
+type Page = "dashboard" | "vendas" | "equipe" | "clientes" | "comissoes" | "contacorrente" | "produtos" | "metas" | "relatorios" | "configuracoes" | "perfil" | "clientes-pendentes" | "tiny-erp" | "changelog" | "logistica" | "sentinela";
 
 const FEATURE_LOG_CRM_ENABLED = import.meta.env.VITE_FEATURE_LOG_CRM === 'true';
 type CustomerView = 'list' | 'create' | 'edit' | 'view';
@@ -98,6 +101,7 @@ const menuItems: Array<{ id: Page; icon: any; label: string; backofficeOnly?: bo
   ...(FEATURE_LOG_CRM_ENABLED
     ? [{ id: "logistica" as Page, icon: Truck, label: "Logística", backofficeOnly: true, featureFlag: true }]
     : []),
+  { id: "sentinela", icon: ShieldAlert, label: "Sentinela", backofficeOnly: true },
   { id: "configuracoes", icon: Settings, label: "Configurações", backofficeOnly: true },
 ];
 
@@ -117,6 +121,28 @@ interface SidebarProps {
 }
 
 function Sidebar({ currentPage, onPageChange, canAccessPage }: SidebarProps) {
+  // Badge da sentinela: violação ativa precisa ser vista sem ninguém abrir a tela.
+  // Recarrega a cada 5 min; falha em silêncio (o serviço já trata) para nunca
+  // derrubar a navegação por causa de um contador.
+  const [alertasSentinela, setAlertasSentinela] = useState(0);
+  const podeVerSentinela = canAccessPage("sentinela");
+
+  useEffect(() => {
+    if (!podeVerSentinela) return;
+    let ativo = true;
+    const buscar = () => {
+      void contarAlertasAbertos().then((n) => {
+        if (ativo) setAlertasSentinela(n);
+      });
+    };
+    buscar();
+    const t = setInterval(buscar, 5 * 60 * 1000);
+    return () => {
+      ativo = false;
+      clearInterval(t);
+    };
+  }, [podeVerSentinela]);
+
   return (
     <div className="flex flex-col h-full bg-card border-r">
       <div className="px-6 py-4 border-b flex-shrink-0 h-[72px] flex items-center justify-center">
@@ -134,7 +160,15 @@ function Sidebar({ currentPage, onPageChange, canAccessPage }: SidebarProps) {
               onClick={() => onPageChange(item.id)}
             >
               <item.icon className="h-4 w-4" />
-              {item.label}
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.id === "sentinela" && alertasSentinela > 0 && (
+                <span
+                  aria-label={`${alertasSentinela} alertas em aberto`}
+                  className="ml-auto min-w-5 rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-semibold leading-none text-destructive-foreground"
+                >
+                  {alertasSentinela}
+                </span>
+              )}
             </Button>
           ))}
       </nav>
@@ -157,7 +191,7 @@ function SidebarUserInfo({
   onOpenChangelog: () => void;
 }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.75";
+  const systemVersion = "V 1.76";
   const ultimaVersao = CHANGELOG[0];
   
   if (!usuario) return null;
@@ -529,6 +563,9 @@ function AppContent() {
     if (page === "equipe") return has("equipe.visualizar") || isLegacyAdmin;
     if (page === "metas") return has("metas.visualizar") || isLegacyAdmin;
     if (page === "configuracoes") return has("configuracoes.visualizar") || isLegacyAdmin;
+    // Sentinela expõe inconsistências internas (comissão, pedido, dados de cliente):
+    // gate explícito, senão o `return true` no fim liberaria para vendedor.
+    if (page === "sentinela") return has("configuracoes.visualizar") || isLegacyAdmin;
 
     const requiredPermission = PAGE_VIEW_PERMISSION[page];
     if (requiredPermission) {
@@ -890,6 +927,8 @@ function AppContent() {
         return <UserProfilePage />;
       case "changelog":
         return <ChangelogPage />;
+      case "sentinela":
+        return <SentinelaPage />;
       case "dashboard":
         return (
           <div className="space-y-6">

@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.76',
+    items: [
+      'Nova tela "Sentinela" (backoffice): o sistema já verificava sozinho, todo dia, um conjunto de regras críticas — comissão de pedido excluído, pedido sem confirmação do ERP, frete entregue preso em trânsito, CEP fora do padrão, cliente novo sem condição de pagamento, entre outras. Até agora esse resultado só existia no banco de dados. Agora ele aparece no menu, com contador de alertas em aberto.',
+      'Sentinela: a verificação de "campo de cliente apagado" deixou de olhar apenas o campo Observação e passou a cobrir todos os campos de cadastro, contato e endereço — a mesma classe do incidente que apagou dados de clientes. O alerta só é levantado quando o campo continua vazio na base, evitando alarme falso.',
+    ],
+  },
+  {
     version: 'V 1.75',
     items: [
       'Relatórios > Solicitado x Faturado: relatório REATIVADO no menu. Os itens reais de cada nota fiscal agora são guardados no sistema (capturados automaticamente na emissão + carga histórica), permitindo comparar o que foi pedido com o que foi faturado e identificar cortes.',
