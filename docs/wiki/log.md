@@ -45,3 +45,12 @@
 2026-06-22 · [FIX] · Relatórios ABC Produtos/Mix/ROI: auth Supabase corrigida (JWT inject), loading infinito ROI, include_itens → query direta · PR #69 (V 1.62)
 - 2026-06-25 · [FEATURE] · F-LOG-CRM R-LOG-4: SSW automático — botão "Atualizar rastreio" (detalhe, force), botão "Atualizar" do Kanban varre SSW dos fretes visíveis, cron horário via ssw-sweep-v1 (agendamento pg_cron pendente de confirmação). Edges frete-logistica-v1 + ssw-sweep-v1 deployadas. V 1.69 · SHA 00964ff
 - 2026-06-25 · [FIX] · Clientes: regime Simples distingue "Não consultado" de "Indisponível" (antes ambos "—"). V 1.68 · SHA 7bc21f1
+
+## 2026-08-01
+
+- 2026-08-01 · [FEATURE] · Sentinela visível no app: tela Sentinela (backoffice) + badge com contador no menu, lendo `sentinela_alerta`. Até aqui a sentinela gravava violações que ninguém lia — detecção sem notificação. V 1.76 · SHA 277f565
+- 2026-08-01 · [FEATURE] · Migration 150: regra `wipe_campo_cliente` generaliza a antiga `wipe_observacao` (1 campo) para todos os campos de cliente/contato/endereço. Desenho medido em prod: só alerta se o campo continua vazio na base (a versão ingênua daria 520 falsos positivos em `codigo`). Revelou 22 perdas reais ainda vigentes de maio/2026 · SHA 277f565
+- 2026-08-01 · [FEATURE] · Testes de banco (RPC/PL-pgSQL): `npm run test:db` reconstrói o schema do repo num Postgres efêmero e roda `tests/db/cases/*.sql` em transação revertida. 2 casos, ambos provados contra a versão bugada da função (migrations 140 e 146). Novo job no CI · SHA 855d79c
+- 2026-08-01 · [FEATURE] · Detector de divergência prod↔repo (`npm run drift`): sha256 das 136 funções de produção contra lock versionado + valores de enum usados no código que não existem no banco. Pega o caso real "Aguardando Agendamento". Novo job no CI · SHA 855d79c
+- 2026-08-01 · [FIX] · CI: job de Edge Functions estava vermelho desde antes deste lote por falta de `--allow-env` (5 testes usam `Deno.env.set`). 94 passam agora · SHA 6c8b366
+- 2026-08-01 · [DOC] · `supabase/schema_views.sql`: o `schema_baseline.sql` não versionava as 13 views do schema público; a migration 122 depende de uma delas (`cliente_exportacao`). Descoberto ao reconstruir o banco · SHA 855d79c
