@@ -36,3 +36,8 @@ yarn-error.log*
 # OS
 Thumbs.db
 .envrc
+
+# Artefatos de sessão do Playwright MCP e screenshots de verificação — evidência
+# de teste manual, não código. Foram varridos por um `git add -A` em 2026-08-01.
+.playwright-mcp/
+screenshot-*.png
