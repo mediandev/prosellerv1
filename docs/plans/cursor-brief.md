@@ -1448,3 +1448,28 @@ select cron.unschedule('ssw-sweep-hourly');
 # opcional: desligar o secret (deixa a edge dormente / 401)
 npx supabase secrets unset SSW_SWEEP_SECRET --project-ref xxoiqfraeolsqsmsheue
 ```
+
+---
+
+## Migration 150 — sentinela: regra genérica de campo apagado (2026-08-01)
+
+**Operação:** `CREATE OR REPLACE` de `sentinela_verificar()` + nova função auxiliar
+`sentinela_campo_ainda_vazio(text, bigint, text)`. Nenhum DDL de tabela, nenhum
+dado de negócio tocado — a função só escreve em `sentinela_alerta`.
+
+**Comando:** Management API `POST /v1/projects/xxoiqfraeolsqsmsheue/database/query`
+com o conteúdo de `supabase/migrations/150_sentinela_wipe_campo_generico.sql`.
+
+**Pré-condições:**
+- Backup da definição atual em `docs/plans/backups/sentinela_verificar_PRE-150_2026-08-01.sql`
+  (sha256 6c8e6e4705cdd686, 7122 bytes) — conferir que prod ainda bate antes de aplicar.
+- Ensaio `BEGIN; ... ROLLBACK;` executado em 2026-08-01:
+  - janela real (26h): 0 alertas novos, demais regras inalteradas;
+  - janela ampliada (120d): 22 alertas, todos perdas reais ainda vigentes
+    (vendedoresatribuidos 11, nome_fantasia 6, grupo_id 5);
+  - versão sem guardas produzia 4 falsos positivos (clientes soft-deleted) e a
+    versão ingênua sem confirmação contra a base produziria 520 só em `codigo`.
+
+**Rollback:** reaplicar o arquivo de backup acima (`CREATE OR REPLACE`). A função
+auxiliar pode ficar (é inerte se ninguém chamar) ou:
+`DROP FUNCTION IF EXISTS public.sentinela_campo_ainda_vazio(text, bigint, text);`
