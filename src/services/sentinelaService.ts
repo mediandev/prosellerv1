@@ -62,6 +62,58 @@ export const rotuloRegra = (regra: string): string =>
 export const explicacaoRegra = (regra: string): string =>
   REGRAS_SENTINELA[regra]?.explicacao ?? '';
 
+const formatarDataHora = (iso: string): string => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      });
+};
+
+/**
+ * Resumo legível do alerta a partir do jsonb `detalhe`, sem exigir leitura de JSON.
+ * Fica no serviço (e não no componente) para poder ser testado sem a cadeia de
+ * imports versionados do shadcn — mesma restrição dos outros smoke tests do repo.
+ */
+export function resumirAlerta(alerta: Pick<SentinelaAlerta, 'regra' | 'chave' | 'detalhe'>): string {
+  const d = alerta.detalhe ?? {};
+  const v = (k: string) => (d[k] === undefined || d[k] === null ? '' : String(d[k]));
+
+  switch (alerta.regra) {
+    case 'wipe_campo_cliente':
+      return `Cliente ${v('cliente_id')} · campo "${v('label') || v('campo')}" · valor perdido: "${v('valor_anterior')}"`
+        + (v('usuario') ? ` · por ${v('usuario')}` : '');
+    case 'comissao_pedido_excluido':
+      return `Pedido ${v('pedido_id')} · comissão de R$ ${v('valor')}`;
+    case 'pedido_aberto_sem_tiny':
+      return `Pedido ${v('numero')} · status "${v('status')}" sem ID do Tiny`;
+    case 'frete_entregue_preso':
+      return `NFe ${v('nfe')} · status atual "${v('status')}"`;
+    case 'cep_invalido':
+      return `CEP gravado: "${v('cep')}"`;
+    case 'cliente_novo_sem_condicao':
+      return `${v('nome')} · criado em ${v('criado_em') ? formatarDataHora(v('criado_em')) : '—'}`;
+    case 'condicao_nome_divergente':
+      return `"${v('nome')}" · intervalo configurado: ${v('intervalo')}`;
+    default:
+      return alerta.chave;
+  }
+}
+
+/** Agrupa por regra, da regra com mais alertas para a com menos. */
+export function agruparPorRegra(
+  alertas: SentinelaAlerta[],
+): Array<{ regra: string; itens: SentinelaAlerta[] }> {
+  const mapa = alertas.reduce<Record<string, SentinelaAlerta[]>>((acc, a) => {
+    (acc[a.regra] ||= []).push(a);
+    return acc;
+  }, {});
+  return Object.keys(mapa)
+    .sort((a, b) => mapa[b].length - mapa[a].length)
+    .map((regra) => ({ regra, itens: mapa[regra] }));
+}
+
 /** Alertas em aberto (violação ativa agora), mais recentes primeiro. */
 export async function listarAlertasAbertos(): Promise<SentinelaAlerta[]> {
   const { data, error } = await getSupabaseClient()

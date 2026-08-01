@@ -16,6 +16,8 @@ import {
   invalidarCacheSentinela,
   rotuloRegra,
   explicacaoRegra,
+  resumirAlerta,
+  agruparPorRegra,
   type SentinelaAlerta,
 } from '../services/sentinelaService';
 
@@ -25,32 +27,6 @@ const formatarDataHora = (iso: string): string => {
     ? '—'
     : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
-
-/** Resumo legível do alerta a partir do jsonb `detalhe`, sem exigir leitura de JSON. */
-function resumirDetalhe(alerta: SentinelaAlerta): string {
-  const d = alerta.detalhe ?? {};
-  const v = (k: string) => (d[k] === undefined || d[k] === null ? '' : String(d[k]));
-
-  switch (alerta.regra) {
-    case 'wipe_campo_cliente':
-      return `Cliente ${v('cliente_id')} · campo "${v('label') || v('campo')}" · valor perdido: "${v('valor_anterior')}"`
-        + (v('usuario') ? ` · por ${v('usuario')}` : '');
-    case 'comissao_pedido_excluido':
-      return `Pedido ${v('pedido_id')} · comissão de R$ ${v('valor')}`;
-    case 'pedido_aberto_sem_tiny':
-      return `Pedido ${v('numero')} · status "${v('status')}" sem ID do Tiny`;
-    case 'frete_entregue_preso':
-      return `NFe ${v('nfe')} · status atual "${v('status')}"`;
-    case 'cep_invalido':
-      return `CEP gravado: "${v('cep')}"`;
-    case 'cliente_novo_sem_condicao':
-      return `${v('nome')} · criado em ${v('criado_em') ? formatarDataHora(v('criado_em')) : '—'}`;
-    case 'condicao_nome_divergente':
-      return `"${v('nome')}" · intervalo configurado: ${v('intervalo')}`;
-    default:
-      return alerta.chave;
-  }
-}
 
 export function SentinelaPage() {
   const [alertas, setAlertas] = useState<SentinelaAlerta[]>([]);
@@ -76,11 +52,7 @@ export function SentinelaPage() {
   }, []);
 
   // Agrupa por regra para a tela não virar uma lista plana sem hierarquia.
-  const porRegra = alertas.reduce<Record<string, SentinelaAlerta[]>>((acc, a) => {
-    (acc[a.regra] ||= []).push(a);
-    return acc;
-  }, {});
-  const regras = Object.keys(porRegra).sort((a, b) => porRegra[b].length - porRegra[a].length);
+  const grupos = agruparPorRegra(alertas);
 
   return (
     <div className="space-y-6">
@@ -118,23 +90,23 @@ export function SentinelaPage() {
         </Card>
       )}
 
-      {regras.map((regra) => (
+      {grupos.map(({ regra, itens }) => (
         <Card key={regra}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
               {rotuloRegra(regra)}
-              <Badge variant="secondary">{porRegra[regra].length}</Badge>
+              <Badge variant="secondary">{itens.length}</Badge>
             </CardTitle>
             <p className="text-sm text-muted-foreground">{explicacaoRegra(regra)}</p>
           </CardHeader>
           <CardContent className="space-y-2">
-            {porRegra[regra].map((a) => (
+            {itens.map((a) => (
               <div
                 key={a.id}
                 className="flex flex-wrap items-baseline justify-between gap-2 rounded-md border px-3 py-2 text-sm"
               >
-                <span>{resumirDetalhe(a)}</span>
+                <span>{resumirAlerta(a)}</span>
                 <span className="text-xs text-muted-foreground">
                   detectado em {formatarDataHora(a.criado_em)}
                 </span>
