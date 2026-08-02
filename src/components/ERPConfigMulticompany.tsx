@@ -267,7 +267,8 @@ export function ERPConfigMulticompany() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {erpConfigs.map((config, index) => (\n            <div key={config.empresaId}>
+          {erpConfigs.map((config, index) => (
+            <div key={config.empresaId}>
               {index > 0 && <Separator className="my-6" />}
               <div className="space-y-4">
                 {/* Header da Empresa */}

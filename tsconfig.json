@@ -21,6 +21,9 @@
     "noFallthroughCasesInSwitch": true,
 
     /* Path aliases */
+    // baseUrl é deprecado no TS 7. Silenciado por ora para o typecheck poder virar
+    // gate obrigatório no CI; a migração para paths sem baseUrl fica no débito.
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["packages/shared/*"]
