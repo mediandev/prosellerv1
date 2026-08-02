@@ -136,10 +136,10 @@ Decisões do cliente (2026-07-31): (a) sem período aberto → **mês corrente**
 
 ## ✅ Item B aplicado — estorno (147) confirmado em prod: trigger ativo, teste ao vivo revertido OK, 0 comissões órfãs.
 
-## ⏳ Próximos
-- **Camada 1:** testes automatizados das invariantes puras (expandir o padrão dos 23 testes do SSW).
-- **C · Solicitado × Faturado:** investigar cálculo, corrigir, reativar no menu.
-- 7 (Simples c/ cache) e 10 (auditoria) na sequência.
+## ⏳ Próximos (revisado em 2026-08-02 — ver seção V 1.76 no fim do doc)
+- ~~**Camada 1:** testes automatizados das invariantes puras~~ → **iniciado** com a suíte de banco (2 casos). Falta cobrir 144/145/147.
+- ~~**C · Solicitado × Faturado**~~ → **concluído** (V 1.75).
+- 7 (Simples c/ cache) e 10 (auditoria): **bloqueados em decisão do cliente**.
 
 ---
 
@@ -171,3 +171,76 @@ A suíte expôs **migração pela metade** (intencional no front, nunca aplicada
 - **Teste na tela (Playwright, prod):** card no menu ✓ · relatório abre ✓ · Solicitado (ex.: 133.736 un/R$ 845 mil/440 pedidos) × Faturado (19.416 un/R$ 132 mil/90 pedidos) × **Perda calculada** ✓.
 - ✅ **Backfill 100% CONCLUÍDO (2026-07-31):** 426 pedidos · 426 notas · **2.241 itens** persistidos · **0 alvos pendentes** (2ª passada re-processou os 16 com falha de conexão: 16/16 ok). Cobertura dez/2025–jul/2026. Números do relatório agora são COMPLETOS; NFs novas entram sozinhas via webhook.
 - Commits: `ca810b0` (V1.75) + `73d2ac4` (solicitados via query direta).
+
+---
+
+## 🛡️ Estrutura anti-regressão — V 1.76 (2026-08-01/02)
+
+Origem: crítica adversarial ao próprio plano de estabilização. Os quatro buracos
+identificados e o que foi feito em cada um.
+
+| # | Buraco | Ação | Estado |
+|---|---|---|---|
+| 1 | Sentinela gravava alertas que **ninguém lia** (detecção sem notificação) | Tela **Sentinela** (backoffice) + badge com contador no menu · V 1.76 · SHA `277f565` | ✅ testado em prod |
+| 2 | Regra de "campo apagado" cobria **1 campo só** (`observacao`) — não veria o bug da Época | **Migration 150**: `wipe_campo_cliente` cobre cliente/contato/endereço | ✅ aplicada, cron ativo |
+| 3 | **Nenhuma camada testava PL/pgSQL** — onde nasceram 140/144/145/146 | `npm run test:db`: reconstrói o schema num Postgres efêmero, roda casos em transação revertida · job no CI | ✅ 2 casos, ambos provados contra a função bugada |
+| 4 | Deploy manual de edge/migration **não passava por verificação** | `npm run drift`: sha256 das 136 funções de prod contra lock + enum usado no código × enum do banco · job no CI | ✅ pega o caso real "Aguardando Agendamento" |
+
+**Desenho medido, não teórico (regra 150).** "Campo apagado" cru daria **520 falsos
+positivos** só em `codigo` (o histórico registra o apagamento, mas o valor está lá
+hoje). Confirmando contra o estado atual da base, sobram **22 perdas reais**.
+Guardas: coluna inexistente e cliente excluído não alertam.
+
+**Duas armadilhas encontradas no próprio trabalho** (ambas da classe "verificador
+que fica quieto no defeito que deveria pegar):
+1. A 1ª versão do teste da Época **passava até na função bugada** — os blocos de
+   contato/endereço só executam se ao menos um campo daquele bloco vier
+   preenchido; mandar só o nome não aciona o caminho que apagava dado. Corrigido
+   para enviar um campo por bloco.
+2. A 1ª versão do checador de enum exigia a palavra "status" na mesma linha do
+   literal e por isso passou em silêncio justamente no único defeito conhecido.
+
+Daí a regra que vale para as próximas: **todo verificador novo precisa ser rodado
+contra a versão com o defeito** antes de valer como rede.
+
+### Achados colaterais
+
+- **O CI estava vermelho e ninguém lia.** O job de Edge Functions falhava desde
+  antes deste lote por falta de `--allow-env` (5 testes usam `Deno.env.set`) —
+  comando, não lógica. Corrigido: 94 passam · SHA `6c8b366`. **CI verde pela
+  primeira vez** (typecheck segue `continue-on-error`).
+- **`schema_baseline.sql` não versionava as 13 views** do schema público, e a
+  migration 122 depende de uma delas (`cliente_exportacao`). Criado
+  `supabase/schema_views.sql`.
+- **22 perdas de dado ainda vigentes** (maio/2026), resíduo que a recuperação da
+  140 não pegou: 11 `vendedoresatribuidos`, 6 `nome_fantasia`, 5 `grupo_id`.
+  Valores antigos preservados em `cliente_historico_alteracoes`.
+
+---
+
+## 📋 O que falta — fila real (2026-08-02)
+
+### Precisa de AÇÃO (não é monitorar)
+
+| Prioridade | Item | Por quê |
+|---|---|---|
+| 1 | **Recuperar as 22 perdas de maio** | Dado real faltando na base hoje; os valores antigos existem no histórico. Script pequeno + conferência na tela. |
+| 2 | **Ampliar a suíte de banco** para 144 (comissão por natureza), 145 (pagamento excedente) e 147 (trigger de estorno) | Hoje só 140 e 146 têm rede. As outras três correções deste lote seguem sem teste. |
+| 3 | **Conferir na tela o item 4 (contagem do Mix) e o item 9 (filtro por produto)** | Nunca validados numericamente. O item 9 foi entregue num relatório que estava **fora do menu**; com a reativação (V 1.75) ficou acessível pela 1ª vez. |
+| 4 | **Typecheck: 2 erros em `ERPConfigMulticompany.tsx`** (quebrado desde a V 1.16) | Enquanto existirem, o typecheck não pode virar gate obrigatório no CI. |
+
+### Precisa do humano (credencial)
+
+- **Cadastrar `SUPABASE_ACCESS_TOKEN` como secret no GitHub** — sem ele o job de
+  divergência passa avisando que pulou, ou seja: a verificação existe mas não roda.
+- **Notificação da sentinela fora do app** (e-mail/WhatsApp) — hoje o alerta só
+  aparece para quem abre a tela.
+
+### Bloqueados em decisão do cliente
+
+- Item 7 (Simples a cada envio) · Item 10 (auditoria) · enum "Aguardando Agendamento".
+
+### Só monitorar
+
+- `sentinela-diaria` (6h BRT) · `ssw-sweep-hourly` · webhook de NF alimentando
+  `nota_fiscal_item`. Todos ativos e com baseline limpo.
