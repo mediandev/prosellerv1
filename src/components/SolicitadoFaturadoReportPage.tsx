@@ -779,7 +779,7 @@ export function SolicitadoFaturadoReportPage({ onBack }: SolicitadoFaturadoRepor
             {/* Resumo e Ações */}
             <div className="flex items-center justify-between border-t pt-4">
               <p className="text-sm text-muted-foreground">
-                {analiseData.length} produto{analiseData.length !== 1 ? 's' : ''} • R$ {analiseData.reduce((sum, item) => sum + item.valorSolicitado, 0).toFixed(2)}
+                {analiseData.length} produto{analiseData.length !== 1 ? 's' : ''} • {formatCurrency(analiseData.reduce((sum, item) => sum + item.valorSolicitado, 0))}
               </p>
               <div className="flex items-center space-x-2">
                 <Button onClick={exportarExcel} disabled={analiseData.length === 0}>

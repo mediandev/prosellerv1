@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.77',
+    items: [
+      'Relatórios > Solicitado x Faturado: o total ao lado da contagem de produtos aparecia sem formatação (ex.: "R$ 10992.39"). Agora segue o padrão do sistema ("R$ 10.992,39"), igual ao restante da tabela.',
+    ],
+  },
+  {
     version: 'V 1.76',
     items: [
       'Nova tela "Sentinela" (backoffice): o sistema já verificava sozinho, todo dia, um conjunto de regras críticas — comissão de pedido excluído, pedido sem confirmação do ERP, frete entregue preso em trânsito, CEP fora do padrão, cliente novo sem condição de pagamento, entre outras. Até agora esse resultado só existia no banco de dados. Agora ele aparece no menu, com contador de alertas em aberto.',
