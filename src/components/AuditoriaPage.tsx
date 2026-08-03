@@ -20,6 +20,12 @@ import {
   type RegistroAuditoria,
 } from '../services/auditoriaService';
 
+/** Maiúscula só na primeira letra. A classe `capitalize` do CSS maiusculiza
+ *  TODA palavra ("Alterou As Permissões De Cicero"), que foi o que apareceu em
+ *  produção na V 1.86. */
+const primeiraMaiuscula = (t: string): string =>
+  t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+
 const formatarDataHora = (iso: string): string => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime())
@@ -163,7 +169,7 @@ export function AuditoriaPage() {
                           Mostrar entidade + identificador cru exibia coisas como
                           "Usuário #65b5ce3c-b94f-4ac5-..." — verdadeiro e inútil. */}
                       <td className="py-2 pr-4">
-                        <span className="capitalize">{r.descricao}</span>
+                        <span>{primeiraMaiuscula(r.descricao)}</span>
                         <span className="block text-xs text-muted-foreground">
                           {r.entidade}
                           {r.entidade_id && r.entidade_id.length <= 12 ? ` #${r.entidade_id}` : ''}

@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.87',
+    items: [
+      'Auditoria: corrigido o texto que saía com todas as palavras em maiúscula ("Alterou As Permissões De Cicero"). Agora só a primeira letra.',
+    ],
+  },
+  {
     version: 'V 1.86',
     items: [
       'Auditoria: a coluna "O quê" passa a mostrar a frase pronta ("alterou as permissões de Cicero Rocha Costa") em vez do identificador interno do registro, que não dizia nada. O tipo e o número ficam abaixo, em letra menor. Espaçamento entre colunas ajustado.',
