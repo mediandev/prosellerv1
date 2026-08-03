@@ -8,6 +8,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.83',
+    items: [
+      'Auditoria: clientes entram no registro — cadastro, exclusão, restauração, aprovação e rejeição de cadastro pendente, além de mudanças com impacto comercial (vendedor atribuído, grupo/rede, lista de preço, condição padrão, desconto, pedido mínimo, situação, CNPJ e código).',
+      'Auditoria: liberar ou remover uma condição de pagamento de um cliente também passa a ser registrado.',
+      'Correção rotineira de cadastro (telefone, e-mail, observação) NÃO entra na Auditoria de propósito — continua no histórico do cliente, que é onde ela sempre esteve.',
+    ],
+  },
+  {
     version: 'V 1.82',
     items: [
       'Pedidos: o sistema passa a guardar quem alterou e quem excluiu cada pedido (antes só guardava quem criou). Essas ações agora aparecem na Auditoria, incluindo exclusão e restauração de pedido, com o valor e o status que o pedido tinha na hora.',
