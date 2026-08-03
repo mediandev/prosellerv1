@@ -145,8 +145,16 @@ chegar por e-mail e o que fazer em cada caso.
 **c) Guia do Supabase.** Onde ficam os dados, como consultar sem risco, o que
 exige cuidado redobrado e como pedir ajuda quando algo não estiver claro.
 
-Também faremos uma **sessão de acompanhamento** para percorrer o material junto e
-tirar dúvidas na prática.
+Todo o material será entregue **por escrito**, para consulta a qualquer momento.
+
+## 7. O que faremos neste mês
+
+Este mês é de **monitoramento**: acompanhar o sistema em operação, verificar os
+alertas que a rotina diária gerar e corrigir o que aparecer, além de concluir a
+documentação da passagem descrita acima.
+
+Treinamento e acompanhamento prático são atividades à parte e podem ser
+contratados separadamente, se houver interesse.
 
 ---
 
