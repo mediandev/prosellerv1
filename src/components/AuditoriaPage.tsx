@@ -141,26 +141,33 @@ export function AuditoriaPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-xs text-muted-foreground">
-                    <th className="py-2 pr-3 whitespace-nowrap">Quando</th>
-                    <th className="py-2 pr-3">Quem</th>
-                    <th className="py-2 pr-3">Ação</th>
-                    <th className="py-2 pr-3">O quê</th>
+                    <th className="py-2 pr-4 whitespace-nowrap">Quando</th>
+                    <th className="py-2 pr-4">Quem</th>
+                    <th className="py-2 pr-4">Ação</th>
+                    <th className="py-2 pr-4">O quê</th>
                     <th className="py-2">Mudança</th>
                   </tr>
                 </thead>
                 <tbody>
                   {registros.map((r) => (
                     <tr key={r.id} className="border-b last:border-0 align-top">
-                      <td className="py-2 pr-3 whitespace-nowrap">{formatarDataHora(r.ocorrido_em)}</td>
-                      <td className="py-2 pr-3">{r.usuario_nome}</td>
-                      <td className="py-2 pr-3">
+                      <td className="py-2 pr-4 whitespace-nowrap">{formatarDataHora(r.ocorrido_em)}</td>
+                      <td className="py-2 pr-4 whitespace-nowrap">{r.usuario_nome}</td>
+                      <td className="py-2 pr-4">
                         <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${tomAcao(r.acao)}`}>
                           {rotuloAcao(r.acao)}
                         </span>
                       </td>
-                      <td className="py-2 pr-3">
-                        {r.entidade}
-                        {r.entidade_id ? ` #${r.entidade_id}` : ''}
+                      {/* A descrição já vem pronta do banco e cita o nome
+                          ("alterou as permissões de Cicero Rocha Costa").
+                          Mostrar entidade + identificador cru exibia coisas como
+                          "Usuário #65b5ce3c-b94f-4ac5-..." — verdadeiro e inútil. */}
+                      <td className="py-2 pr-4">
+                        <span className="capitalize">{r.descricao}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {r.entidade}
+                          {r.entidade_id && r.entidade_id.length <= 12 ? ` #${r.entidade_id}` : ''}
+                        </span>
                       </td>
                       <td className="py-2 text-muted-foreground">{descreverDetalhe(r)}</td>
                     </tr>
