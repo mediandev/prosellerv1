@@ -54,3 +54,12 @@
 - 2026-08-01 · [FEATURE] · Detector de divergência prod↔repo (`npm run drift`): sha256 das 136 funções de produção contra lock versionado + valores de enum usados no código que não existem no banco. Pega o caso real "Aguardando Agendamento". Novo job no CI · SHA 855d79c
 - 2026-08-01 · [FIX] · CI: job de Edge Functions estava vermelho desde antes deste lote por falta de `--allow-env` (5 testes usam `Deno.env.set`). 94 passam agora · SHA 6c8b366
 - 2026-08-01 · [DOC] · `supabase/schema_views.sql`: o `schema_baseline.sql` não versionava as 13 views do schema público; a migration 122 depende de uma delas (`cliente_exportacao`). Descoberto ao reconstruir o banco · SHA 855d79c
+
+## 2026-08-03
+
+- 2026-08-03 · [FEATURE] · Status "Aguardando Agendamento" concluído (migration 152 + edges + front). Zero fretes no valor legado. Provado em prod: gravação via o caminho do Kanban retorna 200 e persiste; sem a migration o teste falha com o erro que o usuário via. V 1.78 · SHA 37ac0cc
+- 2026-08-03 · [FEATURE] · Sentinela regra 8: falhas da consulta do Simples Nacional (migration 153). Auto-resolve quando a consulta seguinte funciona. V 1.79 · SHA 6786e8a
+- 2026-08-03 · [DECISÃO] · Fila com throttle para o Simples **descartada por medição**: 1 empresa dispara consulta · 1-17/dia contra teto de 4.320 · pico de 6/min todas OK · 1 falha em 4 meses (lentidão, não limite). O buraco real era ninguém ver as falhas — resolvido pela regra 8.
+- 2026-08-03 · [FEATURE] · Auditoria de ações com impacto (migration 154 + tela): comissões, lançamentos, pagamentos, fechamento de período e conta corrente. Permissão própria `auditoria.visualizar`. Sem UPDATE/DELETE na tabela. V 1.80 · SHA fb4ebac
+- 2026-08-03 · [FIX] · Selos de Criação/Exclusão da Auditoria saíam sem cor: CSS é pré-compilado e `rose`/`emerald` não existem em `src/index.css`. Teste novo lê o CSS e exige que a classe exista. V 1.81 · SHA 1e4d7af
+- 2026-08-03 · [RUNBOOK] · `SUPABASE_ACCESS_TOKEN` cadastrado como secret no GitHub: o job de divergência prod↔repo saiu de "pulado" para verificar de verdade (137 funções). CI ganhou disparo manual.
