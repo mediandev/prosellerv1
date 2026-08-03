@@ -152,6 +152,11 @@ export interface Venda {
   createdAt: Date;
   updatedAt: Date;
   createdBy: string; // ID do usuário que criou
+  // Nomes resolvidos pela consulta do pedido (migration 156). Opcionais: pedido
+  // antigo não tem autoria gravada, e a tela simplesmente não mostra a linha.
+  criadoPorNome?: string;
+  atualizadoPorNome?: string;
+  atualizadoEm?: Date;
   
   // Integração com ERP
   integracaoERP?: IntegracaoERPVenda;

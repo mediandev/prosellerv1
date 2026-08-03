@@ -2188,6 +2188,11 @@ export const api = {
           createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
           updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
           createdBy: pedidoData.createdBy,
+          // Nomes de quem criou/alterou (migration 156). O front só recebia o
+          // identificador interno, que não diz nada a quem lê.
+          criadoPorNome: pedidoData.criadoPorNome ?? undefined,
+          atualizadoPorNome: pedidoData.atualizadoPorNome ?? undefined,
+          atualizadoEm: pedidoData.atualizadoEm ? new Date(pedidoData.atualizadoEm) : undefined,
           integracaoERP: pedidoData.idTiny
             ? {
               erpPedidoId: String(pedidoData.idTiny),
@@ -2725,6 +2730,11 @@ export const api = {
           createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
           updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
           createdBy: pedidoData.createdBy,
+          // Nomes de quem criou/alterou (migration 156). O front só recebia o
+          // identificador interno, que não diz nada a quem lê.
+          criadoPorNome: pedidoData.criadoPorNome ?? undefined,
+          atualizadoPorNome: pedidoData.atualizadoPorNome ?? undefined,
+          atualizadoEm: pedidoData.atualizadoEm ? new Date(pedidoData.atualizadoEm) : undefined,
           integracaoERP: pedidoData.idTiny
             ? {
               erpPedidoId: String(pedidoData.idTiny),
@@ -3139,6 +3149,11 @@ export const api = {
           createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
           updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
           createdBy: pedidoData.createdBy,
+          // Nomes de quem criou/alterou (migration 156). O front só recebia o
+          // identificador interno, que não diz nada a quem lê.
+          criadoPorNome: pedidoData.criadoPorNome ?? undefined,
+          atualizadoPorNome: pedidoData.atualizadoPorNome ?? undefined,
+          atualizadoEm: pedidoData.atualizadoEm ? new Date(pedidoData.atualizadoEm) : undefined,
           integracaoERP: pedidoData.idTiny
             ? {
               erpPedidoId: String(pedidoData.idTiny),
@@ -3987,6 +4002,11 @@ export const api = {
           createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
           updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
           createdBy: pedidoData.createdBy,
+          // Nomes de quem criou/alterou (migration 156). O front só recebia o
+          // identificador interno, que não diz nada a quem lê.
+          criadoPorNome: pedidoData.criadoPorNome ?? undefined,
+          atualizadoPorNome: pedidoData.atualizadoPorNome ?? undefined,
+          atualizadoEm: pedidoData.atualizadoEm ? new Date(pedidoData.atualizadoEm) : undefined,
           integracaoERP: pedidoData.idTiny
             ? {
               erpPedidoId: String(pedidoData.idTiny),
@@ -4074,6 +4094,11 @@ export const api = {
           createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
           updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
           createdBy: pedidoData.createdBy,
+          // Nomes de quem criou/alterou (migration 156). O front só recebia o
+          // identificador interno, que não diz nada a quem lê.
+          criadoPorNome: pedidoData.criadoPorNome ?? undefined,
+          atualizadoPorNome: pedidoData.atualizadoPorNome ?? undefined,
+          atualizadoEm: pedidoData.atualizadoEm ? new Date(pedidoData.atualizadoEm) : undefined,
           integracaoERP: pedidoData.idTiny
             ? {
               erpPedidoId: String(pedidoData.idTiny),
@@ -4149,6 +4174,11 @@ export const api = {
           createdAt: pedidoData.createdAt ? new Date(pedidoData.createdAt) : new Date(),
           updatedAt: pedidoData.updatedAt ? new Date(pedidoData.updatedAt) : new Date(),
           createdBy: pedidoData.createdBy,
+          // Nomes de quem criou/alterou (migration 156). O front só recebia o
+          // identificador interno, que não diz nada a quem lê.
+          criadoPorNome: pedidoData.criadoPorNome ?? undefined,
+          atualizadoPorNome: pedidoData.atualizadoPorNome ?? undefined,
+          atualizadoEm: pedidoData.atualizadoEm ? new Date(pedidoData.atualizadoEm) : undefined,
           integracaoERP: pedidoData.idTiny
             ? {
               erpPedidoId: String(pedidoData.idTiny),

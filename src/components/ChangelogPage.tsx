@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.82',
+    items: [
+      'Pedidos: o sistema passa a guardar quem alterou e quem excluiu cada pedido (antes só guardava quem criou). Essas ações agora aparecem na Auditoria, incluindo exclusão e restauração de pedido, com o valor e o status que o pedido tinha na hora.',
+      'Pedidos > Detalhe: abaixo do número do pedido aparece "Criado por [nome] em [data] · última alteração por [nome] em [data]". Pedidos antigos, que não têm esse registro, simplesmente não exibem a linha.',
+    ],
+  },
+  {
     version: 'V 1.81',
     items: [
       'Auditoria: os selos de "Criação" e "Exclusão" apareciam sem cor (só "Alteração" estava colorido). Corrigido — exclusão em vermelho, criação em verde.',

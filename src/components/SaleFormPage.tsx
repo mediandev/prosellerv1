@@ -2256,6 +2256,26 @@ export function SaleFormPage({ vendaId, modo, onVoltar }: SaleFormPageProps) {
               <p className="text-sm text-muted-foreground mt-1">
                 {formData.numero || 'Preencha as informações do pedido'}
               </p>
+              {/* Autoria do pedido (migrations 155/156). Só aparece quando existe:
+                  pedido antigo não tem esse dado gravado, e mostrar "criado por —"
+                  seria pior que não mostrar nada. */}
+              {modo !== 'criar' && (formData.criadoPorNome || formData.atualizadoPorNome) && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {formData.criadoPorNome && (
+                    <>
+                      Criado por <span className="font-medium">{formData.criadoPorNome}</span>
+                      {formData.createdAt && ` em ${new Date(formData.createdAt).toLocaleDateString('pt-BR')}`}
+                    </>
+                  )}
+                  {formData.criadoPorNome && formData.atualizadoPorNome && ' · '}
+                  {formData.atualizadoPorNome && (
+                    <>
+                      última alteração por <span className="font-medium">{formData.atualizadoPorNome}</span>
+                      {formData.atualizadoEm && ` em ${new Date(formData.atualizadoEm).toLocaleDateString('pt-BR')}`}
+                    </>
+                  )}
+                </p>
+              )}
             </div>
           </div>
 
