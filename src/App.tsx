@@ -14,7 +14,8 @@ import {
   LogOut,
   Sparkles,
   Truck,
-  ShieldAlert
+  ShieldAlert,
+  ScrollText
 } from "lucide-react";
 import { format } from "date-fns@4.1.0";
 import { ptBR } from "date-fns@4.1.0/locale";
@@ -61,6 +62,7 @@ import LogisticaPage from "./components/logistica/LogisticaPage";
 import { TinyERPModeIndicator } from "./components/TinyERPModeIndicator";
 import { ChangelogPage, CHANGELOG } from "./components/ChangelogPage";
 import { SentinelaPage } from "./components/SentinelaPage";
+import { AuditoriaPage } from "./components/AuditoriaPage";
 import { contarAlertasAbertos } from "./services/sentinelaService";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { DataInitializer } from "./components/DataInitializerSimple";
@@ -79,7 +81,7 @@ import { toast } from "sonner@2.0.3";
 import { api } from "./services/api";
 import { tinyERPSyncService } from "./services/tinyERPSync";
 
-type Page = "dashboard" | "vendas" | "equipe" | "clientes" | "comissoes" | "contacorrente" | "produtos" | "metas" | "relatorios" | "configuracoes" | "perfil" | "clientes-pendentes" | "tiny-erp" | "changelog" | "logistica" | "sentinela";
+type Page = "dashboard" | "vendas" | "equipe" | "clientes" | "comissoes" | "contacorrente" | "produtos" | "metas" | "relatorios" | "configuracoes" | "perfil" | "clientes-pendentes" | "tiny-erp" | "changelog" | "logistica" | "sentinela" | "auditoria";
 
 const FEATURE_LOG_CRM_ENABLED = import.meta.env.VITE_FEATURE_LOG_CRM === 'true';
 type CustomerView = 'list' | 'create' | 'edit' | 'view';
@@ -102,6 +104,7 @@ const menuItems: Array<{ id: Page; icon: any; label: string; backofficeOnly?: bo
     ? [{ id: "logistica" as Page, icon: Truck, label: "Logística", backofficeOnly: true, featureFlag: true }]
     : []),
   { id: "sentinela", icon: ShieldAlert, label: "Sentinela", backofficeOnly: true },
+  { id: "auditoria", icon: ScrollText, label: "Auditoria", backofficeOnly: true },
   { id: "configuracoes", icon: Settings, label: "Configurações", backofficeOnly: true },
 ];
 
@@ -191,7 +194,7 @@ function SidebarUserInfo({
   onOpenChangelog: () => void;
 }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.79";
+  const systemVersion = "V 1.80";
   const ultimaVersao = CHANGELOG[0];
   
   if (!usuario) return null;
@@ -566,6 +569,10 @@ function AppContent() {
     // Sentinela expõe inconsistências internas (comissão, pedido, dados de cliente):
     // gate explícito, senão o `return true` no fim liberaria para vendedor.
     if (page === "sentinela") return has("configuracoes.visualizar") || isLegacyAdmin;
+    // Auditoria expõe quem fez o quê com dinheiro. Permissão PRÓPRIA — decisão do
+    // cliente (2026-08-03): "só usuários com permissão específica". Não herda de
+    // configuracoes.visualizar; o admin legado mantém acesso para evitar lockout.
+    if (page === "auditoria") return has("auditoria.visualizar") || isLegacyAdmin;
 
     const requiredPermission = PAGE_VIEW_PERMISSION[page];
     if (requiredPermission) {
@@ -929,6 +936,8 @@ function AppContent() {
         return <ChangelogPage />;
       case "sentinela":
         return <SentinelaPage />;
+      case "auditoria":
+        return <AuditoriaPage />;
       case "dashboard":
         return (
           <div className="space-y-6">

@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.80',
+    items: [
+      'Nova tela "Auditoria" (backoffice): registro de quem fez o quê, quando, e o que mudou de/para. Nesta primeira etapa cobre o grupo de maior risco — comissões (valor, efetivação, débito), lançamentos, pagamentos, fechamento de período e conta corrente do cliente. Filtros por tipo de registro, pessoa e período. Sem prazo de expurgo: o histórico é mantido para consulta de todo o período de uso.',
+      'Auditoria: visível apenas para quem tiver a nova permissão "Visualizar Auditoria" (Configurações > Permissões). Não é herdada de outras permissões.',
+    ],
+  },
+  {
     version: 'V 1.79',
     items: [
       'Sentinela: nova verificação para falhas na consulta do Simples Nacional. Quando a Receita não responde no envio do pedido, a emissão é bloqueada e o usuário recebe aviso — mas o registro dessa falha ficava numa tabela que ninguém abria. Agora aparece na tela da Sentinela, com cliente, CNPJ e motivo, e some sozinho quando a consulta seguinte funciona.',

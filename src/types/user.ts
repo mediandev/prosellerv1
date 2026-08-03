@@ -59,6 +59,10 @@ export const PERMISSOES_DISPONIVEIS: Permissao[] = [
   { id: 'configuracoes.visualizar', nome: 'Acessar Configurações', descricao: 'Permite acessar a tela de configurações', categoria: 'configuracoes' },
   { id: 'config.minhas_empresas', nome: 'Gerenciar Minhas Empresas', descricao: 'Permite acessar e configurar empresas de faturamento', categoria: 'configuracoes' },
   { id: 'config.geral', nome: 'Configurações Gerais', descricao: 'Permite acessar configurações gerais do sistema', categoria: 'configuracoes' },
+  // Permissão PRÓPRIA, não derivada de configurações: decisão do cliente
+  // (2026-08-03) de que a auditoria seja visível só a quem for autorizado
+  // explicitamente — ela expõe quem mexeu em comissão e em conta corrente.
+  { id: 'auditoria.visualizar', nome: 'Visualizar Auditoria', descricao: 'Permite ver o registro de quem fez o quê (comissões, conta corrente e demais ações com impacto)', categoria: 'configuracoes' },
   
   // Usuários
   { id: 'usuarios.visualizar', nome: 'Visualizar Usuários', descricao: 'Permite visualizar lista de usuários', categoria: 'usuarios' },
