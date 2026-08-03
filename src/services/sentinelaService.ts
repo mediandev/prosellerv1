@@ -50,6 +50,11 @@ export const REGRAS_SENTINELA: Record<string, { titulo: string; explicacao: stri
     titulo: 'Condição parcelada com nome divergente',
     explicacao: 'O nome da condição não reflete o intervalo de parcelas configurado.',
   },
+  regime_lookup_falhou: {
+    titulo: 'Consulta do Simples Nacional falhou',
+    explicacao:
+      'A Receita não respondeu na hora de enviar o pedido ao ERP e a emissão foi bloqueada. O usuário recebe aviso e pode tentar de novo; o alerta some sozinho quando a consulta seguinte funciona.',
+  },
   wipe_observacao: {
     titulo: 'Observação de contato apagada',
     explicacao: 'Regra antiga, substituída por "Campo de cliente apagado" na V1.76.',
@@ -96,6 +101,9 @@ export function resumirAlerta(alerta: Pick<SentinelaAlerta, 'regra' | 'chave' | 
       return `${v('nome')} · criado em ${v('criado_em') ? formatarDataHora(v('criado_em')) : '—'}`;
     case 'condicao_nome_divergente':
       return `"${v('nome')}" · intervalo configurado: ${v('intervalo')}`;
+    case 'regime_lookup_falhou':
+      return `${v('razao_social')} · CNPJ ${v('cnpj')} · motivo: ${v('motivo')}`
+        + (v('pedido_id') ? ` · pedido ${v('pedido_id')}` : '');
     default:
       return alerta.chave;
   }

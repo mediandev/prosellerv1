@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.79',
+    items: [
+      'Sentinela: nova verificação para falhas na consulta do Simples Nacional. Quando a Receita não responde no envio do pedido, a emissão é bloqueada e o usuário recebe aviso — mas o registro dessa falha ficava numa tabela que ninguém abria. Agora aparece na tela da Sentinela, com cliente, CNPJ e motivo, e some sozinho quando a consulta seguinte funciona.',
+    ],
+  },
+  {
     version: 'V 1.78',
     items: [
       'Logística: o status "Aguardando Agendamento" passa a funcionar de verdade. A coluna já existia no Kanban, mas o sistema recusava o frete ao ser arrastado para ela — a troca tinha sido feita só nas telas, nunca no banco de dados. Agora está completa: quando a transportadora informa reentrega, o frete cai automaticamente em "Aguardando Agendamento", e o status aparece nas listas da Busca, do Novo Frete e no card da Torre de Controle.',
