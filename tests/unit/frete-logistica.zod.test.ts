@@ -53,13 +53,10 @@ describe('FreteLogisticaCreate (F-LOG-CRM R-LOG-1)', () => {
     expect(result.success).toBe(true);
   });
 
-  // ⚠️ PENDÊNCIA CONHECIDA (2026-07-31): o zod/front trocou 'Em Trânsito - Reentrega'
-  // por 'Aguardando Agendamento' (changelog V1.5x), mas o ENUM DO BANCO nunca foi
-  // migrado (segue com Reentrega e SEM Aguardando Agendamento). Consequências reais:
-  // drop no Kanban p/ "Aguardando Agendamento" é rejeitado pelo banco; o resolver SSW
-  // ainda pode gravar Reentrega, que o front não exibe. Registrado em
-  // docs/plans/EXECUCAO-LOTE-2026-07.md para completar a migração do enum.
-  // Este teste valida o schema zod COMO ESTÁ HOJE.
+  // ✅ RESOLVIDO (migration 152, 2026-08-03): o banco passou a aceitar
+  // 'Aguardando Agendamento', fechando a divergência que fazia o drop no Kanban
+  // ser rejeitado. O espelho desta lista do lado do banco está em
+  // tests/db/cases/status_aguardando_agendamento.sql.
   it('aceita todos os 9 valores de StatusEntregaFrete', () => {
     const status: Array<string> = [
       'Em Separação',

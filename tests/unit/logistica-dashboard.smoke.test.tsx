@@ -20,7 +20,7 @@ import { render, screen } from "@testing-library/react";
 
 const BUCKET_ORDER = [
   "Em Trânsito",
-  "Reentrega",
+  "Aguardando Agendamento",
   "Agendados",
   "Devoluções em Trânsito",
   "Recusadas",
@@ -62,7 +62,7 @@ function MiniDashboard({ buckets }: { buckets: Record<string, MiniFrete[]> }) {
 
 const EMPTY = {
   "Em Trânsito": [],
-  "Reentrega": [],
+  "Aguardando Agendamento": [],
   "Agendados": [],
   "Devoluções em Trânsito": [],
   "Recusadas": [],
@@ -73,7 +73,7 @@ describe("LogisticaDashboardPage contrato visual (F-LOG-2 CA-5)", () => {
     render(<MiniDashboard buckets={EMPTY} />);
 
     expect(screen.getByText("Em Trânsito")).toBeInTheDocument();
-    expect(screen.getByText("Reentrega")).toBeInTheDocument();
+    expect(screen.getByText("Aguardando Agendamento")).toBeInTheDocument();
     expect(screen.getByText("Agendados")).toBeInTheDocument();
     expect(screen.getByText("Devoluções em Trânsito")).toBeInTheDocument();
     expect(screen.getByText("Recusadas")).toBeInTheDocument();

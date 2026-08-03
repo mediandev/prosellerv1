@@ -164,7 +164,7 @@ export type FreteLogisticaEnriched = FreteLogistica & {
 /** Buckets da Torre de Controle (`action=list_by_status`). */
 export type DashboardBucketLabel =
   | "Em Trânsito"
-  | "Reentrega"
+  | "Aguardando Agendamento"
   | "Agendados"
   | "Devoluções em Trânsito"
   | "Recusadas";

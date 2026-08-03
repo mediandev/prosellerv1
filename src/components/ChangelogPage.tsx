@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.78',
+    items: [
+      'Logística: o status "Aguardando Agendamento" passa a funcionar de verdade. A coluna já existia no Kanban, mas o sistema recusava o frete ao ser arrastado para ela — a troca tinha sido feita só nas telas, nunca no banco de dados. Agora está completa: quando a transportadora informa reentrega, o frete cai automaticamente em "Aguardando Agendamento", e o status aparece nas listas da Busca, do Novo Frete e no card da Torre de Controle.',
+    ],
+  },
+  {
     version: 'V 1.77',
     items: [
       'Relatórios > Solicitado x Faturado: o total ao lado da contagem de produtos aparecia sem formatação (ex.: "R$ 10992.39"). Agora segue o padrão do sistema ("R$ 10.992,39"), igual ao restante da tabela.',

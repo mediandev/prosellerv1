@@ -16,7 +16,7 @@ import type {
 
 const BUCKET_ORDER: DashboardBucketLabel[] = [
   "Em Trânsito",
-  "Reentrega",
+  "Aguardando Agendamento",
   "Agendados",
   "Devoluções em Trânsito",
   "Recusadas",
@@ -24,7 +24,7 @@ const BUCKET_ORDER: DashboardBucketLabel[] = [
 
 const ICONS: Record<DashboardBucketLabel, JSX.Element> = {
   "Em Trânsito": <Truck className="h-5 w-5" />,
-  "Reentrega": <RotateCw className="h-5 w-5" />,
+  "Aguardando Agendamento": <RotateCw className="h-5 w-5" />,
   "Agendados": <CalendarClock className="h-5 w-5" />,
   "Devoluções em Trânsito": <RotateCcw className="h-5 w-5" />,
   "Recusadas": <XCircle className="h-5 w-5" />,
@@ -32,7 +32,7 @@ const ICONS: Record<DashboardBucketLabel, JSX.Element> = {
 
 const TONES: Record<DashboardBucketLabel, string> = {
   "Em Trânsito": "text-sky-700",
-  "Reentrega": "text-violet-700",
+  "Aguardando Agendamento": "text-violet-700",
   "Agendados": "text-amber-700",
   "Devoluções em Trânsito": "text-slate-700",
   "Recusadas": "text-rose-700",

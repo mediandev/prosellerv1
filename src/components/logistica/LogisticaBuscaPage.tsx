@@ -18,7 +18,7 @@ const STATUS_OPTIONS = [
   "Em Separação",
   "Aguardando Coleta",
   "Em Trânsito",
-  "Em Trânsito - Reentrega",
+  "Aguardando Agendamento",
   "Entregue",
   "Agendado",
   "Recusado",

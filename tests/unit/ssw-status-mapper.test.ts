@@ -3,13 +3,20 @@
 
 import { describe, it, expect } from 'vitest';
 
-// The helpers are Deno modules; re-implement the pure functions here for Vitest.
-// Keep in sync with supabase/functions/_shared/frete-logistica-helpers.ts.
+// ⚠️ ATENÇÃO: este arquivo REIMPLEMENTA o mapper (os helpers são módulos Deno e
+// o Vitest não os carrega). Portanto ele NÃO protege o código de produção — é uma
+// cópia testando a si mesma. Descoberto em 2026-08-03, quando a troca de status
+// foi feita na função real e este arquivo continuou verde.
+// A cobertura de verdade, sobre a função REAL, está em
+// tests/edge/ssw-tracking-helpers.test.ts. Mantido aqui só como documentação
+// executável das regras de mapeamento; se divergir da função real, é este que está
+// errado.
 
 type StatusEntrega =
   | 'Em Separação'
   | 'Aguardando Coleta'
   | 'Em Trânsito'
+  | 'Aguardando Agendamento'
   | 'Em Trânsito - Reentrega'
   | 'Entregue'
   | 'Agendado'
@@ -24,7 +31,7 @@ function mapOcorrenciaToStatus(tipo: string, ocorrencia: string): StatusEntrega 
   if (/RECUSAD[AO]/i.test(ocorrencia)) return 'Recusado';
   if (tipo === 'Cliente' && /\(02\)/.test(ocorrencia)) return 'Agendado';
   if (/AGENDAD[AO]\s*\(08\)/i.test(ocorrencia)) return 'Agendado';
-  if (/REENTREGA/i.test(ocorrencia.toUpperCase())) return 'Em Trânsito - Reentrega';
+  if (/REENTREGA/i.test(ocorrencia.toUpperCase())) return 'Aguardando Agendamento';
   return 'Em Trânsito';
 }
 
@@ -61,8 +68,8 @@ describe('mapOcorrenciaToStatus (R-LOG-4)', () => {
     expect(mapOcorrenciaToStatus('Informativo', 'DEVOLVIDO - ENTREGUE')).toBe('Devolvido - Entregue');
   });
 
-  it('REENTREGA → Em Trânsito - Reentrega', () => {
-    expect(mapOcorrenciaToStatus('Informativo', 'SAIU PARA REENTREGA')).toBe('Em Trânsito - Reentrega');
+  it('REENTREGA → Aguardando Agendamento', () => {
+    expect(mapOcorrenciaToStatus('Informativo', 'SAIU PARA REENTREGA')).toBe('Aguardando Agendamento');
   });
 
   it('Informativo genérico → Em Trânsito', () => {

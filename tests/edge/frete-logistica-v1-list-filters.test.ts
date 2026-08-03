@@ -4,7 +4,7 @@
 // F-LOG-CRM R-LOG-2 · valida helpers puros da extensão GET de `frete-logistica-v1`:
 //   - clampLimit / clampOffset (lição INC-016: hard cap 100).
 //   - csvParam (parse de status CSV).
-//   - DASHBOARD_BUCKETS (5 buckets, "Em Trânsito" inclui Reentrega).
+//   - DASHBOARD_BUCKETS (5 buckets, "Em Trânsito" inclui Aguardando Agendamento).
 //   - diasEmTransito (cálculo do KPI dos cards do Dashboard).
 //
 // Integração HTTP completa fica para smoke E2E manual em prod (matriz de validação
@@ -86,15 +86,23 @@ Deno.test("DASHBOARD_BUCKETS tem exatamente 5 buckets", () => {
   assertEquals(Object.keys(DASHBOARD_BUCKETS).length, 5);
 });
 
-Deno.test("Bucket 'Em Trânsito' inclui 'Em Trânsito' e 'Em Trânsito - Reentrega'", () => {
+// Migration 152 concluiu a troca "Em Trânsito - Reentrega" -> "Aguardando
+// Agendamento" (decisão do cliente em 2026-08-03). O valor legado permanece nas
+// listas para não esconder frete antigo que ainda o tivesse (hoje: zero).
+
+Deno.test("Bucket 'Em Trânsito' consolida trânsito + aguardando agendamento", () => {
   assertEquals(DASHBOARD_BUCKETS["Em Trânsito"], [
     "Em Trânsito",
+    "Aguardando Agendamento",
     "Em Trânsito - Reentrega",
   ]);
 });
 
-Deno.test("Bucket 'Reentrega' só inclui 'Em Trânsito - Reentrega'", () => {
-  assertEquals(DASHBOARD_BUCKETS["Reentrega"], ["Em Trânsito - Reentrega"]);
+Deno.test("Bucket 'Aguardando Agendamento' foca só nesse estado (+ legado)", () => {
+  assertEquals(DASHBOARD_BUCKETS["Aguardando Agendamento"], [
+    "Aguardando Agendamento",
+    "Em Trânsito - Reentrega",
+  ]);
 });
 
 Deno.test("Bucket 'Agendados' só inclui 'Agendado'", () => {

@@ -1473,3 +1473,32 @@ com o conteúdo de `supabase/migrations/150_sentinela_wipe_campo_generico.sql`.
 **Rollback:** reaplicar o arquivo de backup acima (`CREATE OR REPLACE`). A função
 auxiliar pode ficar (é inerte se ninguém chamar) ou:
 `DROP FUNCTION IF EXISTS public.sentinela_campo_ainda_vazio(text, bigint, text);`
+
+---
+
+## Migration 152 — status "Aguardando Agendamento" (2026-08-03)
+
+**Operação:** `ALTER TYPE public.status_entrega_frete ADD VALUE IF NOT EXISTS
+'Aguardando Agendamento' AFTER 'Em Trânsito';`
+
+**Por quê:** decisão do cliente (2026-08-03) — a operação usa "Aguardando
+Agendamento"; a troca foi feita no front na V1.5x e nunca no banco. Hoje arrastar
+um frete para essa coluna do Kanban é **rejeitado pelo banco**.
+
+**Pré-condições medidas em prod (2026-08-03):**
+- ZERO fretes com 'Em Trânsito - Reentrega' → nenhuma linha a migrar.
+- Única coluna que usa o tipo: `frete_logistica.status_entrega`.
+- Provado no banco efêmero: sem a migration o caso `status_aguardando_agendamento`
+  falha com o MESMO erro que o usuário vê hoje
+  (`invalid input value for enum status_entrega_frete`); com ela, passa.
+
+**Junto na mesma entrega (front + edge, deploy separado):**
+- `_shared/frete-logistica-helpers.ts`: REENTREGA passa a mapear para
+  'Aguardando Agendamento'; buckets do Dashboard atualizados.
+- Front: listas de status em Busca e Novo Frete; bucket da Torre de Controle.
+- Edge a redeployar: `frete-logistica-v1` e `ssw-sweep-v1` (usam o helper).
+
+**Rollback:** não há `DROP VALUE` em enum no Postgres. O valor novo fica inerte se
+o código voltar a não usá-lo — reverter significa reverter o código (git revert),
+não o banco. Por isso a ordem importa: **migration primeiro, código depois**;
+assim nunca existe front pedindo valor que o banco não aceita.

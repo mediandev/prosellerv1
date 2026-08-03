@@ -47,6 +47,34 @@ Deno.test("mapper: AGENDADA (08) → Agendado", () => {
   assertEquals(mapOcorrenciaToStatus("Informativo", "ENTREGA AGENDADA (08)"), "Agendado");
 });
 
+// Migration 152 (decisão do cliente em 2026-08-03): reentrega da transportadora
+// significa, na operação, que a entrega precisa ser reagendada. Antes o mapper
+// devolvia 'Em Trânsito - Reentrega', valor que o front não exibe mais.
+// Este caso não existia — a ramificação REENTREGA nunca teve teste sobre a
+// função REAL (o arquivo tests/unit/ssw-status-mapper.test.ts reimplementa o
+// mapper e por isso não protegia nada).
+Deno.test("mapper: REENTREGA → Aguardando Agendamento", () => {
+  assertEquals(
+    mapOcorrenciaToStatus("Informativo", "SAIU PARA REENTREGA"),
+    "Aguardando Agendamento",
+  );
+});
+
+Deno.test("mapper: nenhum status produzido é o legado 'Em Trânsito - Reentrega'", () => {
+  const amostras: Array<[string, string]> = [
+    ["Informativo", "SAIU PARA REENTREGA"],
+    ["Informativo", "TENTATIVA DE REENTREGA (99)"],
+    ["Cliente", "REENTREGA SOLICITADA"],
+  ];
+  for (const [tipo, ocorrencia] of amostras) {
+    assertEquals(
+      mapOcorrenciaToStatus(tipo, ocorrencia) === "Em Trânsito - Reentrega",
+      false,
+      `"${ocorrencia}" ainda produz o valor legado`,
+    );
+  }
+});
+
 Deno.test("mapper: RECUSADA → Recusado", () => {
   assertEquals(mapOcorrenciaToStatus("Cliente", "MERCADORIA RECUSADA"), "Recusado");
 });
