@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.81',
+    items: [
+      'Auditoria: os selos de "Criação" e "Exclusão" apareciam sem cor (só "Alteração" estava colorido). Corrigido — exclusão em vermelho, criação em verde.',
+    ],
+  },
+  {
     version: 'V 1.80',
     items: [
       'Nova tela "Auditoria" (backoffice): registro de quem fez o quê, quando, e o que mudou de/para. Nesta primeira etapa cobre o grupo de maior risco — comissões (valor, efetivação, débito), lançamentos, pagamentos, fechamento de período e conta corrente do cliente. Filtros por tipo de registro, pessoa e período. Sem prazo de expurgo: o histórico é mantido para consulta de todo o período de uso.',

@@ -38,10 +38,18 @@ export const ACOES: Record<string, string> = {
 
 export const rotuloAcao = (acao: string): string => ACOES[acao] ?? acao;
 
-/** Cor do selo por tipo de ação — exclusão precisa saltar aos olhos. */
+/**
+ * Cor do selo por tipo de ação — exclusão precisa saltar aos olhos.
+ *
+ * ⚠️ Só usar classes que EXISTEM em src/index.css. O projeto serve CSS
+ * pré-compilado (não há Tailwind gerando classe sob demanda): a primeira versão
+ * usava `rose`/`emerald`, que não existem no arquivo, e os selos de Exclusão e
+ * Criação saíram sem cor nenhuma em produção. Disponíveis hoje para fundo:
+ * amber, gray, green, red (nível 100).
+ */
 export const tomAcao = (acao: string): string => {
-  if (acao === 'excluiu') return 'bg-rose-100 text-rose-800';
-  if (acao === 'criou') return 'bg-emerald-100 text-emerald-800';
+  if (acao === 'excluiu') return 'bg-red-100 text-red-800';
+  if (acao === 'criou') return 'bg-green-100 text-green-800';
   return 'bg-amber-100 text-amber-800';
 };
 
