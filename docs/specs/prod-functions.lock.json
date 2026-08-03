@@ -1,6 +1,6 @@
 {
   "_comentario": "Estado das funções de PRODUÇÃO. Gerado por scripts/drift-check.py --update. Atualize APÓS todo deploy legítimo de RPC/migration; uma diferença não explicada é divergência repo↔prod.",
-  "_divergencias_aceitas_nota": "Cada entrada aqui e uma divergencia REAL, conhecida e aguardando decisao — nao um falso positivo. 'Aguardando Agendamento': o front usa esse status mas o enum do banco nunca foi migrado; arrastar o card para essa coluna FALHA em producao hoje. Pendente de decisao do cliente (completar a troca ou reverter as telas). Remover desta lista assim que decidido.",
+  "_divergencias_aceitas_nota": "Divergencia REAL, conhecida e aguardando decisao — nao e falso positivo. O front usa esse status mas o enum do banco nunca foi migrado; arrastar o card para essa coluna FALHA em producao hoje. Remover desta lista assim que o cliente decidir.",
   "divergencias_aceitas": [
     "ENUM `status_entrega_frete` não tem \"Aguardando Agendamento\""
   ],
@@ -148,7 +148,8 @@
     "rpc_listar_clientes(p_limit integer, p_page integer, p_is_admin boolean, p_vendedor_id uuid, p_search text, p_tipo_cliente text)": "fbba60342235992b061a25e6f9d53e3a88df82b8389542ca7cbbe5df53a67512",
     "search_price_list_products(p_search text, p_lista_id bigint, p_limit integer, p_offset integer)": "626adc241cacbb6d6ee8664962c0c8c1070278e9c0170097054022f438143d3e",
     "sentinela_campo_ainda_vazio(p_tabela text, p_cliente bigint, p_coluna text)": "289cdd216307bac6bb2cb2b1f98215538c1e0fc991636bf22f5efa7a81fee2aa",
-    "sentinela_verificar()": "03f5943e7938d7c812fb343a1dd66a2a12cd507a226bd39841f4fe43f49ced78",
+    "sentinela_tem_conteudo(p_valor text)": "6b9591fa058eb0670a400ba5f8457714acad0ff803ec45324421ea01ed42fe6d",
+    "sentinela_verificar()": "6e41eef8c3820cf3596074e64facdb8f249c02baf03de45adb37cd10043aa05c",
     "tg_estorno_comissao_pedido_excluido()": "c3d896333c03f0edb4bc0bbb25b5fa3c87a5d0e839ebf3220a40da9d5e89f736",
     "tg_pedido_venda_generate_comissao()": "f23468454b0c4f39a34f79aec8dcda7696ddae54b9f7aa52f8aab7bc60bd0381",
     "trigger_comissao_faturado()": "e3558d2384501e6e9b415abb5ec0b02156d212a717165ece6130346b8a01a0e9",

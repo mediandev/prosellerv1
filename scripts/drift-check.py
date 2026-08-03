@@ -170,9 +170,18 @@ def main() -> int:
 
     if atualizar:
         LOCK.parent.mkdir(parents=True, exist_ok=True)
+        # Preserva o que é decisão humana: a lista de divergências aceitas não pode
+        # ser apagada por um --update de rotina (foi o que aconteceu em 2026-08-03).
+        anterior = json.loads(LOCK.read_text()) if LOCK.exists() else {}
+        preservado = {
+            k: anterior[k]
+            for k in ("divergencias_aceitas", "_divergencias_aceitas_nota")
+            if k in anterior
+        }
         LOCK.write_text(
             json.dumps(
                 {
+                    **preservado,
                     "_comentario": (
                         "Estado das funções de PRODUÇÃO. Gerado por scripts/drift-check.py "
                         "--update. Atualize APÓS todo deploy legítimo de RPC/migration; "
