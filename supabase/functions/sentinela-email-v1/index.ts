@@ -56,6 +56,34 @@ const REGRAS: Record<string, { titulo: string; oQueFazer: string }> = {
     titulo: 'Consulta do Simples Nacional falhou',
     oQueFazer: 'A Receita não respondeu e a emissão foi bloqueada. Normalmente é temporário: tente enviar o pedido de novo.',
   },
+  pedido_duplicado_no_erp: {
+    titulo: 'Pedido enviado duas vezes ao ERP',
+    oQueFazer: 'Dois pedidos com o mesmo número no Tiny. Confira no ERP se saiu nota em duplicidade — este é o mais urgente da lista.',
+  },
+  comissao_duplicada: {
+    titulo: 'Comissão em duplicidade',
+    oQueFazer: 'O mesmo pedido gerou mais de uma comissão. Confira antes de fechar o período, senão o vendedor recebe duas vezes.',
+  },
+  cliente_cnpj_duplicado: {
+    titulo: 'Dois cadastros com o mesmo CNPJ',
+    oQueFazer: 'Pedido e nota podem ir para o cadastro errado. Unifique os cadastros.',
+  },
+  pedido_valor_divergente: {
+    titulo: 'Valor do pedido não bate com os itens',
+    oQueFazer: 'Se faturar assim, a nota sai com valor errado. Abra o pedido e confira os itens.',
+  },
+  comissao_sem_pedido: {
+    titulo: 'Comissão sem pedido correspondente',
+    oQueFazer: 'Comissão apontando para pedido que não existe mais. Confira antes de pagar.',
+  },
+  produto_ativo_sem_preco: {
+    titulo: 'Produto ativo sem preço',
+    oQueFazer: 'O vendedor vê o produto mas não consegue fechar pedido. Defina o preço na lista.',
+  },
+  cliente_com_pedido_sem_endereco: {
+    titulo: 'Cliente comprou e está sem endereço',
+    oQueFazer: 'Sem endereço não dá para emitir nota nem entregar. Complete o cadastro.',
+  },
 }
 
 const rotulo = (regra: string) => REGRAS[regra]?.titulo ?? regra
@@ -85,6 +113,20 @@ function resumir(regra: string, d: Record<string, unknown> | null): string {
       return `"${v('nome')}" · parcelas: ${v('intervalo')}`
     case 'regime_lookup_falhou':
       return `${v('razao_social')} · motivo: ${v('motivo')}`
+    case 'pedido_duplicado_no_erp':
+      return `Número no Tiny ${v('id_tiny')} em ${v('quantidade')} pedidos`
+    case 'comissao_duplicada':
+      return `Pedido ${v('pedido_id')} · ${v('quantidade')} comissões`
+    case 'cliente_cnpj_duplicado':
+      return `CNPJ ${v('cpf_cnpj')} · ${v('quantidade')} cadastros: ${v('nomes')}`
+    case 'pedido_valor_divergente':
+      return `Pedido ${v('pedido')} · pedido R$ ${v('valor_no_pedido')} · itens R$ ${v('soma_dos_itens')}`
+    case 'comissao_sem_pedido':
+      return `Comissão ${v('comissao_id')} · pedido ${v('pedido_id')} inexistente · R$ ${v('valor')}`
+    case 'produto_ativo_sem_preco':
+      return `${v('descricao')}${v('sku') ? ` · SKU ${v('sku')}` : ''}`
+    case 'cliente_com_pedido_sem_endereco':
+      return `${v('nome')} (cliente ${v('cliente_id')})`
     default:
       return ''
   }

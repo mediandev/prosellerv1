@@ -55,6 +55,34 @@ export const REGRAS_SENTINELA: Record<string, { titulo: string; explicacao: stri
     explicacao:
       'A Receita não respondeu na hora de enviar o pedido ao ERP e a emissão foi bloqueada. O usuário recebe aviso e pode tentar de novo; o alerta some sozinho quando a consulta seguinte funciona.',
   },
+  pedido_duplicado_no_erp: {
+    titulo: 'Pedido enviado duas vezes ao ERP',
+    explicacao: 'Dois pedidos com o mesmo número no Tiny — indica nota fiscal emitida em duplicidade. Confira no ERP antes de qualquer coisa.',
+  },
+  comissao_duplicada: {
+    titulo: 'Comissão em duplicidade',
+    explicacao: 'O mesmo pedido gerou mais de uma comissão. O vendedor receberia duas vezes pela mesma venda.',
+  },
+  cliente_cnpj_duplicado: {
+    titulo: 'Dois cadastros com o mesmo CNPJ',
+    explicacao: 'Pedido e nota podem ir para o cadastro errado, e o histórico do cliente fica dividido entre os dois.',
+  },
+  pedido_valor_divergente: {
+    titulo: 'Valor do pedido não bate com os itens',
+    explicacao: 'O total do pedido difere da soma dos produtos. Se for faturado assim, a nota sai com valor errado.',
+  },
+  comissao_sem_pedido: {
+    titulo: 'Comissão sem pedido correspondente',
+    explicacao: 'Existe comissão apontando para um pedido que não existe mais — pagamento sobre venda inexistente.',
+  },
+  produto_ativo_sem_preco: {
+    titulo: 'Produto ativo sem preço',
+    explicacao: 'O produto aparece para o vendedor mas não fecha pedido. Defina o preço na lista correspondente.',
+  },
+  cliente_com_pedido_sem_endereco: {
+    titulo: 'Cliente comprou e está sem endereço',
+    explicacao: 'Sem endereço não há como emitir nota nem entregar. O problema só apareceria na hora de faturar.',
+  },
   wipe_observacao: {
     titulo: 'Observação de contato apagada',
     explicacao: 'Regra antiga, substituída por "Campo de cliente apagado" na V1.76.',
@@ -104,6 +132,20 @@ export function resumirAlerta(alerta: Pick<SentinelaAlerta, 'regra' | 'chave' | 
     case 'regime_lookup_falhou':
       return `${v('razao_social')} · CNPJ ${v('cnpj')} · motivo: ${v('motivo')}`
         + (v('pedido_id') ? ` · pedido ${v('pedido_id')}` : '');
+    case 'pedido_duplicado_no_erp':
+      return `Número no Tiny ${v('id_tiny')} aparece em ${v('quantidade')} pedidos`;
+    case 'comissao_duplicada':
+      return `Pedido ${v('pedido_id')} · ${v('quantidade')} comissões`;
+    case 'cliente_cnpj_duplicado':
+      return `CNPJ ${v('cpf_cnpj')} · ${v('quantidade')} cadastros: ${v('nomes')}`;
+    case 'pedido_valor_divergente':
+      return `Pedido ${v('pedido')} · no pedido: R$ ${v('valor_no_pedido')} · soma dos itens: R$ ${v('soma_dos_itens')}`;
+    case 'comissao_sem_pedido':
+      return `Comissão ${v('comissao_id')} · pedido ${v('pedido_id')} não existe · R$ ${v('valor')}`;
+    case 'produto_ativo_sem_preco':
+      return `${v('descricao')}${v('sku') ? ` · SKU ${v('sku')}` : ''}`;
+    case 'cliente_com_pedido_sem_endereco':
+      return `${v('nome')} (cliente ${v('cliente_id')})`;
     default:
       return alerta.chave;
   }

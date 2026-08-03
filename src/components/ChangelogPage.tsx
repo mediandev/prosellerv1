@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.88',
+    items: [
+      'Sentinela: a verificação diária passou de 8 para 15 regras. As novas vigiam pedido enviado duas vezes ao ERP, comissão em duplicidade, dois cadastros com o mesmo CNPJ, valor do pedido que não bate com a soma dos itens, comissão apontando para pedido inexistente, produto ativo sem preço e cliente que já comprou mas está sem endereço.',
+      'Sentinela: o resultado da verificação passa a chegar por e-mail todo dia às 6h15, com o que fazer em cada caso. Se não houver nada, não chega e-mail.',
+    ],
+  },
+  {
     version: 'V 1.87',
     items: [
       'Auditoria: corrigido o texto que saía com todas as palavras em maiúscula ("Alterou As Permissões De Cicero"). Agora só a primeira letra.',
