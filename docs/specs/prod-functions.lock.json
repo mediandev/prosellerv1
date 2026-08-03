@@ -1,9 +1,5 @@
 {
   "_comentario": "Estado das funções de PRODUÇÃO. Gerado por scripts/drift-check.py --update. Atualize APÓS todo deploy legítimo de RPC/migration; uma diferença não explicada é divergência repo↔prod.",
-  "_divergencias_aceitas_nota": "Divergencia REAL, conhecida e aguardando decisao — nao e falso positivo. O front usa esse status mas o enum do banco nunca foi migrado; arrastar o card para essa coluna FALHA em producao hoje. Remover desta lista assim que o cliente decidir.",
-  "divergencias_aceitas": [
-    "ENUM `status_entrega_frete` não tem \"Aguardando Agendamento\""
-  ],
   "enums": {
     "grupo_transportador": [
       "ATIVA",
@@ -16,6 +12,7 @@
       "Em Separação",
       "Aguardando Coleta",
       "Em Trânsito",
+      "Aguardando Agendamento",
       "Em Trânsito - Reentrega",
       "Entregue",
       "Agendado",
