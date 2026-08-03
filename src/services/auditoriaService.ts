@@ -34,6 +34,11 @@ export const ACOES: Record<string, string> = {
   criou: 'Criação',
   alterou: 'Alteração',
   excluiu: 'Exclusão',
+  restaurou: 'Restauração',
+  aprovou: 'Aprovação',
+  rejeitou: 'Rejeição',
+  desativou: 'Acesso cortado',
+  reativou: 'Acesso devolvido',
 };
 
 export const rotuloAcao = (acao: string): string => ACOES[acao] ?? acao;
@@ -48,8 +53,8 @@ export const rotuloAcao = (acao: string): string => ACOES[acao] ?? acao;
  * amber, gray, green, red (nível 100).
  */
 export const tomAcao = (acao: string): string => {
-  if (acao === 'excluiu') return 'bg-red-100 text-red-800';
-  if (acao === 'criou') return 'bg-green-100 text-green-800';
+  if (acao === 'excluiu' || acao === 'desativou' || acao === 'rejeitou') return 'bg-red-100 text-red-800';
+  if (acao === 'criou' || acao === 'aprovou' || acao === 'reativou') return 'bg-green-100 text-green-800';
   return 'bg-amber-100 text-amber-800';
 };
 
@@ -66,6 +71,23 @@ export function descreverDetalhe(registro: RegistroAuditoria): string {
     return d
       .map((m: any) => `${m.campo}: ${m.de ?? '(vazio)'} → ${m.para ?? '(vazio)'}`)
       .join(' · ');
+  }
+
+  // Permissões: mostra o delta em português.
+  if (typeof d === 'object' && d !== null && ('ganhou' in d || 'perdeu' in d)) {
+    const o = d as { ganhou?: string[]; perdeu?: string[] };
+    const partes: string[] = [];
+    if (o.ganhou?.length) partes.push(`ganhou ${o.ganhou.join(', ')}`);
+    if (o.perdeu?.length) partes.push(`perdeu ${o.perdeu.join(', ')}`);
+    return partes.join(' · ') || 'sem mudança efetiva';
+  }
+
+  // Troca de credencial: o valor nunca é gravado, então descreve o fato.
+  if (typeof d === 'object' && d !== null && 'tem_chave_agora' in d) {
+    const o = d as { tinha_chave_antes?: boolean; tem_chave_agora?: boolean };
+    if (!o.tinha_chave_antes && o.tem_chave_agora) return 'chave cadastrada';
+    if (o.tinha_chave_antes && !o.tem_chave_agora) return 'chave removida';
+    return 'chave substituída (valor não é guardado)';
   }
 
   // Exclusão: a linha inteira que foi apagada. Mostra só o que ajuda a

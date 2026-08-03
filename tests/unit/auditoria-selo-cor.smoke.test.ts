@@ -24,9 +24,19 @@ describe('auditoria — selo de ação', () => {
     }
   });
 
-  it('exclusão, criação e alteração têm cores distintas entre si', () => {
-    const cores = Object.keys(ACOES).map(tomAcao);
-    expect(new Set(cores).size).toBe(cores.length);
+  // Ações do mesmo grupo COMPARTILHAM cor de propósito (excluir, desativar e
+  // rejeitar são todas destrutivas). O que não pode é destrutivo e construtivo
+  // saírem iguais — aí a cor deixa de informar qualquer coisa.
+  it.each([
+    ['destrutivo', ['excluiu', 'desativou', 'rejeitou']],
+    ['construtivo', ['criou', 'aprovou', 'reativou']],
+  ])('ações %s compartilham a mesma cor', (_grupo, acoes) => {
+    expect(new Set((acoes as string[]).map(tomAcao)).size).toBe(1);
+  });
+
+  it('destrutivo, construtivo e neutro têm cores diferentes entre si', () => {
+    const cores = [tomAcao('excluiu'), tomAcao('criou'), tomAcao('alterou')];
+    expect(new Set(cores).size).toBe(3);
   });
 
   it('toda ação conhecida tem rótulo em português', () => {

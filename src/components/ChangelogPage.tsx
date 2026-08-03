@@ -8,6 +8,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.85',
+    items: [
+      'Auditoria completa: entram preços por lista, listas de preço, produtos, naturezas de operação (inclusive o mapeamento com o Tiny), condições de pagamento, metas, empresas de faturamento e fretes.',
+      'Auditoria > Chave de API do ERP: a troca da chave é registrada, mas a chave em si NUNCA é guardada no registro — aparece apenas "chave substituída".',
+      'Auditoria: novos tipos de ação com cor própria — Restauração, Aprovação, Rejeição, Acesso cortado e Acesso devolvido.',
+      'Observação: nas telas de preço, produto e configurações o sistema ainda não registra QUEM fez a alteração (aparece como "Sistema"), apenas o que mudou e quando. Em pedidos, clientes, usuários, comissões e fretes o nome aparece.',
+    ],
+  },
+  {
     version: 'V 1.84',
     items: [
       'Auditoria: usuários e permissões entram no registro — criação, exclusão, corte e devolução de acesso, mudança entre backoffice e vendedor, e alteração de permissões.',
