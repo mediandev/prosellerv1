@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.84',
+    items: [
+      'Auditoria: usuários e permissões entram no registro — criação, exclusão, corte e devolução de acesso, mudança entre backoffice e vendedor, e alteração de permissões.',
+      'Auditoria > Permissões: o registro mostra exatamente o que a pessoa GANHOU e o que PERDEU (ex.: "ganhou comissoes.visualizar"), em vez de duas listas para comparar na mão.',
+    ],
+  },
+  {
     version: 'V 1.83',
     items: [
       'Auditoria: clientes entram no registro — cadastro, exclusão, restauração, aprovação e rejeição de cadastro pendente, além de mudanças com impacto comercial (vendedor atribuído, grupo/rede, lista de preço, condição padrão, desconto, pedido mínimo, situação, CNPJ e código).',

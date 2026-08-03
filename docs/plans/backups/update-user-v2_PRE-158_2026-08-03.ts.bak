@@ -283,10 +283,7 @@ serve(async (req) => {
 
       const { data: permissionsRow, error: permsError } = await supabaseAdmin
         .from('user')
-        // `atualizado_por` (migration 158): a troca de PERMISSÕES não passa pela
-        // RPC update_user_v2 — é gravada direto aqui. Sem esta linha, a auditoria
-        // registraria a mudança mais sensível do sistema como autor "Sistema".
-        .update({ permissoes: sanitizedData.permissoes, atualizado_por: user.id })
+        .update({ permissoes: sanitizedData.permissoes })
         .eq('user_id', targetUserId)
         .select('user_id, permissoes')
         .maybeSingle()
