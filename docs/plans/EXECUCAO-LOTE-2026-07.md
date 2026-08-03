@@ -244,3 +244,67 @@ contra a versão com o defeito** antes de valer como rede.
 
 - `sentinela-diaria` (6h BRT) · `ssw-sweep-hourly` · webhook de NF alimentando
   `nota_fiscal_item`. Todos ativos e com baseline limpo.
+
+---
+
+## ✅ Respostas do cliente — 2026-08-03
+
+| # | Assunto | Decisão | Situação |
+|---|---|---|---|
+| 3.1 | Status de frete | *"Utilizamos o aguardando agendamento, precisa concluir a troca."* | ✅ **ENTREGUE** — migration 152 + edges + front (V 1.78) |
+| 3.2 | Simples Nacional a cada envio | Cliente **recusou** a revalidação diária e propôs uma **fila** que respeita 3 req/min | 🔨 a construir |
+| 3.3 | Auditoria | (a) tudo · (b) só com permissão específica · (c) sem prazo de expurgo | 🔨 escopo fechado como **opção A** |
+
+### 3.1 — concluído (V 1.78)
+
+Enum `status_entrega_frete` recebeu 'Aguardando Agendamento'. **Zero fretes** no
+valor legado ⇒ nenhuma linha migrada. Ordem seguida: **banco primeiro, código
+depois** (enum não tem `DROP VALUE`; front pedindo valor inexistente = erro).
+
+Mapeador do SSW: `REENTREGA` passa a produzir 'Aguardando Agendamento'.
+'Em Trânsito - Reentrega' permanece no tipo como legado inerte.
+
+**Provado em prod:** gravação do status via o mesmo caminho do arrastar no Kanban
+retornou HTTP 200 e o valor foi persistido; frete devolvido ao status original e
+conferido no banco. Antes da migration, o caso de teste falha com
+`invalid input value for enum status_entrega_frete` — o erro que o usuário via.
+
+**Dois achados de teste:**
+1. A ramificação REENTREGA **nunca teve teste sobre a função real**.
+2. `tests/unit/ssw-status-mapper.test.ts` **reimplementa** o mapeador em vez de
+   importá-lo — testava a si mesmo e ficou verde durante toda a troca. Aviso
+   adicionado no topo; cobertura real criada no teste Deno.
+
+A divergência "Aguardando Agendamento" saiu da lista de exceções do `drift-check`:
+verde agora é por conserto, não por tolerância.
+
+### 3.2 — desenho decorrente (a construir)
+
+O cliente refutou a proposta original com dois argumentos corretos:
+consumo desnecessário (967 clientes/dia, a maioria sem comprar) e **teto de
+escala** (3 req/min = 4.320/dia amarraria o número máximo de clientes).
+Contraproposta dele — **fila com throttle** — é o desenho certo:
+
+1. No faturamento, usa o dado já gravado e **não espera**: nunca bloqueia, nem com
+   vários vendedores enviando junto ou lote de rascunhos de uma vez.
+2. Dado vencido entra numa fila.
+3. Um worker escoa a fila a ≤3 req/min.
+
+Assim some o teto de clientes (a fila absorve picos) e some o desperdício
+(consulta só quem vai ser faturado).
+
+**Pendente com o cliente:** a partir de quantos dias o dado é considerado vencido?
+
+### 3.3 — escopo fechado: opção A
+
+Registrar **ações com impacto**, não toda alteração de campo:
+exclusão de pedido · exclusão de cliente · alteração de comissão · alteração de
+preço · alteração de permissão.
+
+Cada linha: quando · quem · o quê · de qual valor para qual.
+
+Motivo de não registrar tudo: alteração rotineira de cadastro (corrigir telefone,
+ajustar observação) enterraria o que interessa e faria o registro crescer rápido,
+ficando lento de consultar. Ampliar depois é fácil; reduzir, não.
+
+Visibilidade: só usuários com permissão específica. Retenção: sem expurgo.
