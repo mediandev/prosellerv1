@@ -1,4 +1,16 @@
-# Logística & Rastreio SSW
+# Logística
+
+> **Última revisão: 2026-08-04.**
+>
+> **ATUALIZADO em 2026-08-03 (migration 152):** o status `Em Trânsito - Reentrega`
+> foi substituído por **`Aguardando Agendamento`**, por decisão do cliente. Quando
+> a transportadora informa reentrega, o frete passa a cair em "Aguardando
+> Agendamento". O valor antigo permanece no banco como legado inerte — ninguém
+> mais o grava (havia ZERO fretes nele quando a troca foi feita).
+>
+> Antes desta migration, a troca existia só nas telas e o banco recusava o valor:
+> arrastar o card para essa coluna do Kanban dava erro.
+ & Rastreio SSW
 
 > **Módulo ATIVO em produção.** (A versão anterior deste arquivo marcava tudo como "removido" — foi erro de análise: rodou num checkout local defasado. Os módulos `frete-logistica-helpers.ts`, `ssw-refresh.ts`, `ssw-client.ts`, `ssw-sweep-v1` e `romaneio-logistica-v1` existem em produção e estão no ar.)
 

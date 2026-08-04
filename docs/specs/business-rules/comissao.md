@@ -1,11 +1,16 @@
 # Comissão
 
+> **Última revisão: 2026-08-04.** As regras marcadas com "ATUALIZADO" mudaram
+> depois da validação do cliente em 31/07 — todas por decisão dele. Onde houver
+> divergência entre este documento e o sistema, **o sistema é a verdade**.
+
 ## Regras de negócio
 
-1. **Pedidos bonificados não geram comissão.** Quando `pedido_venda.natureza_operacao = 'Bonificação'`, `generate_vendedor_comissao` interrompe e retorna status `'bonificacao_sem_comissao'`.
-   - *Por quê:* Bonificações são operações de cortesia ou promoção, não representam venda real, então não devem comissionar o vendedor.
-   - *Regressão:* Um pedido com `natureza_operacao = 'Bonificação'` gera comissão em `vendedor_comissao`.
-   - *Nota (verificação):* A comparação é **case-sensitive e sensível a acento** (migration 143, linha 57: `if v_pedido.natureza_operacao = 'Bonificação'`, sem `LOWER()` nem transliteração). Variações como `'bonificação'` ou `'BONIFICACAO'` contornam a regra. Ver Dúvida 6.
+1. **Natureza de operação marcada como "sem comissão" não gera comissão.** `generate_vendedor_comissao` consulta o flag `natureza_operacao.tem_comissao` pelo `natureza_id` do pedido; se for `false`, interrompe e retorna `'natureza_sem_comissao'`.
+   - *Por quê:* Bonificação, remessa para troca e outras operações de cortesia não representam venda real. Quem decide isso é a configuração da natureza, não o nome dela.
+   - *Regressão:* Um pedido cuja natureza tem `tem_comissao = false` gera comissão em `vendedor_comissao`.
+   - **ATUALIZADO em 2026-07-28 (migration 144).** Até então a regra comparava o TEXTO `natureza_operacao = 'Bonificação'` — sensível a acento e maiúscula, e cega para qualquer outra natureza sem comissão. Impacto medido antes de aplicar: 541 pedidos ativos, apenas 2 mudavam de critério ("Remessa para troca"), ambos sem comissão gerada. Nenhuma comissão existente foi afetada.
+   - *Fallback:* natureza ausente ⇒ gera comissão (preserva o comportamento anterior em pedido sem natureza).
 
 2. **Pedidos excluídos (soft-delete) não geram comissão.** Quando `pedido_venda.deleted_at IS NOT NULL`, `generate_vendedor_comissao` interrompe e retorna `'pedido_deletado_sem_comissao'` (migration 143, linhas 43-46).
    - *Por quê:* Pedido deletado deixou de ser válido para comissionar; evita pagar comissão sobre transações canceladas.
@@ -45,7 +50,12 @@
     - *Por quê:* Mudanças no valor da venda devem refletir na comissão em tempo real para manter a auditoria correta.
     - *Regressão:* `valor_total` muda de 100 para 200 mas `valor_comissao` continua calculado sobre 100.
 
-11. **Não há mecanismo automático de reversão/cancelamento de comissão quando `valor_total` vai para 0 ou o pedido é deletado.** A migration 143 impede **criar** comissão nova em pedido já deletado, mas não existe trigger, `ON DELETE CASCADE` ou RPC que **delete ou reverta** comissões já criadas.
+11. **Excluir um pedido estorna a comissão automaticamente.** O trigger `trg_estorno_comissao_on_delete` dispara na transição de `deleted_at` (nulo → preenchido) e:
+    - **período aberto** ⇒ apaga a comissão;
+    - **período fechado** ⇒ mantém o fechamento intacto e lança um **débito** rastreável em `lancamentos_comissao`, no período aberto mais recente (ou no mês corrente);
+    - **valor R$ 0,00 em período fechado** ⇒ nenhum débito (seria ruído).
+    - *Restaurar o pedido NÃO recria a comissão* — decisão do cliente em 2026-07-31.
+    - **ATUALIZADO em 2026-07-31 (migration 147).** Antes desta data não existia nenhum mecanismo de reversão: a 143 só impedia *criar* comissão em pedido já excluído.
     - *Por quê:* Desvio de design conhecido: o sistema registra comissão no lançamento mas não a reversa se o pedido cai.
     - *Regressão:* Pedido é deletado mas a comissão permanece em `vendedor_comissao` com o valor original. (Comportamento **confirmado** pela verificação — este é o estado atual, não um bug corrigível apenas por documentação.)
 

@@ -1,5 +1,9 @@
 # Cliente
 
+> **Última revisão: 2026-08-04.** As regras marcadas com "ATUALIZADO" mudaram
+> depois da validação do cliente em 31/07 — todas por decisão dele. Onde houver
+> divergência entre este documento e o sistema, **o sistema é a verdade**.
+
 ## Regras de negócio
 
 1. **Nome (razão social) obrigatório com no mínimo 2 caracteres úteis.** O nome não pode ser vazio, ter menos de 2 caracteres nem conter apenas espaços em branco (a validação desconsidera espaços). A RPC deve rejeitar antes de persistir.
@@ -82,7 +86,11 @@
 
 9. **Isolamento de dados / RLS.** [RESPONDIDA — código] Não há RLS de isolamento por empresa/região no nível de tabela; a autorização é funcional dentro das RPCs (via `p_requesting_user_id`). Backoffice enxerga e edita TODOS os clientes; a mesma política vale em dev/staging/prod. Consta como débito de segurança conhecido (políticas `allow_all` ainda neutralizam RLS em prod) — acompanhar com **equipe de segurança**.
 
-10. **[⚠️ PARA O CLIENTE DECIDIR] Qual formato o CEP deve ter?** Descoberto em 2026-07-28 (teste na tela): ao salvar um cliente, o CEP perde o hífen mas mantém o ponto (`13.345-400` → `13.345400`), gerando um formato que não é máscara nem dígito puro. **Bug pré-existente** (a função remove só o hífen), independente da migration 140. **81 registros já corrompidos**; a base tem 4 formatos convivendo: `12.345-678` (533), `12345678` só dígitos (216), `12345-678` (105), `12.345678` corrompido (81).
+10. **CEP é guardado só com dígitos, com os zeros à esquerda preservados; a máscara é da exibição.** `create_cliente_v2` e `update_cliente_v2` aplicam `regexp_replace(..., '\D', '', 'g')`. A tela exibe e digita no formato `NN.NNN-NNN`.
+    - *Por quê:* decisão do cliente em 2026-07-31. A coluna é TEXTO e **nunca** pode virar número — 498 endereços têm zero à esquerda, que sumiria na conversão.
+    - *Regressão:* um CEP gravado com ponto, hífen ou com menos de 8 dígitos.
+    - **ATUALIZADO em 2026-07-31 (migration 146).** Antes, a função removia apenas o hífen e mantinha o ponto (`13.345-400` → `13.345400`) — nem máscara nem dígito puro. 81 registros estavam corrompidos e a base tinha 4 formatos convivendo. **Toda a base foi normalizada: 936/936 endereços com 8 dígitos.**
+    - *Vigiado:* a regra `cep_invalido` da sentinela acusa qualquer CEP fora desse padrão.
    - *Decisão necessária:* (a) padronizar em **só dígitos** (`13345400`, mais correto — a tela formata na exibição) ou (b) **manter a máscara** como digitada (`13.345-400`).
    - *Depois da decisão:* corrigir a função + normalizar os 81 (e opcionalmente unificar os demais formatos).
    - *Status:* não bloqueia nada; o CEP segue utilizável. Registrado para não travar a investigação.
