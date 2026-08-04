@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -194,7 +194,7 @@ function SidebarUserInfo({
   onOpenChangelog: () => void;
 }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.90";
+  const systemVersion = "V 1.91";
   const ultimaVersao = CHANGELOG[0];
   
   if (!usuario) return null;
@@ -349,14 +349,19 @@ function AppContent() {
   // força "dashboard" depois que o usuário entra — se apenas navegássemos aqui,
   // o link seria atropelado. Testado em produção: sem isto, #/sentinela cai no
   // Dashboards.
-  const [rotaSolicitada, setRotaSolicitada] = useState<Page | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const rota = window.location.hash.replace(/^#\/?/, '').split('?')[0];
-    const telas = ['dashboard','vendas','clientes','produtos','equipe','metas','comissoes',
-                   'contacorrente','relatorios','logistica','sentinela','auditoria',
-                   'configuracoes','perfil'];
-    return telas.includes(rota) ? (rota as Page) : null;
-  });
+  // Ref, não estado: se ficasse nas dependências do efeito de login, limpá-la
+  // dispararia o efeito de novo — e a segunda passada cairia no "else", mandando
+  // para o dashboard. Foi exatamente o que aconteceu na V 1.89.
+  const rotaSolicitada = useRef<Page | null>(
+    (() => {
+      if (typeof window === 'undefined') return null;
+      const rota = window.location.hash.replace(/^#\/?/, '').split('?')[0];
+      const telas = ['dashboard','vendas','clientes','produtos','equipe','metas','comissoes',
+                     'contacorrente','relatorios','logistica','sentinela','auditoria',
+                     'configuracoes','perfil'];
+      return telas.includes(rota) ? (rota as Page) : null;
+    })(),
+  );
 
   // Detectar tokens de convite/invite na URL (hash fragment do Supabase)
   useEffect(() => {
@@ -437,15 +442,16 @@ function AppContent() {
   // no efeito que confere `currentPage`; tela sem acesso cai no dashboard sozinha.
   useEffect(() => {
     if (usuario && dataInitialized) {
-      if (rotaSolicitada) {
-        setCurrentPage(rotaSolicitada);
-        setRotaSolicitada(null);
+      const destino = rotaSolicitada.current;
+      rotaSolicitada.current = null;   // consome ANTES de navegar: vale uma vez só
+      if (destino) {
+        setCurrentPage(destino);
         window.history.replaceState(null, '', window.location.pathname);
       } else {
         setCurrentPage("dashboard");
       }
     }
-  }, [usuario, dataInitialized, rotaSolicitada]);
+  }, [usuario, dataInitialized]);
 
   // Inicializar modo Tiny ERP na primeira carga
   useEffect(() => {

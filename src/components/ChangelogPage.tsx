@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.91',
+    items: [
+      'Link direto para tela: correção definitiva. O botão "Resolver agora" dos e-mails agora abre a tela certa, inclusive quando é preciso fazer login antes.',
+    ],
+  },
+  {
     version: 'V 1.90',
     items: [
       'Correção do link direto: ao abrir o sistema por um link de tela específica, o login levava sempre ao Dashboard. Agora o link é respeitado depois de entrar.',
