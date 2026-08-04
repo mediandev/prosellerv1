@@ -194,7 +194,7 @@ function SidebarUserInfo({
   onOpenChangelog: () => void;
 }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.88";
+  const systemVersion = "V 1.89";
   const ultimaVersao = CHANGELOG[0];
   
   if (!usuario) return null;
@@ -340,6 +340,20 @@ function AppContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authView, setAuthView] = useState<'login' | 'forgot-password' | 'set-password'>('login');
   const [inviteTokens, setInviteTokens] = useState<{ accessToken: string; refreshToken: string } | null>(null);
+
+  // Abrir direto numa tela pela URL: proseller.app.br/#/clientes
+  // Existe para os e-mails da sentinela terem botão "Resolver agora" que leva ao
+  // lugar certo. Sem isso o alerta informa mas não ajuda a agir.
+  // Só navega se a pessoa tiver acesso à tela — senão ignora em silêncio.
+  useEffect(() => {
+    const rota = window.location.hash.replace(/^#\/?/, '').split('?')[0];
+    if (!rota) return;
+    const telas = menuItems.map((m) => m.id).concat(['sentinela', 'auditoria', 'perfil'] as Page[]);
+    if (telas.includes(rota as Page)) {
+      setCurrentPage(rota as Page);   // guarda de permissão fica no efeito que valida currentPage
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   // Detectar tokens de convite/invite na URL (hash fragment do Supabase)
   useEffect(() => {

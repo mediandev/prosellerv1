@@ -8,6 +8,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.89',
+    items: [
+      'E-mail da Sentinela: cada item passa a ter um botão "Resolver agora" que abre o sistema direto na tela certa, e o caminho escrito ao lado (ex.: "Clientes → abrir o cliente → aba Endereço").',
+      'E-mail da Sentinela: deixa de repetir todo dia o que já foi avisado. Chega quando aparece algo NOVO — marcado como tal — e, uma vez por semana, um lembrete do que continua pendente.',
+      'O sistema passa a aceitar link direto para uma tela (ex.: proseller.app.br/#/clientes), respeitando as permissões do usuário.',
+    ],
+  },
+  {
     version: 'V 1.88',
     items: [
       'Sentinela: a verificação diária passou de 8 para 15 regras. As novas vigiam pedido enviado duas vezes ao ERP, comissão em duplicidade, dois cadastros com o mesmo CNPJ, valor do pedido que não bate com a soma dos itens, comissão apontando para pedido inexistente, produto ativo sem preço e cliente que já comprou mas está sem endereço.',

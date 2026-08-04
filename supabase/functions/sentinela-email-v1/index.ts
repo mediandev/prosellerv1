@@ -7,10 +7,14 @@
 // Todo problema caro deste sistema seguiu o mesmo roteiro: quebrava em silêncio
 // e o cliente descobria dias depois, no prejuízo. Este e-mail fecha esse ciclo.
 //
-// Regras de comportamento:
-//   * Não manda e-mail quando está tudo certo. Alarme que apita todo dia vira
-//     ruído e a pessoa cria o hábito de ignorar — que é o defeito que a
-//     sentinela existe para evitar.
+// QUANDO manda e-mail (migration 162) — alerta repetido todo dia vira ruído e a
+// pessoa aprende a apagar sem ler:
+//   * apareceu algo NOVO  -> e-mail no mesmo dia
+//   * nada novo           -> silêncio
+//   * ainda há pendência  -> um lembrete por semana (segunda-feira)
+//
+// Outras regras de comportamento:
+//   * Não manda e-mail quando está tudo certo.
 //   * Nunca deixa o cron falhar: erro de envio é registrado e devolve 200.
 //     O importante é a verificação ter rodado; o e-mail é o mensageiro.
 //
@@ -89,6 +93,29 @@ const REGRAS: Record<string, { titulo: string; oQueFazer: string }> = {
 const rotulo = (regra: string) => REGRAS[regra]?.titulo ?? regra
 const oQueFazer = (regra: string) => REGRAS[regra]?.oQueFazer ?? ''
 
+/** Onde ir para resolver. Sem isso o e-mail informa mas não ajuda a agir. */
+const ONDE: Record<string, { tela: string; caminho: string }> = {
+  wipe_campo_cliente:              { tela: 'clientes',      caminho: 'Clientes → abrir o cliente → conferir o campo' },
+  comissao_pedido_excluido:        { tela: 'comissoes',     caminho: 'Comissões → período correspondente' },
+  pedido_aberto_sem_tiny:          { tela: 'vendas',        caminho: 'Pedidos → abrir o pedido → reenviar ao ERP' },
+  frete_entregue_preso:            { tela: 'logistica',     caminho: 'Logística → Busca → abrir o frete → "Atualizar rastreio"' },
+  cep_invalido:                    { tela: 'clientes',      caminho: 'Clientes → abrir o cliente → aba Endereço' },
+  cliente_novo_sem_condicao:       { tela: 'clientes',      caminho: 'Clientes → abrir o cliente → Condição Comercial' },
+  condicao_nome_divergente:        { tela: 'configuracoes', caminho: 'Configurações → Condições de Pagamento' },
+  regime_lookup_falhou:            { tela: 'vendas',        caminho: 'Pedidos → reenviar o pedido ao ERP' },
+  pedido_duplicado_no_erp:         { tela: 'vendas',        caminho: 'Confira no Tiny se saiu nota em duplicidade, depois Pedidos' },
+  comissao_duplicada:              { tela: 'comissoes',     caminho: 'Comissões → período correspondente' },
+  cliente_cnpj_duplicado:          { tela: 'clientes',      caminho: 'Clientes → buscar pelo CNPJ → unificar os cadastros' },
+  pedido_valor_divergente:         { tela: 'vendas',        caminho: 'Pedidos → abrir o pedido → conferir os itens' },
+  comissao_sem_pedido:             { tela: 'comissoes',     caminho: 'Comissões → conferir antes de pagar' },
+  produto_ativo_sem_preco:         { tela: 'produtos',      caminho: 'Produtos → abrir o produto → definir preço na lista' },
+  cliente_com_pedido_sem_endereco: { tela: 'clientes',      caminho: 'Clientes → abrir o cliente → aba Endereço' },
+}
+
+const APP = 'https://proseller.app.br'
+const linkTela = (regra: string) => `${APP}/#/${ONDE[regra]?.tela ?? 'sentinela'}`
+const caminho = (regra: string) => ONDE[regra]?.caminho ?? 'Sentinela'
+
 const escapar = (t: unknown) =>
   String(t ?? '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] as string))
 
@@ -144,18 +171,36 @@ Deno.serve(async (req) => {
 
     const { data: alertas, error } = await supabase
       .from('sentinela_alerta')
-      .select('regra, detalhe, criado_em')
+      .select('id, regra, detalhe, criado_em, notificado_em')
       .is('resolvido_em', null)
       .order('criado_em', { ascending: false })
       .limit(200)
 
     if (error) throw new Error(`Falha ao ler alertas: ${error.message}`)
 
-    // Tudo certo = silêncio. Alarme que apita todo dia é alarme ignorado.
+    // Tudo certo = silêncio.
     if (!alertas || alertas.length === 0) {
       console.log('[SENTINELA-EMAIL] nenhuma violação — nenhum e-mail enviado')
       return new Response(
         JSON.stringify({ success: true, alertas: 0, enviado: false, motivo: 'sem violações' }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
+    // QUANDO interromper alguém (migration 162): novidade sempre; pendência
+    // conhecida, só no lembrete semanal. `forcar` permite disparo manual.
+    const url = new URL(req.url)
+    const forcar = url.searchParams.get('forcar') === '1'
+    const novos = alertas.filter((a) => a.notificado_em === null)
+    const ehSegunda = new Date().getUTCDay() === 1
+
+    if (!forcar && novos.length === 0 && !ehSegunda) {
+      console.log(`[SENTINELA-EMAIL] ${alertas.length} pendência(s), nenhuma nova — silêncio`)
+      return new Response(
+        JSON.stringify({
+          success: true, alertas: alertas.length, novos: 0, enviado: false,
+          motivo: 'nada novo desde o último aviso; o lembrete das pendências vai na segunda',
+        }),
         { headers: { 'Content-Type': 'application/json' } },
       )
     }
@@ -177,13 +222,19 @@ Deno.serve(async (req) => {
         const resto = itens.length > 10
           ? `<li style="margin:3px 0;color:#666;">…e mais ${itens.length - 10}. A lista completa está na tela Sentinela.</li>`
           : ''
+        const temNovo = itens.some((i) => i.notificado_em === null)
         return `
         <div style="margin:0 0 22px;padding:14px 16px;border-left:4px solid #b45309;background:#fffbeb;">
           <p style="margin:0 0 4px;font-size:15px;font-weight:600;color:#92400e;">
             ${escapar(rotulo(regra))} <span style="font-weight:400;">(${itens.length})</span>
+            ${temNovo ? '<span style="background:#b45309;color:#fff;font-size:11px;padding:1px 6px;border-radius:3px;margin-left:6px;">NOVO</span>' : ''}
           </p>
           <p style="margin:0 0 8px;font-size:13px;color:#78350f;">${escapar(oQueFazer(regra))}</p>
-          <ul style="margin:0;padding-left:18px;font-size:13px;color:#444;">${linhas}${resto}</ul>
+          <ul style="margin:0 0 10px;padding-left:18px;font-size:13px;color:#444;">${linhas}${resto}</ul>
+          <a href="${linkTela(regra)}" style="display:inline-block;background:#1e40af;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:7px 14px;border-radius:5px;">
+            Resolver agora →
+          </a>
+          <span style="font-size:12px;color:#78350f;margin-left:8px;">${escapar(caminho(regra))}</span>
         </div>`
       })
       .join('')
@@ -205,7 +256,8 @@ Deno.serve(async (req) => {
           Um alerta some sozinho quando o problema é resolvido.
         </p>
         <p style="font-size:11px;color:#9ca3af;margin-top:18px;border-top:1px solid #e5e7eb;padding-top:10px;">
-          E-mail automático. Só é enviado quando há algo a tratar — se não chegar, está tudo em ordem.
+          E-mail automático. Chega quando aparece algo NOVO e, uma vez por semana, para lembrar do que ficou pendente.
+          Se não chegar, não há novidade.
         </p>
       </body></html>`
 
@@ -218,7 +270,9 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         from: REMETENTE,
         to: [destino],
-        subject: `ProSeller · ${total} ponto${total > 1 ? 's' : ''} de atenção`,
+        subject: novos.length > 0
+          ? `ProSeller · ${novos.length} ponto${novos.length > 1 ? 's' : ''} novo${novos.length > 1 ? 's' : ''} de atenção`
+          : `ProSeller · lembrete semanal · ${total} pendência${total > 1 ? 's' : ''}`,
         html,
       }),
     })
@@ -234,9 +288,18 @@ Deno.serve(async (req) => {
       )
     }
 
-    console.log(`[SENTINELA-EMAIL] enviado para ${destino}: ${total} alerta(s) em ${Date.now() - inicio}ms`)
+    // Marca o que foi avisado para não repetir amanhã (migration 162).
+    if (novos.length > 0) {
+      const { error: errMarca } = await supabase
+        .from('sentinela_alerta')
+        .update({ notificado_em: new Date().toISOString() })
+        .in('id', novos.map((n) => n.id))
+      if (errMarca) console.error('[SENTINELA-EMAIL] falha ao marcar como avisado:', errMarca)
+    }
+
+    console.log(`[SENTINELA-EMAIL] enviado para ${destino}: ${total} alerta(s), ${novos.length} novo(s), em ${Date.now() - inicio}ms`)
     return new Response(
-      JSON.stringify({ success: true, alertas: total, enviado: true, destino }),
+      JSON.stringify({ success: true, alertas: total, novos: novos.length, enviado: true, destino }),
       { headers: { 'Content-Type': 'application/json' } },
     )
   } catch (e) {
