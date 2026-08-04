@@ -11,7 +11,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Produto, Marca, TipoProduto, UnidadeMedida, SituacaoProduto } from "../types/produto";
 import { maskNCM, maskCEST, maskEAN13 } from "../lib/masks";
 import { ArrowLeft, Save, Upload, X, Check, ChevronsUpDown, Plus, Tag, Package, Ruler } from "lucide-react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { api } from "../services/api";
 
 /** Lock em nível de módulo para evitar criação duplicada (ex.: dois eventos submit no mesmo tick). */

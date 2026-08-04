@@ -8,7 +8,7 @@ import { Textarea } from './ui/textarea';
 import { Label } from './ui/label';
 import { Alert, AlertDescription } from './ui/alert';
 import { ArrowLeft, Save, Edit, X, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { CustomerFormDadosCadastrais } from './CustomerFormDadosCadastrais';
 import { CustomerFormContato } from './CustomerFormContato';
 import { CustomerFormCondicaoComercial } from './CustomerFormCondicaoComercial';

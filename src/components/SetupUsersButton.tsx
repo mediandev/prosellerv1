@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from './ui/button';
 import { api } from '../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Loader2, UserPlus } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 

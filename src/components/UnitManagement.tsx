@@ -10,7 +10,7 @@ import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { mockUnidadesMedida } from "../data/mockUnidadesMedida";
 import { UnidadeMedida } from "../types/produto";
 import { Plus, Edit, Trash2, Search, Ruler, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { api } from "../services/api";
 
 export function UnitManagement() {

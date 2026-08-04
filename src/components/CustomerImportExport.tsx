@@ -18,7 +18,7 @@ import { Badge } from './ui/badge';
 import { Alert, AlertDescription } from './ui/alert';
 import { Upload, Download, FileSpreadsheet, CheckCircle, XCircle, AlertTriangle, ArrowRight, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Checkbox } from './ui/checkbox';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { api, getAuthToken } from '../services/api';
 
 // Mapeamento de variações de nomes de colunas → nome padrão do template

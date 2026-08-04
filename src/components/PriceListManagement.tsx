@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { ListaPreco } from '../types/listaPreco';
 import { api } from '../services/api';

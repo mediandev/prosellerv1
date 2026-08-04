@@ -13,7 +13,7 @@ import { api } from '../services/api';
 import { History, CheckCircle2, AlertCircle, XCircle, FileSpreadsheet, Eye, Undo2, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 const tipoLabels: Record<TipoImportacao, string> = {
   vendas: 'Vendas',

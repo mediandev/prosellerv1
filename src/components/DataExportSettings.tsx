@@ -6,7 +6,7 @@ import { Badge } from './ui/badge';
 import { exportService } from '../services/exportService';
 import { api } from '../services/api';
 import { Download, FileSpreadsheet, CheckCircle2, Database, Package, ShoppingCart, UserCircle, Users } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface ExportResult {
   success: boolean;

@@ -28,7 +28,7 @@ import {
 } from "./ui/dialog";
 import { Badge } from "./ui/badge";
 import { Target, TrendingUp, Calendar, Copy, Trash2, Edit, Plus, Download, Upload, AlertCircle } from "lucide-react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { api } from "../services/api";
 import {
   VendedorMeta,

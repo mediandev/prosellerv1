@@ -3,7 +3,7 @@ import { Company } from '../types/company';
 import { Venda } from '../types/venda';
 import { tinyERPSyncService } from './tinyERPSync';
 import { api } from './api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 export interface ConfiguracaoEnvioAutomatico {
   habilitado: boolean;

@@ -8,6 +8,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.93',
+    items: [
+      'Limpeza técnica sem efeito visível para quem usa: os nomes das bibliotecas no código deixaram de carregar a versão colada (ex.: "sonner@2.0.3" virou "sonner"). Eram 161 ocorrências, herdadas da geração automática do projeto. Isso devolveu o verificador de erros do editor, que estava desligado por não reconhecer esses nomes.',
+    ],
+  },
+  {
     version: 'V 1.92',
     items: [
       'Produtos: dois cadastros de teste ("Produto Exemplo ABC" e "Teste 3 edit edt123") foram desativados. Ficavam ativos sem preço em nenhuma lista, apareciam para o vendedor e não fechavam pedido.',

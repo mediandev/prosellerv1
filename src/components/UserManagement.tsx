@@ -24,7 +24,7 @@ function getPermissoesVisiveis(tipo: string): Permissao[] {
 function getCategoriasVisiveis(tipo: string): string[] {
   return Array.from(new Set(getPermissoesVisiveis(tipo).map((p) => p.categoria)));
 }
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { 
   Users, 
   Plus, 
@@ -43,8 +43,8 @@ import {
   ArrowUp,
   ArrowDown
 } from "lucide-react";
-import { format } from "date-fns@4.1.0";
-import { ptBR } from "date-fns@4.1.0/locale";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { ScrollArea } from "./ui/scroll-area";
 
 interface FormularioUsuario {

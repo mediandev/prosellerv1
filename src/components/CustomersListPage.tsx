@@ -66,7 +66,7 @@ import {
   PaginationPrevious,
 } from './ui/pagination';
 import { CustomerImportExport } from './CustomerImportExport';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { api } from '../services/api';
 import { Loader2 } from 'lucide-react';
 

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Compromisso, Pagamento, TipoCompromisso } from '../types/contaCorrente';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';

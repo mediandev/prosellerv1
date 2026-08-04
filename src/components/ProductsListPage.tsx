@@ -16,7 +16,7 @@ import {
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { Produto } from "../types/produto";
 import { Search, Plus, MoreVertical, Eye, Edit, Trash2, Package, ImageIcon, Filter, Tag, Layers, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Loader2 } from "lucide-react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { api } from "../services/api";
 import { ProductFiltersCard } from "./ProductFiltersCard";
 

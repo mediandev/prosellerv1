@@ -15,8 +15,8 @@ import {
   FileText,
   Activity,
 } from 'lucide-react';
-import { format } from 'date-fns@4.1.0';
-import { ptBR } from 'date-fns@4.1.0/locale';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface CustomerHistoryTabProps {
   clienteId: string;

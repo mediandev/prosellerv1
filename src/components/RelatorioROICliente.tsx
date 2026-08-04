@@ -18,9 +18,9 @@ import {
   CommandList,
 } from "./ui/command";
 import { api } from "../services/api";
-import { format } from "date-fns@4.1.0";
-import { ptBR } from "date-fns@4.1.0/locale";
-import { toast } from "sonner@2.0.3";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
 interface RelatorioROIClienteProps {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { api } from '../services/api';
 import { consultarCNPJCompleto, consultarCEP } from '../services/integrations';
 import {

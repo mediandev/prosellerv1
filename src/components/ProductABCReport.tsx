@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Download, Filter, X } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { api } from "../services/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { isStatusConcluido } from "../utils/statusVendaUtils";
 
 interface ProductABCFilters {

@@ -30,7 +30,7 @@ import {
 } from "../services/clientRiskService";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../services/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import {
   Collapsible,
   CollapsibleContent,

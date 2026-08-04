@@ -20,7 +20,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { InactiveClient } from "../types/clientRisk";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 interface InactiveClientsTableProps {
   clients: InactiveClient[];

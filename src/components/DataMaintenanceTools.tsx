@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Alert, AlertDescription } from './ui/alert';
 import { Wrench, AlertTriangle, CheckCircle2, Loader2, Search } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 // Configuração do Supabase removida - funcionalidade desabilitada
 import { getAuthToken } from '../services/api';
 

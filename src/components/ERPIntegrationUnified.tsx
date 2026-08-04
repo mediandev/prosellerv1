@@ -40,7 +40,7 @@ import {
   X,
   Send
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 type ERPType = 'tiny' | 'totvs' | 'sap' | 'omie' | 'bling';
 

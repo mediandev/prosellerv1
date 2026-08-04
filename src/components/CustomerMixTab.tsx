@@ -5,7 +5,7 @@ import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
 import { Input } from './ui/input';
 import { Package, Search, CheckCircle2, XCircle, Loader2, Save } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { api } from '../services/api';
 import { getSupabaseClient } from '../services/supabase';
 import { Produto } from '../types/produto';

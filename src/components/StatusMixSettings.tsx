@@ -6,7 +6,7 @@ import { Switch } from './ui/switch';
 import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
 import { Save, CheckCircle, AlertCircle, Play } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { api } from '../services/api';
 import { ConfiguracaoStatusMix } from '../types/statusMix';
 

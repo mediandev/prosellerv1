@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from './ui/alert';
 import { Separator } from './ui/separator';
 import { Badge } from './ui/badge';
 import { CheckCircle, XCircle, RefreshCw, AlertTriangle, Loader2 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { api } from '../services/api';
 import { Company } from '../types/company';
 import { NaturezaOperacao } from '../types/naturezaOperacao';

@@ -35,7 +35,7 @@ import { CondicaoPagamento, validarPrazoPagamento, formatarPrazoPagamento, calcu
 import { condicoesPagamentoMock } from "../data/mockCondicoesPagamento";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { ListaPreco } from "../types/listaPreco";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { 
   Plus, 
   Trash2, 

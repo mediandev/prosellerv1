@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Calendar, DollarSign, FileText, Paperclip, User, Clock, Edit, Trash2, Eye, Download } from 'lucide-react';
 import { Compromisso, Pagamento, TipoCompromisso } from '../types/contaCorrente';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface CompromissoDialogDetalhesProps {
   open: boolean;

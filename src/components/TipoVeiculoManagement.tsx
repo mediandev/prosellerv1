@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from './ui/dialog';
 import { Plus, Edit, Trash2, Truck } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { api } from '../services/api';
 import { TipoVeiculo } from '../types/tipoVeiculo';
 import { tiposVeiculoPadrao } from '../data/tiposVeiculoPadrao';

@@ -1,5 +1,5 @@
 import * as React from "react";
-import * as VisuallyHiddenPrimitive from "@radix-ui/react-visually-hidden@1.1.1";
+import * as VisuallyHiddenPrimitive from "@radix-ui/react-visually-hidden";
 
 const VisuallyHidden = React.forwardRef<
   React.ElementRef<typeof VisuallyHiddenPrimitive.Root>,

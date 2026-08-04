@@ -8,7 +8,7 @@ import { Switch } from "./ui/switch";
 import { Separator } from "./ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { CheckCircle, XCircle, RefreshCw, Building2, Key, Trash2 } from "lucide-react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { companyService } from "../services/companyService";
 import { useCompanies } from "../hooks/useCompanies";
 import { Company } from "../types/company";

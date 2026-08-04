@@ -18,7 +18,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { Alert, AlertDescription } from './ui/alert';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 import { NaturezaOperacao } from '../types/naturezaOperacao';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';

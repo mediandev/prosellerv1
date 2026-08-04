@@ -16,7 +16,7 @@ import { Combobox } from "./ui/combobox";
 import { Building2, MapPin, Mail, Phone, FileText, CreditCard, Pencil, Trash2, Plus, Search, X, Save, Check, Edit, Settings } from "lucide-react";
 import { applyCNPJMask, applyCEPMask, applyPhoneMask, applyCPFCNPJMask } from '../lib/masks';
 import { municipiosPorUF, ufs } from '../data/municipios';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { companyService } from '../services/companyService';
 import { CompanyERPDialog } from './CompanyERPDialog';
 import { ERPStatusBadge } from './ERPStatusBadge';

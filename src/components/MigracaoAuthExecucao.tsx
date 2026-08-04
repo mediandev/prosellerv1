@@ -6,7 +6,7 @@ import { Badge } from "./ui/badge";
 import { Progress } from "./ui/progress";
 import { AlertCircle, CheckCircle, Info, Loader2 } from "lucide-react";
 import { api } from "../services/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 interface MigracaoLog {
   etapa: string;

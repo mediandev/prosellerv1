@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { CategoriaContaCorrente } from "../types/contaCorrente";
 import { api } from "../services/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Plus, Trash2, Edit, Tag, CheckCircle2, XCircle } from "lucide-react";
 import { Switch } from "./ui/switch";
 import { Textarea } from "./ui/textarea";

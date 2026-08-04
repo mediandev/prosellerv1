@@ -2,7 +2,7 @@
 // 🔄 VERSION: 2025-12-24_03:00 - FIX CRÍTICO: Forçar salvamento dados NFe SEMPRE
 // ✅ VERSÃO 3.0.0 - Salvamento FORÇADO de notaFiscalId, notaFiscalNumero, notaFiscalChave
 console.log('🚀 tinyERPSync.ts v3.0.0 CARREGADO - Salvamento NFe FORÇADO');
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Venda, StatusVenda, TinyERPStatus, MAPEAMENTO_STATUS_TINY } from '../types/venda';
 import { api } from './api';
 

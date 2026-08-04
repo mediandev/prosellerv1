@@ -5,7 +5,7 @@ import { Button } from "./ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { Input } from "./ui/input";
 import { api } from "../services/api";
-import { format } from "date-fns@4.1.0";
+import { format } from "date-fns";
 import { ChevronLeft, ChevronRight, Download, DollarSign, TrendingUp, Wallet } from "lucide-react";
 import { toSafeNumber, formatCurrencyBRL } from "../utils/number";
 

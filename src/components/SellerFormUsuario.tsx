@@ -6,7 +6,7 @@ import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
 import { Badge } from "./ui/badge";
 import { Separator } from "./ui/separator";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Mail, Key, Shield, Eye, EyeOff, Send, Check, X } from "lucide-react";
 import { Seller, UserPermissions } from "../types/seller";
 import {

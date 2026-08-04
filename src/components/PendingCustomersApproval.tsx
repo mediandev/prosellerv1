@@ -11,7 +11,7 @@ import { AlertCircle, CheckCircle, XCircle, Eye, Search, User, Calendar, Loader2
 import { Cliente } from '../types/customer';
 import { CustomerFormPage } from './CustomerFormPage';
 import { api } from '../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface PendingCustomersApprovalProps {
   onVoltar?: () => void;

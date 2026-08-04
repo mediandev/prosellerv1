@@ -3,7 +3,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card } from './ui/card';
 import { api } from '../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Bug, RefreshCw, Send, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 
 export function VendaDebugger() {

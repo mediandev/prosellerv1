@@ -8,11 +8,11 @@ import { Button } from "./ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
 import { Badge } from "./ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
-import { format } from "date-fns@4.1.0";
-import { ptBR } from "date-fns@4.1.0/locale";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { useAuth } from "../contexts/AuthContext";
 import { buscarMetaVendedor, buscarMetaTotal } from "../services/metasService";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import {
   Transaction,
   carregarDadosDashboard,

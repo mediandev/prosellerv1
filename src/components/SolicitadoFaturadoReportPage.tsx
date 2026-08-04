@@ -9,7 +9,7 @@ import { Download, Filter, X, ArrowLeft, Calendar as CalendarIcon, RefreshCw } f
 import { companyService } from "../services/companyService";
 import { Combobox } from "./ui/combobox";
 import { api } from "../services/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
 import { ptBR } from "date-fns/locale";

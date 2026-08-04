@@ -14,7 +14,7 @@ import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Plus, FileText, TrendingUp, TrendingDown, DollarSign, Calendar, Filter, X, Paperclip } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface CustomerFormContaCorrenteProps {
   formData: Partial<Cliente>;

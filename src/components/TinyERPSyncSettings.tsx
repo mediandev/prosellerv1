@@ -10,7 +10,7 @@ import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { RefreshCw, Clock, CheckCircle, XCircle, Activity, Webhook, History, Settings } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 export function TinyERPSyncSettings() {
   const [config, setConfig] = useState<ConfiguracaoSincronizacao>(tinyERPSyncService.obterConfiguracao());

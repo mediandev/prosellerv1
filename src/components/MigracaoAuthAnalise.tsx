@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from "./ui/alert";
 import { Badge } from "./ui/badge";
 import { AlertCircle, CheckCircle, Info, Trash2 } from "lucide-react";
 import { api } from "../services/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 interface AnaliseResult {
   usuarios: any[];

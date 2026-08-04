@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Combobox } from './ui/combobox';
 import { Separator } from './ui/separator';
 import { TipoCompromisso } from '../types/contaCorrente';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 import { api } from '../services/api';
 

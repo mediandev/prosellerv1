@@ -13,7 +13,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Separator } from './ui/separator';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { ListaPreco, TipoComissao, FaixaDesconto, ProdutoPreco } from '../types/listaPreco';
 import { Produto } from '../types/produto';
 import { api } from '../services/api';

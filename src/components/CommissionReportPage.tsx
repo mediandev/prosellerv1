@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import { api } from "../services/api";
 import { RelatorioPeriodoComissoes, RelatorioComissoesCompleto, LancamentoManual, PagamentoPeriodo, ComissaoVenda } from "../types/comissao";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 

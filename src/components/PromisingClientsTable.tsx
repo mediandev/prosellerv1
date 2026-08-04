@@ -21,7 +21,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { PromisingClient } from "../types/clientRisk";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 interface PromisingClientsTableProps {
   clients: PromisingClient[];

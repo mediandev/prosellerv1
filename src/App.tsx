@@ -17,8 +17,8 @@ import {
   ShieldAlert,
   ScrollText
 } from "lucide-react";
-import { format } from "date-fns@4.1.0";
-import { ptBR } from "date-fns@4.1.0/locale";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import EntregaPublicaPage from "./components/logistica/EntregaPublicaPage";
 import { LoginPage } from "./components/LoginPage";
@@ -77,7 +77,7 @@ import { Transaction } from "./services/dashboardDataService";
 import type { DashboardSnapshot } from "./services/dashboardSnapshotService";
 import { ListaPreco } from "./types/listaPreco";
 import { Produto } from "./types/produto";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { api } from "./services/api";
 import { tinyERPSyncService } from "./services/tinyERPSync";
 
@@ -194,7 +194,7 @@ function SidebarUserInfo({
   onOpenChangelog: () => void;
 }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.92";
+  const systemVersion = "V 1.93";
   const ultimaVersao = CHANGELOG[0];
   
   if (!usuario) return null;

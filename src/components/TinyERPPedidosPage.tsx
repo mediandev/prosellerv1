@@ -8,8 +8,8 @@ import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { mockVendas } from '../data/mockVendas';
 import { clientes } from '../data/mockCustomers';
 import { Venda } from '../types/venda';
-import { format } from 'date-fns@4.1.0';
-import { ptBR } from 'date-fns@4.1.0/locale';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { 
   Search, 
   Package, 
@@ -25,7 +25,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { formatCurrency } from '../lib/masks';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 export function TinyERPPedidosPage() {
   const [searchTerm, setSearchTerm] = useState('');

@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Separator } from './ui/separator';
 import { Plus, Trash2, X } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { maskTelefoneFixo, maskTelefoneCelular, unmaskNumber } from '../lib/masks';
 import { api } from '../services/api';
 import {

@@ -1,6 +1,6 @@
 import { Calendar, FileText, Edit, Trash2, Eye, Download, User, Clock } from 'lucide-react';
 import { Pagamento } from '../types/contaCorrente';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { api } from '../services/api';
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';

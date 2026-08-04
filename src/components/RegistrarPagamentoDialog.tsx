@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Combobox } from './ui/combobox';
 import { Separator } from './ui/separator';
 import { Compromisso } from '../types/contaCorrente';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { DollarSign, Calendar } from 'lucide-react';
 import { Badge } from './ui/badge';
 

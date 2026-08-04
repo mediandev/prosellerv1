@@ -10,7 +10,7 @@ import { companyService } from "../services/companyService";
 import { Badge } from "./ui/badge";
 import { Combobox } from "./ui/combobox";
 import { api } from "../services/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { isStatusConcluido, isStatusPendente } from "../utils/statusVendaUtils";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
