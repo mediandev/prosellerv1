@@ -194,7 +194,7 @@ function SidebarUserInfo({
   onOpenChangelog: () => void;
 }) {
   const { usuario, logout } = useAuth();
-  const systemVersion = "V 1.89";
+  const systemVersion = "V 1.90";
   const ultimaVersao = CHANGELOG[0];
   
   if (!usuario) return null;
@@ -344,16 +344,19 @@ function AppContent() {
   // Abrir direto numa tela pela URL: proseller.app.br/#/clientes
   // Existe para os e-mails da sentinela terem botão "Resolver agora" que leva ao
   // lugar certo. Sem isso o alerta informa mas não ajuda a agir.
-  // Só navega se a pessoa tiver acesso à tela — senão ignora em silêncio.
-  useEffect(() => {
+  //
+  // Guardado em estado (e não aplicado direto) porque o efeito de login abaixo
+  // força "dashboard" depois que o usuário entra — se apenas navegássemos aqui,
+  // o link seria atropelado. Testado em produção: sem isto, #/sentinela cai no
+  // Dashboards.
+  const [rotaSolicitada, setRotaSolicitada] = useState<Page | null>(() => {
+    if (typeof window === 'undefined') return null;
     const rota = window.location.hash.replace(/^#\/?/, '').split('?')[0];
-    if (!rota) return;
-    const telas = menuItems.map((m) => m.id).concat(['sentinela', 'auditoria', 'perfil'] as Page[]);
-    if (telas.includes(rota as Page)) {
-      setCurrentPage(rota as Page);   // guarda de permissão fica no efeito que valida currentPage
-      window.history.replaceState(null, '', window.location.pathname);
-    }
-  }, []);
+    const telas = ['dashboard','vendas','clientes','produtos','equipe','metas','comissoes',
+                   'contacorrente','relatorios','logistica','sentinela','auditoria',
+                   'configuracoes','perfil'];
+    return telas.includes(rota) ? (rota as Page) : null;
+  });
 
   // Detectar tokens de convite/invite na URL (hash fragment do Supabase)
   useEffect(() => {
@@ -429,12 +432,20 @@ function AppContent() {
     toast.success('Sistema pronto para uso!');
   };
 
-  // Sempre redirecionar para dashboard quando o usuário faz login
+  // Ao entrar, vai para o dashboard — a menos que a URL tenha pedido uma tela
+  // específica (link de e-mail da sentinela). A permissão é validada logo abaixo,
+  // no efeito que confere `currentPage`; tela sem acesso cai no dashboard sozinha.
   useEffect(() => {
     if (usuario && dataInitialized) {
-      setCurrentPage("dashboard");
+      if (rotaSolicitada) {
+        setCurrentPage(rotaSolicitada);
+        setRotaSolicitada(null);
+        window.history.replaceState(null, '', window.location.pathname);
+      } else {
+        setCurrentPage("dashboard");
+      }
     }
-  }, [usuario, dataInitialized]);
+  }, [usuario, dataInitialized, rotaSolicitada]);
 
   // Inicializar modo Tiny ERP na primeira carga
   useEffect(() => {

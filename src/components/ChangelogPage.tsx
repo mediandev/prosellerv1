@@ -8,11 +8,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.90',
+    items: [
+      'Correção do link direto: ao abrir o sistema por um link de tela específica, o login levava sempre ao Dashboard. Agora o link é respeitado depois de entrar.',
+    ],
+  },
+  {
     version: 'V 1.89',
     items: [
       'E-mail da Sentinela: cada item passa a ter um botão "Resolver agora" que abre o sistema direto na tela certa, e o caminho escrito ao lado (ex.: "Clientes → abrir o cliente → aba Endereço").',
       'E-mail da Sentinela: deixa de repetir todo dia o que já foi avisado. Chega quando aparece algo NOVO — marcado como tal — e, uma vez por semana, um lembrete do que continua pendente.',
-      'O sistema passa a aceitar link direto para uma tela (ex.: proseller.app.br/#/clientes), respeitando as permissões do usuário.',
+      'O sistema passa a aceitar link direto para uma tela (ex.: proseller.app.br/#/clientes), respeitando as permissões do usuário. O link funciona mesmo quando é preciso fazer login antes.',
     ],
   },
   {
