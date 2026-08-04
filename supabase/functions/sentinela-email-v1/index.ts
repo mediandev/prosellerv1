@@ -23,6 +23,8 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// Vários destinatários: separados por vírgula no secret SENTINELA_EMAIL_DESTINO.
+// Trocar quem recebe é trocar o secret — não exige mexer em código nem republicar.
 const DESTINO_PADRAO = 'lucas.carmo@flowcode.cc'
 const REMETENTE = 'ProSeller <proseller@flowcode.cc>'
 
@@ -167,7 +169,8 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    const destino = Deno.env.get('SENTINELA_EMAIL_DESTINO') || DESTINO_PADRAO
+    const destinos = (Deno.env.get('SENTINELA_EMAIL_DESTINO') || DESTINO_PADRAO)
+      .split(',').map((e) => e.trim()).filter(Boolean)
 
     const { data: alertas, error } = await supabase
       .from('sentinela_alerta')
@@ -269,7 +272,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         from: REMETENTE,
-        to: [destino],
+        to: destinos,
         subject: novos.length > 0
           ? `ProSeller · ${novos.length} ponto${novos.length > 1 ? 's' : ''} novo${novos.length > 1 ? 's' : ''} de atenção`
           : `ProSeller · lembrete semanal · ${total} pendência${total > 1 ? 's' : ''}`,
@@ -297,9 +300,9 @@ Deno.serve(async (req) => {
       if (errMarca) console.error('[SENTINELA-EMAIL] falha ao marcar como avisado:', errMarca)
     }
 
-    console.log(`[SENTINELA-EMAIL] enviado para ${destino}: ${total} alerta(s), ${novos.length} novo(s), em ${Date.now() - inicio}ms`)
+    console.log(`[SENTINELA-EMAIL] enviado para ${destinos.join(', ')}: ${total} alerta(s), ${novos.length} novo(s), em ${Date.now() - inicio}ms`)
     return new Response(
-      JSON.stringify({ success: true, alertas: total, novos: novos.length, enviado: true, destino }),
+      JSON.stringify({ success: true, alertas: total, novos: novos.length, enviado: true, destinos }),
       { headers: { 'Content-Type': 'application/json' } },
     )
   } catch (e) {

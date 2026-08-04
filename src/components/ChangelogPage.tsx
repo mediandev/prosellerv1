@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.92',
+    items: [
+      'Produtos: dois cadastros de teste ("Produto Exemplo ABC" e "Teste 3 edit edt123") foram desativados. Ficavam ativos sem preço em nenhuma lista, apareciam para o vendedor e não fechavam pedido.',
+      'E-mail da Sentinela: passa a aceitar mais de um destinatário.',
+    ],
+  },
+  {
     version: 'V 1.91',
     items: [
       'Link direto para tela: correção definitiva. O botão "Resolver agora" dos e-mails agora abre a tela certa, inclusive quando é preciso fazer login antes.',
