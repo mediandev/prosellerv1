@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'V 1.94',
+    items: [
+      'Envio ao ERP: pedidos de clientes FILIAL voltaram a ser emitidos. A consulta do Simples Nacional não retornava resposta para filial e a emissão era bloqueada — o pedido PV-2025-7799 (MR Cosméticos) foi recusado 7 vezes. Agora o regime é consultado pelo CNPJ da matriz, conforme confirmado com a Median: matriz e filial não podem ter regimes diferentes.',
+      'A correção vale para os 338 clientes cadastrados como filial, que travariam do mesmo jeito no primeiro faturamento.',
+    ],
+  },
+  {
     version: 'V 1.93',
     items: [
       'Limpeza técnica sem efeito visível para quem usa: os nomes das bibliotecas no código deixaram de carregar a versão colada (ex.: "sonner@2.0.3" virou "sonner"). Eram 161 ocorrências, herdadas da geração automática do projeto. Isso devolveu o verificador de erros do editor, que estava desligado por não reconhecer esses nomes.',

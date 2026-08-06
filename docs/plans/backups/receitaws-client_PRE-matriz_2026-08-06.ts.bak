@@ -71,65 +71,15 @@ const RATE_LIMIT_RETRY_DELAY_MS = 3_000;
  * - `simples.optante` ausente → status `inconclusive` com reason `missing_field`
  *   (CB-001 · plano gratuito não retorna o objeto `simples`).
  */
-
-/**
- * Devolve o CNPJ da MATRIZ a partir de qualquer CNPJ do mesmo grupo.
- *
- * Por que existe (2026-08-06): a ReceitaWS não devolve `simples.optante` para
- * FILIAL — responde sem o campo, o que o sistema lê como "não sei" e BLOQUEIA a
- * emissão. O pedido 904 (MR COSMETICOS, filial 0002) foi recusado 7 vezes por
- * isso.
- *
- * Não é limitação da Receita: o site oficial de Consulta Optantes responde para
- * filial normalmente. É limitação da API intermediária que usamos.
- *
- * Confirmado pelo cliente em 2026-08-06: *"não é possível ter regime diferente
- * entre matriz e filial"*. Logo, consultar a matriz responde pela filial.
- *
- * Estrutura: 8 dígitos de raiz + 4 de ordem (0001 = matriz) + 2 verificadores.
- * Trocamos a ordem por 0001 e recalculamos os verificadores.
- */
-export function cnpjDaMatriz(cnpj: string): string {
-  const d = (cnpj || "").replace(/\D/g, "");
-  if (d.length !== 14) return d;
-  if (d.slice(8, 12) === "0001") return d;          // já é matriz
-
-  const base = d.slice(0, 8) + "0001";
-  const dv = (parcial: string): string => {
-    let peso = parcial.length - 7;
-    let soma = 0;
-    for (let i = 0; i < parcial.length; i++) {
-      soma += Number(parcial[i]) * peso--;
-      if (peso < 2) peso = 9;
-    }
-    const resto = soma % 11;
-    return String(resto < 2 ? 0 : 11 - resto);
-  };
-  const d1 = dv(base);
-  const d2 = dv(base + d1);
-  return base + d1 + d2;
-}
-
-export function ehFilial(cnpj: string): boolean {
-  const d = (cnpj || "").replace(/\D/g, "");
-  return d.length === 14 && d.slice(8, 12) !== "0001";
-}
-
 export async function consultarSimplesNacional(params: {
   cnpj: string;
   traceId: string;
   timeoutMs?: number;
 }): Promise<SimplesNacionalLookupResult> {
-  // Filial: a ReceitaWS não traz o Simples dela. Como o regime é da empresa
-  // (raiz do CNPJ) e não do estabelecimento, consultamos a matriz.
-  const alvo = ehFilial(params.cnpj)
-    ? { ...params, cnpj: cnpjDaMatriz(params.cnpj) }
-    : params;
-
-  const first = await attemptLookup(alvo, 1);
+  const first = await attemptLookup(params, 1);
   if (first.status === "failed" && first.reason === "rate_limited") {
     await new Promise((r) => setTimeout(r, RATE_LIMIT_RETRY_DELAY_MS));
-    return attemptLookup(alvo, 2);
+    return attemptLookup(params, 2);
   }
   return first;
 }
