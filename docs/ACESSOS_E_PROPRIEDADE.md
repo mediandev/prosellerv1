@@ -14,15 +14,31 @@ diretamente entre as pessoas, nunca por arquivo.
 
 ## 1. As cinco contas que sustentam o sistema
 
+### Os dois que precisam mudar de dono, sem exceção
+
 | Serviço | Para que serve | Se perder o acesso |
 |---|---|---|
-| **Supabase** | Banco de dados e funções do servidor. **É o coração.** | O sistema para. Sem recuperação por fora. |
-| **Netlify** | Publica as telas | As telas param de atualizar; o que está no ar continua |
-| **GitHub** | Guarda todo o código e o histórico | Perde a capacidade de alterar o sistema |
-| **Resend** | Envia os e-mails de alerta e de comissão | Os avisos param de chegar, em silêncio |
-| **Tiny (ERP)** | Emissão de nota fiscal | O faturamento para |
+| **Supabase** | Banco de dados e funções do servidor. **É o coração do sistema.** | O sistema para. Não há recuperação por fora. |
+| **GitHub** | Guarda todo o código e o histórico de alterações | Perde a capacidade de alterar o sistema |
 
-**Ordem de importância para a passagem:** Supabase → GitHub → Tiny → Netlify → Resend.
+**Sem estes dois no nome da Median, não existe autonomia.** Todo o resto do
+sistema depende deles, e nenhum tem como ser recriado a partir de outro lugar.
+
+### Um a confirmar
+
+| Serviço | Para que serve | Situação |
+|---|---|---|
+| **Netlify** | Publica as telas | **A conferir** de quem é a conta hoje. O que já está no ar continua funcionando mesmo sem acesso; o que para é a capacidade de publicar alterações. |
+
+### Os que já são da Median (só confirmar)
+
+| Serviço | Para que serve | Se perder o acesso |
+|---|---|---|
+| **Tiny (ERP)** | Emissão de nota fiscal | O faturamento para |
+| **Resend** | Envia os e-mails de alerta | Os avisos param de chegar, **em silêncio** |
+| **Domínio** `proseller.app.br` | Endereço do sistema | O sistema fica fora do ar |
+
+**Ordem para tocar:** Supabase → GitHub → Netlify (confirmar) → o resto.
 
 ---
 
@@ -46,8 +62,9 @@ está completa.**
       **sem ele, a verificação de divergência para de rodar**
 - [ ] Acesso antigo removido
 
-### Netlify
+### Netlify — **primeiro passo: descobrir de quem é a conta hoje**
 
+- [ ] Confirmado quem é o dono da conta atualmente
 - [ ] Novo responsável na equipe do site
 - [ ] Método de pagamento no nome do cliente
 - [ ] Confirmado que uma publicação funciona ponta a ponta
