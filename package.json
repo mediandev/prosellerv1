@@ -1,6 +1,9 @@
 {
     "name": "ProSeller V1",
     "version": "0.1.0",
+    "engines": {
+        "node": ">=20.19"
+    },
     "private": true,
     "dependencies": {
         "@radix-ui/react-accordion": "^1.2.3",

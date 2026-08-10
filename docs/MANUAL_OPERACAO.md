@@ -142,6 +142,11 @@ o único lugar onde reverter errado pode piorar a situação.
 
 ## 5. Verificações que você pode rodar
 
+> **Antes:** o projeto exige **Node 20.19 ou mais novo**. Em versões anteriores o
+> `npm test` nem inicia, com um erro sobre "ES Module" que parece defeito do
+> projeto e não é. Confira com `node -v`.
+
+
 | Comando | O que faz |
 |---|---|
 | `npm test` | Confere as telas — 96 verificações, alguns segundos |

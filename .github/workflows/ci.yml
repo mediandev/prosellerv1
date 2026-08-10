@@ -137,5 +137,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v1
         with:
-          deno-version: v1.x
+          # v2.x: o deno.lock deste repo é versão 5, que o Deno 1.x não lê
+          # ("Unsupported lockfile version '5'"). Deixou o CI vermelho por 3
+          # execuções sem ninguém notar, porque localmente passa.
+          deno-version: v2.x
       - run: deno test --no-check --allow-read --allow-env tests/edge/
