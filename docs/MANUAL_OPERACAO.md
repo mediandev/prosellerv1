@@ -148,6 +148,7 @@ o único lugar onde reverter errado pode piorar a situação.
 | `npm run test:edge` | Confere as funções do servidor |
 | `npm run test:db` | Copia o banco e testa as regras críticas |
 | `npm run drift` | **Compara o que está no ar com o código.** Se alguém alterou algo direto em produção, acusa aqui |
+| `npm run test:e2e` | Abre o sistema num navegador de verdade e confere as telas. Precisa das credenciais em `PROSELLER_EMAIL` e `PROSELLER_SENHA` |
 
 O `npm run drift` é o que mais vale a pena rodar de vez em quando. Se ele
 reclamar, alguém mexeu fora do caminho normal.
