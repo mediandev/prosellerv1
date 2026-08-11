@@ -24,11 +24,18 @@ diretamente entre as pessoas, nunca por arquivo.
 **Sem estes dois no nome da Median, não existe autonomia.** Todo o resto do
 sistema depende deles, e nenhum tem como ser recriado a partir de outro lugar.
 
-### Um a confirmar
+### Um que precisa ser CRIADO do zero
 
 | Serviço | Para que serve | Situação |
 |---|---|---|
-| **Netlify** | Publica as telas | **A conferir** de quem é a conta hoje. O que já está no ar continua funcionando mesmo sem acesso; o que para é a capacidade de publicar alterações. |
+| **Netlify** | Publica as telas | **A conta hoje é da Flowcode.** Não dá para transferir: a Median precisa **criar a própria conta** e o site ser migrado para ela. |
+
+**O que muda na prática:** o site que está no ar continua funcionando enquanto a
+conta da Flowcode existir. O que para na hora da separação é a **publicação de
+alterações** — e, quando a conta for encerrada, o site sai do ar.
+
+Por isso a criação da conta Netlify precisa acontecer **antes** do encerramento,
+não depois.
 
 ### Os que já são da Median (só confirmar)
 
@@ -38,7 +45,7 @@ sistema depende deles, e nenhum tem como ser recriado a partir de outro lugar.
 | **Resend** | Envia os e-mails de alerta | Os avisos param de chegar, **em silêncio** |
 | **Domínio** `proseller.app.br` | Endereço do sistema | O sistema fica fora do ar |
 
-**Ordem para tocar:** Supabase → GitHub → Netlify (confirmar) → o resto.
+**Ordem para tocar:** Supabase → GitHub → Netlify (criar conta nova) → o resto.
 
 ---
 
@@ -62,13 +69,25 @@ está completa.**
       **sem ele, a verificação de divergência para de rodar**
 - [ ] Acesso antigo removido
 
-### Netlify — **primeiro passo: descobrir de quem é a conta hoje**
+### Netlify — **conta nova, não transferência**
 
-- [ ] Confirmado quem é o dono da conta atualmente
-- [ ] Novo responsável na equipe do site
-- [ ] Método de pagamento no nome do cliente
-- [ ] Confirmado que uma publicação funciona ponta a ponta
-- [ ] Acesso antigo removido
+A conta atual é da Flowcode. O caminho é criar uma conta da Median e migrar o
+site para ela.
+
+- [ ] Median cria conta própria no Netlify (netlify.com)
+- [ ] Site criado nessa conta, conectado ao repositório `mediandev/prosellerv1`
+      (ramo `main`, comando de build `npm install --legacy-peer-deps && npm run build`,
+      pasta publicada `build`)
+- [ ] Variável `VITE_FEATURE_LOG_CRM = true` configurada no site novo —
+      **sem ela o menu Logística não aparece**
+- [ ] Publicação de teste concluída com sucesso na conta nova
+- [ ] Domínio `proseller.app.br` apontado para o site novo
+- [ ] Site conferido no ar pelo endereço definitivo
+- [ ] Só então: site antigo (Flowcode) desativado
+
+⚠️ **Ordem importa.** Apontar o domínio antes de a publicação nova funcionar
+deixa o sistema fora do ar. E encerrar a conta da Flowcode antes de tudo isso
+derruba o sistema na hora.
 
 ### Tiny (ERP)
 
